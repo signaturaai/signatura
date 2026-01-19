@@ -5,6 +5,7 @@
  *
  * The main conversational interface with the AI companion.
  * This is not a chatbot - it's a trusted companion.
+ * Uses the warm, empathetic Signatura color palette.
  */
 
 import { useState, useRef, useEffect } from 'react'
@@ -120,14 +121,14 @@ export function CompanionChat({
     setTimeout(() => {
       setMessages(prev => [...prev, {
         role: 'companion',
-        content: `That's the spirit! You've got this. When you've completed it, come back and tell me how it went. I'll be here. 💙`,
+        content: `That's the spirit! You've got this. When you've completed it, come back and tell me how it went. I'll be here.`,
         timestamp: new Date(),
       }])
     }, 500)
   }
 
   return (
-    <Card className="min-h-[500px] flex flex-col">
+    <Card className="min-h-[500px] flex flex-col bg-white shadow-soft-md border-rose-light/30">
       <CardContent className="flex-1 flex flex-col p-4">
         {/* Messages */}
         <div className="flex-1 overflow-y-auto space-y-4 mb-4">
@@ -135,41 +136,41 @@ export function CompanionChat({
             <div
               key={index}
               className={cn(
-                'flex',
+                'flex animate-fade-up',
                 message.role === 'user' ? 'justify-end' : 'justify-start'
               )}
             >
               <div
                 className={cn(
-                  'max-w-[85%] rounded-2xl p-4 animate-slide-in',
+                  'max-w-[85%] rounded-2xl p-4 shadow-soft',
                   message.role === 'user'
-                    ? 'bg-primary text-primary-foreground rounded-br-md'
-                    : 'bg-companion-muted text-foreground rounded-bl-md'
+                    ? 'user-message rounded-br-md'
+                    : 'companion-message rounded-bl-md'
                 )}
               >
                 {message.role === 'companion' && (
                   <div className="flex items-center gap-2 mb-2">
-                    <Heart className="h-4 w-4 text-companion" />
-                    <span className="text-xs font-medium text-companion">
+                    <Heart className="h-4 w-4 text-rose-dark" />
+                    <span className="text-xs font-medium text-rose-dark">
                       Your Companion
                     </span>
                   </div>
                 )}
-                <p className="whitespace-pre-wrap">{message.content}</p>
+                <p className="whitespace-pre-wrap text-text-primary">{message.content}</p>
 
                 {/* Suggested goal */}
                 {message.suggestedGoal && (
-                  <div className="mt-3 p-3 rounded-lg bg-background/50 border">
+                  <div className="mt-4 p-4 rounded-xl bg-white/70 border border-lavender-light">
                     <div className="flex items-center gap-2 mb-2">
-                      <Sparkles className="h-4 w-4 text-celebration" />
-                      <span className="text-xs font-medium">
+                      <Sparkles className="h-4 w-4 text-lavender-dark" />
+                      <span className="text-xs font-medium text-lavender-dark">
                         Today&apos;s micro-goal
                       </span>
                     </div>
-                    <p className="text-sm mb-3">{message.suggestedGoal.goal}</p>
+                    <p className="text-sm text-text-primary mb-3">{message.suggestedGoal.goal}</p>
                     <Button
                       size="sm"
-                      variant="celebration"
+                      variant="success"
                       onClick={() => handleGoalAccept(message.suggestedGoal!.goal)}
                     >
                       I&apos;ll do it
@@ -177,7 +178,7 @@ export function CompanionChat({
                   </div>
                 )}
 
-                <p className="text-xs opacity-50 mt-2">
+                <p className="text-xs text-text-tertiary mt-2">
                   {message.timestamp.toLocaleTimeString([], {
                     hour: '2-digit',
                     minute: '2-digit',
@@ -188,11 +189,11 @@ export function CompanionChat({
           ))}
 
           {isLoading && (
-            <div className="flex justify-start">
-              <div className="bg-companion-muted rounded-2xl rounded-bl-md p-4">
+            <div className="flex justify-start animate-fade-up">
+              <div className="companion-message rounded-2xl rounded-bl-md p-4">
                 <div className="flex items-center gap-2">
-                  <Heart className="h-4 w-4 text-companion animate-pulse" />
-                  <span className="text-sm text-muted-foreground">
+                  <Heart className="h-4 w-4 text-rose-dark animate-pulse-soft" />
+                  <span className="text-sm text-text-secondary">
                     Thinking...
                   </span>
                 </div>
@@ -204,12 +205,12 @@ export function CompanionChat({
         </div>
 
         {/* Input */}
-        <form onSubmit={handleSubmit} className="flex gap-2">
+        <form onSubmit={handleSubmit} className="flex gap-3">
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Share how you're feeling..."
-            className="min-h-[60px] resize-none"
+            className="min-h-[60px] resize-none rounded-xl border-rose-light focus:border-rose focus:ring-rose/30 bg-white"
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
@@ -220,7 +221,7 @@ export function CompanionChat({
           <Button
             type="submit"
             size="icon"
-            className="h-[60px] w-[60px]"
+            className="h-[60px] w-[60px] bg-rose hover:bg-rose-dark text-white shadow-soft"
             disabled={!input.trim() || isLoading}
           >
             <Send className="h-5 w-5" />
@@ -242,11 +243,11 @@ function getInitialGreeting(
   const timeGreeting = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
 
   if (hasCheckedInToday) {
-    return `Hey ${firstName}, good to see you back today. 💙 We already checked in earlier, but I'm always here if you want to talk. How can I help?`
+    return `Hey ${firstName}, good to see you back today. We already checked in earlier, but I'm always here if you want to talk. How can I help?`
   }
 
   if (streak === 0) {
-    return `Good ${timeGreeting}, ${firstName}! 💙
+    return `Good ${timeGreeting}, ${firstName}!
 
 I'm your companion on this journey. Job searching can feel lonely, but you don't have to do it alone.
 
@@ -254,14 +255,14 @@ How are you feeling today? Be honest—there's no wrong answer here.`
   }
 
   if (streak > 7) {
-    return `Good ${timeGreeting}, ${firstName}! 💙
+    return `Good ${timeGreeting}, ${firstName}!
 
 ${streak} days of checking in together. That's real commitment to yourself. I see you.
 
 How are you doing today?`
   }
 
-  return `Good ${timeGreeting}, ${firstName}! 💙
+  return `Good ${timeGreeting}, ${firstName}!
 
 Day ${streak + 1} of walking this path together. I'm glad you're here.
 

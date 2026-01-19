@@ -4,70 +4,93 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+    /* Signatura Brand - Warm, Empathetic Color System */
+    --background: 300 33% 99%;        /* #FDFBFF - Very light with hint of warmth */
+    --foreground: 16 41% 12%;         /* #2C1810 - Warm dark brown */
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    --card-foreground: 16 41% 12%;
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 240 5.9% 10%;
+    --popover-foreground: 16 41% 12%;
+    --primary: 16 41% 12%;            /* Warm dark brown */
     --primary-foreground: 0 0% 98%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 240 5.9% 10%;
-    --radius: 0.5rem;
+    --secondary: 340 33% 95%;         /* Soft rose tint */
+    --secondary-foreground: 16 41% 12%;
+    --muted: 340 20% 95%;
+    --muted-foreground: 0 10% 42%;    /* #6B5555 - Muted brown */
+    --accent: 270 33% 90%;            /* Lavender tint */
+    --accent-foreground: 16 41% 12%;
+    --destructive: 0 50% 78%;         /* #E8A5A5 - Soft red */
+    --destructive-foreground: 0 40% 12%;
+    --border: 340 20% 88%;
+    --input: 340 20% 88%;
+    --ring: 330 45% 81%;              /* Rose ring color */
+    --radius: 0.75rem;
 
-    /* Signatura Companion Colors - Warm, supportive tones */
-    --companion: 221 83% 53%;          /* Trustworthy blue */
-    --companion-foreground: 0 0% 100%;
-    --companion-muted: 221 83% 95%;
+    /* Signatura Brand Gradient Colors */
+    --gradient-from: #F4C5A5;         /* Warm peach */
+    --gradient-via1: #F5D5E0;         /* Soft pink */
+    --gradient-via2: #D5C5E8;         /* Lavender */
+    --gradient-to: #B5D8E8;           /* Light blue */
 
-    --celebration: 142 71% 45%;        /* Growth green */
-    --celebration-foreground: 0 0% 100%;
+    /* Companion Colors */
+    --companion: #E8B5CD;             /* Rose */
+    --companion-light: #F5D5E0;
+    --companion-dark: #D895B5;
+    --companion-foreground: #2C1810;
 
-    --support: 262 83% 58%;            /* Empathetic purple */
-    --support-foreground: 0 0% 100%;
+    /* User Message Colors */
+    --user: #B5D8E8;                  /* Sky blue */
+    --user-light: #D5E8F0;
+    --user-dark: #8CC5DE;
+    --user-foreground: #2C1810;
+
+    /* Semantic Colors */
+    --success: #A5D8B8;               /* Soft green */
+    --success-foreground: #1A2C1E;
+    --warning: #F4C5A5;               /* Peach */
+    --warning-foreground: #2C1810;
+    --error: #E8A5A5;                 /* Soft red */
+    --error-foreground: #2C1010;
   }
 
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 240 5.9% 10%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
+    --background: 16 30% 8%;
+    --foreground: 340 20% 95%;
+    --card: 16 30% 10%;
+    --card-foreground: 340 20% 95%;
+    --popover: 16 30% 10%;
+    --popover-foreground: 340 20% 95%;
+    --primary: 340 20% 95%;
+    --primary-foreground: 16 30% 8%;
+    --secondary: 16 20% 15%;
+    --secondary-foreground: 340 20% 95%;
+    --muted: 16 20% 15%;
+    --muted-foreground: 340 15% 65%;
+    --accent: 270 20% 20%;
+    --accent-foreground: 340 20% 95%;
+    --destructive: 0 40% 35%;
+    --destructive-foreground: 340 20% 95%;
+    --border: 16 20% 18%;
+    --input: 16 20% 18%;
+    --ring: 330 35% 60%;
 
-    /* Signatura Companion Colors - Dark mode */
-    --companion: 217 91% 60%;
-    --companion-foreground: 0 0% 100%;
-    --companion-muted: 217 91% 20%;
+    /* Dark mode companion colors */
+    --companion: #D895B5;
+    --companion-light: #E8B5CD;
+    --companion-dark: #C875A5;
+    --companion-foreground: #FDFBFF;
 
-    --celebration: 142 76% 36%;
-    --celebration-foreground: 0 0% 100%;
+    --user: #8CC5DE;
+    --user-light: #B5D8E8;
+    --user-dark: #6BAFD0;
+    --user-foreground: #FDFBFF;
 
-    --support: 262 83% 65%;
-    --support-foreground: 0 0% 100%;
+    --success: #85C598;
+    --success-foreground: #E8F5EC;
+    --warning: #E8A77D;
+    --warning-foreground: #FDFBFF;
+    --error: #D88585;
+    --error-foreground: #FDF5F5;
   }
 }
 
@@ -76,61 +99,178 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  /* Warm, readable text */
+  h1, h2, h3, h4, h5, h6 {
+    @apply text-text-primary font-medium tracking-tight;
+  }
+  p {
+    @apply text-text-secondary leading-relaxed;
   }
 }
 
-/* Companion chat styling */
+/* Signatura Brand Components */
 @layer components {
+  /* Brand Gradient Backgrounds */
+  .bg-brand-gradient {
+    background: linear-gradient(90deg, var(--gradient-from) 0%, var(--gradient-via1) 33%, var(--gradient-via2) 66%, var(--gradient-to) 100%);
+  }
+
+  .bg-brand-gradient-subtle {
+    background: linear-gradient(90deg,
+      color-mix(in srgb, var(--gradient-from) 30%, white) 0%,
+      color-mix(in srgb, var(--gradient-via1) 30%, white) 33%,
+      color-mix(in srgb, var(--gradient-via2) 30%, white) 66%,
+      color-mix(in srgb, var(--gradient-to) 30%, white) 100%
+    );
+  }
+
+  .text-brand-gradient {
+    background: linear-gradient(90deg, var(--gradient-from) 0%, var(--gradient-via1) 33%, var(--gradient-via2) 66%, var(--gradient-to) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Companion Chat Messages */
   .companion-message {
-    @apply bg-companion-muted text-foreground rounded-2xl rounded-bl-md p-4 max-w-[85%];
+    @apply rounded-2xl rounded-bl-md p-4 max-w-[85%] shadow-soft;
+    background-color: var(--companion-light);
+    color: var(--companion-foreground);
   }
 
   .user-message {
-    @apply bg-primary text-primary-foreground rounded-2xl rounded-br-md p-4 max-w-[85%] ml-auto;
+    @apply rounded-2xl rounded-br-md p-4 max-w-[85%] ml-auto shadow-soft;
+    background-color: var(--user);
+    color: var(--user-foreground);
   }
 
-  .celebration-badge {
-    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-celebration/10 text-celebration text-sm font-medium;
+  /* Status Badges */
+  .success-badge {
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium;
+    background-color: color-mix(in srgb, var(--success) 20%, white);
+    color: var(--success-foreground);
   }
 
-  .support-badge {
-    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-support/10 text-support text-sm font-medium;
+  .warning-badge {
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium;
+    background-color: color-mix(in srgb, var(--warning) 20%, white);
+    color: var(--warning-foreground);
   }
 
+  .error-badge {
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium;
+    background-color: color-mix(in srgb, var(--error) 20%, white);
+    color: var(--error-foreground);
+  }
+
+  /* Energy & Mood Indicators */
   .mood-indicator {
-    @apply h-2 rounded-full transition-all duration-300;
+    @apply h-2 rounded-full transition-all duration-500 ease-out;
   }
 
   .energy-bar {
-    @apply h-1.5 rounded-full bg-muted overflow-hidden;
+    @apply h-2 rounded-full bg-muted overflow-hidden;
   }
 
   .energy-bar-fill {
-    @apply h-full rounded-full transition-all duration-500 ease-out;
+    @apply h-full rounded-full transition-all duration-700 ease-out;
+    background: linear-gradient(90deg, var(--gradient-from), var(--gradient-to));
+  }
+
+  /* Cards with Warm Styling */
+  .card-warm {
+    @apply bg-white rounded-xl p-6 shadow-soft transition-all duration-300;
+    border: 1px solid transparent;
+  }
+
+  .card-warm:hover {
+    @apply shadow-soft-md;
+    border-color: var(--companion-light);
+  }
+
+  /* Soft Focus States */
+  .focus-ring-warm {
+    @apply focus:outline-none focus:ring-2 focus:ring-offset-2;
+    --tw-ring-color: var(--companion);
+  }
+
+  /* Gradient Button */
+  .btn-gradient {
+    @apply px-6 py-3 rounded-xl font-medium text-white shadow-soft transition-all duration-300;
+    background: linear-gradient(90deg, var(--gradient-from) 0%, var(--gradient-via1) 33%, var(--gradient-via2) 66%, var(--gradient-to) 100%);
+    background-size: 200% 100%;
+  }
+
+  .btn-gradient:hover {
+    @apply shadow-soft-md;
+    background-position: 100% 0;
+  }
+
+  /* Companion presence indicator */
+  .companion-presence {
+    @apply flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium;
+    background-color: var(--companion-light);
+    color: var(--companion-foreground);
   }
 }
 
-/* Smooth transitions for emotional state changes */
+/* Smooth Animations */
 @layer utilities {
-  .animate-mood-change {
-    animation: moodChange 0.5s ease-out;
+  .animate-gradient {
+    background-size: 200% 200%;
+    animation: gradient-flow 8s ease infinite;
   }
 
-  @keyframes moodChange {
-    0% {
-      transform: scale(1);
+  @keyframes gradient-flow {
+    0%, 100% {
+      background-position: 0% 50%;
     }
     50% {
-      transform: scale(1.05);
-    }
-    100% {
-      transform: scale(1);
+      background-position: 100% 50%;
     }
   }
 
+  .animate-fade-up {
+    animation: fade-up 0.5s ease-out;
+  }
+
+  @keyframes fade-up {
+    0% {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-pulse-soft {
+    animation: pulse-soft 3s ease-in-out infinite;
+  }
+
+  @keyframes pulse-soft {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.8;
+    }
+  }
+
+  /* Text utilities */
   .text-balance {
     text-wrap: balance;
+  }
+
+  .text-warm {
+    color: var(--companion-foreground);
+  }
+
+  .text-warm-muted {
+    color: #6B5555;
   }
 }
