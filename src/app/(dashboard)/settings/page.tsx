@@ -5,7 +5,7 @@
  */
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui'
-import { Settings, User, Heart, Eye, Bell } from 'lucide-react'
+import { User, Heart, Eye, Bell } from 'lucide-react'
 
 export const metadata = {
   title: 'Settings | Signatura',

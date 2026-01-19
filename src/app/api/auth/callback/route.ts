@@ -29,8 +29,8 @@ export async function GET(request: Request) {
           .single()
 
         if (!profile) {
-          // Create new profile
-          await supabase.from('user_profiles').insert({
+          // Create new profile - using type assertion since schema may not be loaded
+          await (supabase.from('user_profiles') as any).insert({
             id: user.id,
             email: user.email!,
             full_name: user.user_metadata?.full_name || user.user_metadata?.name || null,
@@ -39,14 +39,14 @@ export async function GET(request: Request) {
           })
 
           // Create default personalization
-          await supabase.from('companion_personalization').insert({
+          await (supabase.from('companion_personalization') as any).insert({
             user_id: user.id,
             preferred_companion_name: 'companion',
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           })
 
           // Create default visibility settings
-          await supabase.from('candidate_visibility_settings').insert({
+          await (supabase.from('candidate_visibility_settings') as any).insert({
             user_id: user.id,
             visible_in_talent_pool: false,
             anonymization_level: 'full',

@@ -6,7 +6,9 @@
  */
 
 import { createClient } from '@/lib/supabase/server'
-import { CompanionChat } from '@/components/companion/chat'
+import { redirect } from 'next/navigation'
+import { CompanionDashboard } from '@/components/companion/dashboard'
+import { Heart } from 'lucide-react'
 
 export const metadata = {
   title: 'Your Companion | Signatura',
@@ -18,15 +20,16 @@ export default async function CompanionPage() {
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) {
-    return null
+    redirect('/login')
   }
 
   // Get user profile and personalization
+  // Using any type here since the database tables may not exist yet
   const { data: profile } = await supabase
     .from('user_profiles')
-    .select('full_name, current_streak, total_checkins')
+    .select('full_name, current_streak, total_checkins, longest_streak')
     .eq('id', user.id)
-    .single()
+    .single() as { data: { full_name: string | null; current_streak: number; total_checkins: number; longest_streak: number } | null }
 
   // Get today's emotional context if exists
   const today = new Date().toISOString().split('T')[0]
@@ -35,76 +38,83 @@ export default async function CompanionPage() {
     .select('*')
     .eq('user_id', user.id)
     .eq('date', today)
-    .single()
+    .maybeSingle() as { data: any }
 
-  // Get recent conversations for context
-  const { data: recentConversations } = await supabase
-    .from('companion_conversations')
-    .select('id, conversation_type, created_at, key_insights')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
-    .limit(3)
-
-  const userName = profile?.full_name || 'Friend'
-  const streak = profile?.current_streak || 0
-  const totalCheckins = profile?.total_checkins || 0
+  const userName = (profile?.full_name as string) || 'Friend'
+  const streak = (profile?.current_streak as number) || 0
+  const longestStreak = (profile?.longest_streak as number) || 0
+  const totalCheckins = (profile?.total_checkins as number) || 0
   const hasCheckedInToday = !!todayContext
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      {/* Header with streak */}
+    <div className="max-w-6xl mx-auto space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">
-            {getGreeting()}, {userName.split(' ')[0]}
-          </h1>
-          <p className="text-muted-foreground">
-            {hasCheckedInToday
-              ? "You've already checked in today. I'm here if you need me."
-              : "How are you feeling today?"}
-          </p>
+        <div className="flex items-center gap-4">
+          <div className="h-12 w-12 rounded-xl bg-brand-gradient flex items-center justify-center shadow-soft">
+            <Heart className="h-6 w-6 text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-text-primary">
+              {getGreeting()}, {userName.split(' ')[0]}
+            </h1>
+            <p className="text-text-secondary">
+              {hasCheckedInToday
+                ? "You've checked in today. I'm here whenever you need me."
+                : "Ready for your daily check-in?"}
+            </p>
+          </div>
         </div>
+
+        {/* Streak Display */}
         {streak > 0 && (
-          <div className="text-right">
-            <p className="text-2xl font-bold text-companion">{streak}</p>
-            <p className="text-xs text-muted-foreground">day streak</p>
+          <div className="hidden sm:flex items-center gap-3 px-4 py-2 rounded-xl bg-peach-light/50 border border-peach-light">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-peach-dark">{streak}</p>
+              <p className="text-xs text-text-secondary">day streak</p>
+            </div>
+            {longestStreak > streak && (
+              <div className="text-center border-l border-peach pl-3">
+                <p className="text-lg font-semibold text-text-tertiary">{longestStreak}</p>
+                <p className="text-xs text-text-tertiary">best</p>
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* Main chat interface */}
-      <CompanionChat
-        userId={user.id}
-        userName={userName}
-        hasCheckedInToday={hasCheckedInToday}
-        todayContext={todayContext}
-        streak={streak}
-        totalCheckins={totalCheckins}
-      />
-
-      {/* Recent activity summary */}
-      {recentConversations && recentConversations.length > 0 && (
-        <div className="space-y-3">
-          <h2 className="text-sm font-medium text-muted-foreground">
-            Recent conversations
+      {/* Welcome Message for First-Time Users */}
+      {totalCheckins === 0 && !hasCheckedInToday && (
+        <div className="p-6 rounded-xl bg-rose-light/30 border border-rose-light">
+          <h2 className="text-lg font-semibold text-text-primary mb-2">
+            Welcome to Signatura
           </h2>
-          <div className="space-y-2">
-            {recentConversations.map((conv) => (
-              <div
-                key={conv.id}
-                className="p-3 rounded-lg bg-muted/50 text-sm"
-              >
-                <p className="font-medium capitalize">
-                  {conv.conversation_type.replace(/_/g, ' ')}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {formatRelativeDate(conv.created_at)}
-                </p>
-              </div>
-            ))}
+          <p className="text-text-secondary mb-4">
+            I&apos;m your companion on this journey. Job searching can feel lonely,
+            but you don&apos;t have to do it alone. Let&apos;s start with a simple check-in—
+            tell me how you&apos;re feeling today.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <MoodHint emoji="Struggling" />
+            <MoodHint emoji="Anxious" />
+            <MoodHint emoji="Hopeful" />
+            <MoodHint emoji="Motivated" />
+            <MoodHint emoji="Exhausted" />
           </div>
         </div>
       )}
+
+      {/* Main Dashboard */}
+      <CompanionDashboard
+        userId={user.id}
+        userName={userName}
+        initialData={{
+          hasCheckedInToday,
+          todayCheckin: todayContext,
+          streak,
+          totalCheckins,
+        }}
+      />
     </div>
   )
 }
@@ -116,14 +126,10 @@ function getGreeting(): string {
   return 'Good evening'
 }
 
-function formatRelativeDate(dateString: string): string {
-  const date = new Date(dateString)
-  const now = new Date()
-  const diff = now.getTime() - date.getTime()
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-
-  if (days === 0) return 'Today'
-  if (days === 1) return 'Yesterday'
-  if (days < 7) return `${days} days ago`
-  return date.toLocaleDateString()
+function MoodHint({ emoji }: { emoji: string }) {
+  return (
+    <span className="px-3 py-1 rounded-full bg-white/50 text-sm text-text-secondary">
+      {emoji}
+    </span>
+  )
 }

@@ -38,7 +38,7 @@ export function CompanionChat({
   hasCheckedInToday,
   todayContext,
   streak,
-  totalCheckins,
+  totalCheckins: _totalCheckins,
 }: CompanionChatProps) {
   const [messages, setMessages] = useState<Message[]>(() => {
     // Initialize with context-aware greeting
@@ -236,7 +236,7 @@ function getInitialGreeting(
   userName: string,
   streak: number,
   hasCheckedInToday: boolean,
-  todayContext: any
+  _todayContext: any
 ): string {
   const firstName = userName.split(' ')[0]
   const hour = new Date().getHours()

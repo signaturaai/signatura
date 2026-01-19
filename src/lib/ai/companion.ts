@@ -9,7 +9,6 @@ import OpenAI from 'openai'
 import {
   COMPANION_SYSTEM_PROMPT,
   buildDailyCheckInPrompt,
-  buildMoodResponsePrompt,
   buildMicroGoalPrompt,
   buildCelebrationPrompt,
   buildRejectionSupportPrompt,
@@ -23,10 +22,17 @@ import type {
   EnergyLevel,
 } from '@/types'
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
+// Lazy-initialize OpenAI client to avoid build-time errors
+let openai: OpenAI | null = null
+
+function getOpenAI(): OpenAI {
+  if (!openai) {
+    openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    })
+  }
+  return openai
+}
 
 const MODEL = process.env.OPENAI_MODEL || 'gpt-4-turbo-preview'
 
@@ -35,14 +41,14 @@ const MODEL = process.env.OPENAI_MODEL || 'gpt-4-turbo-preview'
  */
 export async function detectEmotionalState(
   message: string,
-  recentContext?: Partial<EmotionalState>
+  _recentContext?: Partial<EmotionalState>
 ): Promise<{
   mood: number
   energy: EnergyLevel
   emotionalKeywords: string[]
   burnoutWarning: boolean
 }> {
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: MODEL,
     messages: [
       {
@@ -98,7 +104,7 @@ export async function generateCheckInResponse(
     completedGoalsRatio: '7/10', // TODO: Calculate from actual data
   })
 
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: MODEL,
     messages: [
       { role: 'system', content: COMPANION_SYSTEM_PROMPT },
@@ -156,7 +162,7 @@ export async function generateMicroGoal(
     noApplicationsInDays: context.recentActivity.daysSinceLastApplication,
   })
 
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: MODEL,
     messages: [
       { role: 'system', content: COMPANION_SYSTEM_PROMPT },
@@ -197,7 +203,7 @@ export async function generateCelebration(context: {
     hoursSinceSet: 2, // TODO: Calculate actual time
   })
 
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: MODEL,
     messages: [
       { role: 'system', content: COMPANION_SYSTEM_PROMPT },
@@ -231,7 +237,7 @@ export async function generateRejectionSupport(context: {
     recentRejectionCount: context.recentRejections,
   })
 
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: MODEL,
     messages: [
       { role: 'system', content: COMPANION_SYSTEM_PROMPT },
@@ -275,7 +281,7 @@ export async function generateFollowUpEmail(context: {
     recruiterName: context.recruiterName,
   })
 
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: MODEL,
     messages: [
       { role: 'system', content: COMPANION_SYSTEM_PROMPT },
@@ -321,7 +327,7 @@ export async function generateConversationalResponse(
     })),
   ]
 
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: MODEL,
     messages,
     temperature: 0.7,
