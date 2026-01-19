@@ -1,130 +1,162 @@
-# Signatura
+# Signatura - AI Career Companion
 
-**AI Career Companion** - Making job seekers feel less alone.
+Signatura is not a job search tool. It's an AI companion that walks alongside job seekers during one of the loneliest, most uncertain times in their professional lives.
 
-## What Is Signatura?
+## Philosophy
 
-Signatura is **not** a job search tool suite. It's an AI companion that walks alongside someone during one of the loneliest, most uncertain times in their professional life.
+> "The tools are just touchpoints. The relationship is everything."
 
-The tools (CV optimization, interview coaching, salary negotiation, contract review) are **touchpoints**—conversation starters that let the companion build trust, provide support, and combat the isolation of job searching.
+Traditional job platforms treat job seekers as products to be sold to recruiters. Signatura flips this model by putting human dignity first. Every feature is designed around emotional intelligence, not just task completion.
 
-> "Every line of code should ask: Does this make the user feel less alone?"
+### Core Principles
 
-## Core Philosophy
+1. **Emotional Intelligence First** - Understand mood before offering advice
+2. **Validation Before Optimization** - Acknowledge feelings before suggesting actions
+3. **Energy-Aware Assistance** - Adapt to user's current capacity
+4. **Burnout Prevention** - Actively detect and prevent over-application
+5. **Celebration of Small Wins** - Every step forward matters
 
-### The Problem We Solve
+## Tech Stack
 
-**Primary (90% of the value):** Loneliness and uncertainty during job search
-- Feeling alone in the process
-- Not knowing if you're doing things right
-- Self-doubt and anxiety
-- Burnout from rejections
-- No one to celebrate small wins with
-
-**Secondary (10%):** Suboptimal CVs, poor interview prep, weak salary negotiation
-
-### The Approach
-
-| What People Think | What Signatura Actually Is |
-|-------------------|----------------------------|
-| CV optimization tool | A companion that helps with CVs |
-| Interview prep app | A supportive partner for practice |
-| Job board with AI | A friend that finds opportunities and celebrates applications |
-
-## Architecture Principles
-
-### 1. Emotional Intelligence First
-- Validation before advice
-- Specific recognition over generic praise
-- Memory and context from past conversations
-- Burnout detection and rest encouragement
-
-### 2. Candidate-Controlled Visibility
-- "YOU decide when you're ready to be discovered"
-- Granular privacy controls
-- Age-blind CV processing
-- Anonymization options
-
-### 3. Meaningful Communication
-- Follow-up email generation at every stage
-- Tracking to combat "did they even see it?" anxiety
-- Professional, non-desperate language
-
-### 4. Recruiter Accountability
-- Rejections MUST include specific, actionable feedback
-- Indicator-based feedback (10 dimensions)
-- Recruiter quality tracking
-
-## The 10-Indicator Framework
-
-1. Job Knowledge & Technical Skills
-2. Problem-Solving & Critical Thinking
-3. Communication & Articulation
-4. Social Skills & Interpersonal Ability
-5. Integrity & Ethical Standards
-6. Adaptability & Flexibility
-7. Learning Agility & Growth Mindset
-8. Leadership & Initiative
-9. Creativity & Innovation
-10. Motivation & Drive
+- **Framework**: Next.js 14 (App Router)
+- **Language**: TypeScript
+- **Database**: Supabase (PostgreSQL + pgvector)
+- **Authentication**: Supabase Auth
+- **AI**: OpenAI GPT-4
+- **Styling**: Tailwind CSS + shadcn/ui
+- **Testing**: Vitest + React Testing Library
 
 ## Project Structure
 
 ```
-signatura/
-├── docs/
-│   ├── SIGNATURA_VISION.md          # Full architecture vision
-│   ├── AI_PROMPTS_LIBRARY.md        # AI prompt collection
-│   └── database-schema-emotional-core.sql  # Database schema
-├── src/                              # Application source (TBD)
-├── tests/                            # Test suite (TBD)
-└── README.md
+src/
+├── app/                    # Next.js App Router pages
+│   ├── (auth)/            # Authentication pages (login, signup)
+│   ├── (dashboard)/       # Protected dashboard pages
+│   │   ├── companion/     # Daily check-in & companion chat
+│   │   ├── applications/  # Application tracker
+│   │   ├── cv/           # CV optimization
+│   │   ├── interview/    # Interview preparation
+│   │   └── settings/     # User settings
+│   └── api/              # API routes
+├── components/
+│   ├── ui/               # Base UI components (shadcn/ui)
+│   ├── auth/             # Authentication components
+│   ├── companion/        # Companion chat & presence
+│   └── dashboard/        # Dashboard layout & nav
+├── lib/
+│   ├── ai/               # AI/Companion logic
+│   │   ├── companion.ts  # Core companion functions
+│   │   ├── prompts.ts    # Emotional intelligence prompts
+│   │   ├── context.ts    # Context retrieval
+│   │   └── memory.ts     # Conversation memory
+│   ├── supabase/         # Supabase clients
+│   └── utils.ts          # Utility functions
+└── types/                # TypeScript type definitions
 ```
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js 18+
+- npm or pnpm
+- Supabase account
+- OpenAI API key (optional for development)
+
+### Installation
+
+1. Clone the repository:
+```bash
+git clone https://github.com/your-org/signatura.git
+cd signatura
+```
+
+2. Install dependencies:
+```bash
+npm install
+```
+
+3. Set up environment variables:
+```bash
+cp .env.example .env.local
+```
+
+4. Configure your `.env.local`:
+```env
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+OPENAI_API_KEY=your_openai_key  # Optional
+USE_MOCK_AI=true  # Set to false when using real API
+```
+
+5. Run database migrations:
+```bash
+npx supabase db push
+```
+
+6. Start the development server:
+```bash
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) to see the application.
+
+## Development
+
+### Mock AI Mode
+
+To save API costs during development, set `USE_MOCK_AI=true` in your environment. The companion will return contextually appropriate mock responses.
+
+### Running Tests
+
+```bash
+npm run test
+```
+
+### Key Files
+
+- `src/lib/ai/companion.ts` - Core companion logic with emotional detection
+- `src/lib/ai/prompts.ts` - All emotional intelligence prompts
+- `src/types/companion.ts` - Type definitions for companion interactions
+
+## Architecture
+
+### The Companion Model
+
+Unlike traditional chatbots, Signatura's companion:
+
+1. **Remembers context** - Knows your history, struggles, and wins
+2. **Adapts to energy** - Suggests rest when you're exhausted
+3. **Celebrates progress** - Every application sent is acknowledged
+4. **Provides support** - Rejections are met with empathy, not advice
+
+### Database Schema (4 Tiers)
+
+1. **Emotional Foundation** - Daily check-ins, energy levels, streaks
+2. **User Empowerment** - CVs, skills, goals with user control
+3. **Dignified Communication** - Conversations with context and memory
+4. **Job Search Tools** - Applications, companies, interviews
+
+See `docs/database-schema-emotional-core.sql` for the complete schema.
 
 ## Documentation
 
-- **[Vision Document](docs/SIGNATURA_VISION.md)** - Complete architecture and philosophy
-- **[AI Prompts Library](docs/AI_PROMPTS_LIBRARY.md)** - Emotional intelligence prompt collection
-- **[Database Schema](docs/database-schema-emotional-core.sql)** - Emotional core database design
-
-## Tech Stack (Planned)
-
-- **Frontend:** Next.js with TypeScript
-- **Backend:** Supabase (PostgreSQL + Auth + Storage)
-- **AI:** Claude API for companion interactions
-- **Vector Search:** pgvector for conversation memory
-- **Deployment:** Vercel
-
-## Development Phases
-
-| Phase | Focus | Goal |
-|-------|-------|------|
-| 1 | Companion Foundation | AI companion relationship established |
-| 2 | Candidate Empowerment | Visibility controls, follow-up system |
-| 3 | Job Search Tools | CV, Interview, Compensation, Contract |
-| 4 | Recruiter Accountability | Forced feedback, quality tracking |
-| 5 | Advanced Features | Burnout prediction, proactive support |
-
-## Success Metrics
-
-**Primary (Companion Relationship):**
-- Daily check-in engagement: 70%+
-- Mood improvement over 4 weeks: +2 points average
-- Micro-goal completion: 60%+
-
-**Secondary (Tool Usage):**
-- Follow-up send rate: 40%+
-- Talent pool opt-in: 30%+
-- Session completion: 80%+
+- `docs/SIGNATURA_VISION.md` - Complete product vision and philosophy
+- `docs/AI_PROMPTS_LIBRARY.md` - All emotional intelligence prompts
+- `docs/database-schema-emotional-core.sql` - Database schema
+- `docs/IMPLEMENTATION_LOG.md` - Development progress log
 
 ## Contributing
 
-This project is in early development. See the vision document for architectural guidelines.
+This project follows the principle of emotional intelligence first. When contributing:
+
+1. Use "companion" terminology, never "assistant" or "chatbot"
+2. Consider emotional impact before adding features
+3. Validate feelings before optimizing workflows
+4. Test for burnout detection and prevention
 
 ## License
 
-TBD
-
----
-
-*"This is not a job search app with AI features. This is an AI companion with job search tools. The difference is everything."*
+Private - All rights reserved

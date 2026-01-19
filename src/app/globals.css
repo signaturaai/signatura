@@ -1,0 +1,136 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 240 5.9% 10%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 240 5.9% 10%;
+    --radius: 0.5rem;
+
+    /* Signatura Companion Colors - Warm, supportive tones */
+    --companion: 221 83% 53%;          /* Trustworthy blue */
+    --companion-foreground: 0 0% 100%;
+    --companion-muted: 221 83% 95%;
+
+    --celebration: 142 71% 45%;        /* Growth green */
+    --celebration-foreground: 0 0% 100%;
+
+    --support: 262 83% 58%;            /* Empathetic purple */
+    --support-foreground: 0 0% 100%;
+  }
+
+  .dark {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 10% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 240 5.9% 10%;
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 240 4.9% 83.9%;
+
+    /* Signatura Companion Colors - Dark mode */
+    --companion: 217 91% 60%;
+    --companion-foreground: 0 0% 100%;
+    --companion-muted: 217 91% 20%;
+
+    --celebration: 142 76% 36%;
+    --celebration-foreground: 0 0% 100%;
+
+    --support: 262 83% 65%;
+    --support-foreground: 0 0% 100%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Companion chat styling */
+@layer components {
+  .companion-message {
+    @apply bg-companion-muted text-foreground rounded-2xl rounded-bl-md p-4 max-w-[85%];
+  }
+
+  .user-message {
+    @apply bg-primary text-primary-foreground rounded-2xl rounded-br-md p-4 max-w-[85%] ml-auto;
+  }
+
+  .celebration-badge {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-celebration/10 text-celebration text-sm font-medium;
+  }
+
+  .support-badge {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-support/10 text-support text-sm font-medium;
+  }
+
+  .mood-indicator {
+    @apply h-2 rounded-full transition-all duration-300;
+  }
+
+  .energy-bar {
+    @apply h-1.5 rounded-full bg-muted overflow-hidden;
+  }
+
+  .energy-bar-fill {
+    @apply h-full rounded-full transition-all duration-500 ease-out;
+  }
+}
+
+/* Smooth transitions for emotional state changes */
+@layer utilities {
+  .animate-mood-change {
+    animation: moodChange 0.5s ease-out;
+  }
+
+  @keyframes moodChange {
+    0% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.05);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+}
