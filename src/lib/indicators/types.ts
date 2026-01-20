@@ -157,9 +157,9 @@ export function getScoreLabel(score: number): string {
   return SCORE_LABELS[rounded] || 'Unknown'
 }
 
-// Indicator names for reference
+// Indicator names for reference (universal for all industries)
 export const INDICATOR_NAMES: Record<number, string> = {
-  1: 'Job Knowledge & Technical Skills',
+  1: 'Job Knowledge & Professional Competence',
   2: 'Problem-Solving & Critical Thinking',
   3: 'Communication & Articulation',
   4: 'Social Skills & Interpersonal Ability',
@@ -169,6 +169,20 @@ export const INDICATOR_NAMES: Record<number, string> = {
   8: 'Leadership & Initiative',
   9: 'Creativity & Innovation',
   10: 'Motivation & Drive',
+}
+
+// Indicator categories
+export const INDICATOR_CATEGORIES: Record<number, 'Cognitive' | 'Interpersonal' | 'Character'> = {
+  1: 'Cognitive',
+  2: 'Cognitive',
+  3: 'Interpersonal',
+  4: 'Interpersonal',
+  5: 'Character',
+  6: 'Character',
+  7: 'Cognitive',
+  8: 'Interpersonal',
+  9: 'Cognitive',
+  10: 'Character',
 }
 
 // Short names for UI display
