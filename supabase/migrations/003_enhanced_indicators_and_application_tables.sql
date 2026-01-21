@@ -350,6 +350,15 @@ CREATE INDEX IF NOT EXISTS idx_sub_indicators_indicator ON sub_indicators(indica
 -- PART 11: TRIGGERS FOR UPDATED_AT
 -- ============================================================================
 
+-- Create the handle_updated_at function if it doesn't exist
+CREATE OR REPLACE FUNCTION handle_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 DROP TRIGGER IF EXISTS set_updated_at ON compensation_negotiations;
 DROP TRIGGER IF EXISTS set_updated_at ON contract_reviews;
 
