@@ -3,14 +3,17 @@
 /**
  * Signup Form Component
  *
- * Welcoming signup experience with validation.
+ * Welcoming signup experience with validation, user type selection, and GDPR consent.
  */
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button, Input, Label, Card, CardContent, CardFooter } from '@/components/ui'
-import { Loader2 } from 'lucide-react'
+import { PrivacyPolicyLink } from '@/components/legal'
+import { Loader2, User, Briefcase } from 'lucide-react'
+
+type UserType = 'candidate' | 'recruiter'
 
 export function SignupForm() {
   const router = useRouter()
@@ -20,6 +23,8 @@ export function SignupForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [userType, setUserType] = useState<UserType>('candidate')
+  const [acceptedPrivacy, setAcceptedPrivacy] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -30,6 +35,12 @@ export function SignupForm() {
     setError(null)
 
     // Validation
+    if (!acceptedPrivacy) {
+      setError('You must accept the Privacy Policy to continue')
+      setLoading(false)
+      return
+    }
+
     if (password !== confirmPassword) {
       setError('Passwords do not match')
       setLoading(false)
@@ -48,6 +59,7 @@ export function SignupForm() {
       options: {
         data: {
           full_name: name,
+          user_type: userType,
         },
         emailRedirectTo: `${window.location.origin}/api/auth/callback`,
       },
@@ -66,8 +78,44 @@ export function SignupForm() {
       return
     }
 
-    // If no confirmation required, redirect
-    router.push('/companion')
+    // If user created successfully, update profile with user_type and consent
+    if (data.user) {
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert({
+          id: data.user.id,
+          email,
+          full_name: name,
+          user_type: userType,
+          is_admin: false,
+          privacy_policy_accepted_at: new Date().toISOString(),
+          terms_accepted_at: new Date().toISOString(),
+        })
+
+      if (profileError) {
+        console.error('Error creating profile:', profileError)
+        // Continue anyway - profile might be created by trigger
+      }
+
+      // Log consent
+      try {
+        await fetch('/api/consent/log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            consent_type: 'privacy_policy',
+            action: 'granted',
+            version: '2.0',
+          }),
+        })
+      } catch {
+        // Silently fail - consent was recorded in profile
+      }
+    }
+
+    // Redirect based on user type
+    const redirectPath = userType === 'recruiter' ? '/jobs' : '/companion'
+    router.push(redirectPath)
     router.refresh()
   }
 
@@ -156,13 +204,68 @@ export function SignupForm() {
               disabled={loading}
             />
           </div>
+
+          {/* User Type Selection */}
+          <div className="space-y-3">
+            <Label>I am:</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setUserType('candidate')}
+                disabled={loading}
+                className={`p-4 border-2 rounded-lg text-left transition-all ${
+                  userType === 'candidate'
+                    ? 'border-primary bg-primary/5'
+                    : 'border-muted hover:border-muted-foreground/30'
+                }`}
+              >
+                <User className={`w-5 h-5 mb-2 ${userType === 'candidate' ? 'text-primary' : 'text-muted-foreground'}`} />
+                <div className="font-medium text-sm">Looking for a job</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  CV tools, interview prep
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setUserType('recruiter')}
+                disabled={loading}
+                className={`p-4 border-2 rounded-lg text-left transition-all ${
+                  userType === 'recruiter'
+                    ? 'border-primary bg-primary/5'
+                    : 'border-muted hover:border-muted-foreground/30'
+                }`}
+              >
+                <Briefcase className={`w-5 h-5 mb-2 ${userType === 'recruiter' ? 'text-primary' : 'text-muted-foreground'}`} />
+                <div className="font-medium text-sm">Hiring talent</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Job postings, candidates
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* Privacy Policy Acceptance */}
+          <div className="flex items-start gap-3 pt-2">
+            <input
+              type="checkbox"
+              id="acceptPrivacy"
+              checked={acceptedPrivacy}
+              onChange={(e) => setAcceptedPrivacy(e.target.checked)}
+              disabled={loading}
+              className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+            />
+            <label htmlFor="acceptPrivacy" className="text-sm text-muted-foreground">
+              I accept the <PrivacyPolicyLink className="text-primary underline" /> and consent to data processing as described
+            </label>
+          </div>
         </CardContent>
 
         <CardFooter className="flex flex-col space-y-4">
           <Button
             type="submit"
             className="w-full"
-            disabled={loading}
+            disabled={loading || !acceptedPrivacy}
           >
             {loading ? (
               <>
@@ -170,7 +273,7 @@ export function SignupForm() {
                 Creating account...
               </>
             ) : (
-              'Create account'
+              `Create ${userType === 'recruiter' ? 'recruiter' : 'candidate'} account`
             )}
           </Button>
 
@@ -215,13 +318,7 @@ export function SignupForm() {
 
           <p className="text-xs text-center text-muted-foreground">
             By creating an account, you agree to our{' '}
-            <a href="/terms" className="underline hover:text-primary">
-              Terms of Service
-            </a>{' '}
-            and{' '}
-            <a href="/privacy" className="underline hover:text-primary">
-              Privacy Policy
-            </a>
+            <PrivacyPolicyLink className="underline hover:text-primary" />
           </p>
         </CardFooter>
       </form>

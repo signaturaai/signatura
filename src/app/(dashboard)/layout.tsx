@@ -22,21 +22,21 @@ export default async function DashboardLayout({
     redirect('/login')
   }
 
-  // Get user profile
+  // Get user profile (type assertion since tables may not exist yet)
   const { data: profile } = await supabase
     .from('user_profiles')
     .select('full_name, profile_image, current_streak')
     .eq('id', user.id)
-    .single()
+    .single() as { data: { full_name: string | null; profile_image: string | null; current_streak: number } | null }
 
   return (
     <div className="min-h-screen bg-background">
       {/* Top navigation */}
       <DashboardNav
         user={{
-          name: profile?.full_name || user.email || 'User',
+          name: (profile?.full_name as string) || user.email || 'User',
           email: user.email || '',
-          image: profile?.profile_image,
+          image: profile?.profile_image as string | null,
         }}
       />
 
@@ -47,7 +47,7 @@ export default async function DashboardLayout({
 
       {/* Companion presence indicator */}
       <CompanionPresence
-        streak={profile?.current_streak || 0}
+        streak={(profile?.current_streak as number) || 0}
       />
     </div>
   )

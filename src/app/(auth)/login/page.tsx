@@ -7,6 +7,8 @@
 
 import { LoginForm } from '@/components/auth/login-form'
 
+export const dynamic = 'force-dynamic'
+
 export const metadata = {
   title: 'Welcome Back | Signatura',
   description: 'Sign in to continue your job search journey with your AI companion.',

@@ -21,12 +21,12 @@ import type {
 export async function getCompanionContext(userId: string): Promise<CompanionContext | null> {
   const supabase = await createClient()
 
-  // Fetch user profile
+  // Fetch user profile (type assertion for unloaded schema)
   const { data: profile, error: profileError } = await supabase
     .from('user_profiles')
     .select('*')
     .eq('id', userId)
-    .single()
+    .single() as { data: any; error: any }
 
   if (profileError || !profile) {
     console.error('Error fetching profile:', profileError)
@@ -39,14 +39,14 @@ export async function getCompanionContext(userId: string): Promise<CompanionCont
     .select('*')
     .eq('user_id', userId)
     .order('date', { ascending: false })
-    .limit(7)
+    .limit(7) as { data: any[] | null }
 
   // Fetch personalization settings
   const { data: personalization } = await supabase
     .from('companion_personalization')
     .select('*')
     .eq('user_id', userId)
-    .single()
+    .single() as { data: any }
 
   // Fetch recent conversations for context
   const { data: recentConversations } = await supabase
@@ -54,7 +54,7 @@ export async function getCompanionContext(userId: string): Promise<CompanionCont
     .select('*')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
-    .limit(5)
+    .limit(5) as { data: any[] | null }
 
   // Fetch recent applications for activity context
   const { data: recentApplications } = await supabase
@@ -62,7 +62,7 @@ export async function getCompanionContext(userId: string): Promise<CompanionCont
     .select('*')
     .eq('user_id', userId)
     .gte('created_at', getDateDaysAgo(7).toISOString())
-    .order('created_at', { ascending: false })
+    .order('created_at', { ascending: false }) as { data: any[] | null }
 
   // Calculate emotional state
   const emotionalState = calculateEmotionalState(recentEmotions || [])
@@ -82,7 +82,7 @@ export async function getCompanionContext(userId: string): Promise<CompanionCont
 
   // Calculate recent activity
   const applicationsThisWeek = recentApplications?.length || 0
-  const recentRejections = recentApplications?.filter(
+  const _recentRejections = recentApplications?.filter(
     app => app.application_status === 'rejected'
   ).length || 0
   const daysSinceLastApplication = calculateDaysSince(
@@ -142,7 +142,7 @@ export async function getTopicContext(
     .contains('topics_discussed', [topic])
     .gte('created_at', getDateDaysAgo(lookbackDays).toISOString())
     .order('created_at', { ascending: false })
-    .limit(10)
+    .limit(10) as { data: any[] | null }
 
   return summarizeConversations(conversations || [])
 }
@@ -168,12 +168,12 @@ export async function getPendingFollowUps(userId: string): Promise<Array<{
       )
     `)
     .eq('user_id', userId)
-    .eq('sent_at', null)
-    .order('created_at', { ascending: false })
+    .is('sent_at', null)
+    .order('created_at', { ascending: false }) as { data: any[] | null }
 
-  return (followUps || []).map(fu => ({
+  return (followUps || []).map((fu: any) => ({
     applicationId: fu.job_application_id,
-    companyName: (fu.job_applications as any)?.company_name || 'Unknown',
+    companyName: fu.job_applications?.company_name || 'Unknown',
     daysSinceLastContact: fu.days_since_last_contact || 0,
     stage: fu.application_stage,
   }))
@@ -189,13 +189,13 @@ export async function getBurnoutRisk(userId: string): Promise<{
 }> {
   const supabase = await createClient()
 
-  // Get recent emotional data
+  // Get recent emotional data (type assertion for unloaded schema)
   const { data: recentEmotions } = await supabase
     .from('user_emotional_context')
     .select('mood_rating, energy_level, rejection_count_this_week, burnout_risk_score')
     .eq('user_id', userId)
     .order('date', { ascending: false })
-    .limit(7)
+    .limit(7) as { data: any[] | null }
 
   // Get recent rejections
   const { data: recentRejections } = await supabase
@@ -203,7 +203,7 @@ export async function getBurnoutRisk(userId: string): Promise<{
     .select('id')
     .eq('user_id', userId)
     .eq('application_status', 'rejected')
-    .gte('updated_at', getDateDaysAgo(14).toISOString())
+    .gte('updated_at', getDateDaysAgo(14).toISOString()) as { data: any[] | null }
 
   const factors: string[] = []
   let score = 0

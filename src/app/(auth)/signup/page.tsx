@@ -7,6 +7,8 @@
 
 import { SignupForm } from '@/components/auth/signup-form'
 
+export const dynamic = 'force-dynamic'
+
 export const metadata = {
   title: 'Get Started | Signatura',
   description: 'Create your account and start your journey with an AI companion who understands job searching.',

@@ -1,2 +1,5 @@
 export { CompanionPresence } from './presence'
 export { CompanionChat } from './chat'
+export { EmotionalState, MoodTrend } from './emotional-state'
+export { GoalCard } from './goal-card'
+export { CompanionDashboard } from './dashboard'

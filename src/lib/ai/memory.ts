@@ -28,12 +28,13 @@ export async function storeConversation(params: {
 }): Promise<string | null> {
   const supabase = await createClient()
 
-  const { data, error } = await supabase
-    .from('companion_conversations')
+  // Type assertion for unloaded schema
+  const { data, error } = await (supabase
+    .from('companion_conversations') as any)
     .insert({
       user_id: params.userId,
       conversation_type: params.type,
-      messages: params.messages as any,
+      messages: params.messages,
       message_count: params.messages.length,
       duration_minutes: calculateDuration(params.messages),
       starting_mood: params.startingMood,
@@ -54,7 +55,7 @@ export async function storeConversation(params: {
     return null
   }
 
-  return data.id
+  return data?.id || null
 }
 
 /**
@@ -71,19 +72,19 @@ export async function addMessageToConversation(
     .from('companion_conversations')
     .select('messages')
     .eq('id', conversationId)
-    .single()
+    .single() as { data: { messages: any[] } | null; error: any }
 
   if (fetchError || !current) {
     console.error('Error fetching conversation:', fetchError)
     return false
   }
 
-  const messages = [...(current.messages as any[]), message]
+  const messages = [...(current.messages || []), message]
 
-  const { error: updateError } = await supabase
-    .from('companion_conversations')
+  const { error: updateError } = await (supabase
+    .from('companion_conversations') as any)
     .update({
-      messages: messages as any,
+      messages: messages,
       message_count: messages.length,
       updated_at: new Date().toISOString(),
     })
@@ -125,12 +126,12 @@ export async function storeDailyContext(params: {
     .select('id')
     .eq('user_id', params.userId)
     .eq('date', today)
-    .single()
+    .single() as { data: { id: string } | null }
 
   if (existing) {
     // Update existing entry
-    const { error } = await supabase
-      .from('user_emotional_context')
+    const { error } = await (supabase
+      .from('user_emotional_context') as any)
       .update({
         mood_rating: params.moodRating,
         energy_level: params.energyLevel,
@@ -156,8 +157,8 @@ export async function storeDailyContext(params: {
   }
 
   // Create new entry
-  const { data, error } = await supabase
-    .from('user_emotional_context')
+  const { data, error } = await (supabase
+    .from('user_emotional_context') as any)
     .insert({
       user_id: params.userId,
       date: today,
@@ -187,7 +188,7 @@ export async function storeDailyContext(params: {
   // Update user profile streak
   await updateUserStreak(params.userId)
 
-  return data.id
+  return data?.id || null
 }
 
 /**
@@ -201,8 +202,8 @@ export async function markGoalCompleted(
 
   const today = new Date().toISOString().split('T')[0]
 
-  const { error } = await supabase
-    .from('user_emotional_context')
+  const { error } = await (supabase
+    .from('user_emotional_context') as any)
     .update({
       goal_completed: true,
       completion_time: new Date().toISOString(),
@@ -233,19 +234,19 @@ export async function storeKeyInsight(
     .from('companion_conversations')
     .select('key_insights')
     .eq('id', conversationId)
-    .single()
+    .single() as { data: { key_insights: any[] } | null; error: any }
 
   if (fetchError || !current) {
     console.error('Error fetching conversation:', fetchError)
     return false
   }
 
-  const insights = [...(current.key_insights as any[]), insight]
+  const insights = [...(current.key_insights || []), insight]
 
-  const { error: updateError } = await supabase
-    .from('companion_conversations')
+  const { error: updateError } = await (supabase
+    .from('companion_conversations') as any)
     .update({
-      key_insights: insights as any,
+      key_insights: insights,
     })
     .eq('id', conversationId)
 
@@ -271,24 +272,24 @@ export async function fulfillCommitment(
     .from('companion_conversations')
     .select('commitments_made')
     .eq('id', conversationId)
-    .single()
+    .single() as { data: { commitments_made: any[] } | null; error: any }
 
   if (fetchError || !current) {
     console.error('Error fetching conversation:', fetchError)
     return false
   }
 
-  const commitments = (current.commitments_made as any[]).map(c => {
+  const commitments = (current.commitments_made || []).map((c: any) => {
     if (c.promise === commitmentPromise) {
       return { ...c, fulfilled: true }
     }
     return c
   })
 
-  const { error: updateError } = await supabase
-    .from('companion_conversations')
+  const { error: updateError } = await (supabase
+    .from('companion_conversations') as any)
     .update({
-      commitments_made: commitments as any,
+      commitments_made: commitments,
     })
     .eq('id', conversationId)
 
@@ -314,7 +315,7 @@ export async function getUnfulfilledCommitments(
     .eq('user_id', userId)
     .not('commitments_made', 'eq', '[]')
     .order('created_at', { ascending: false })
-    .limit(10)
+    .limit(10) as { data: any[] | null; error: any }
 
   if (error || !conversations) {
     console.error('Error fetching commitments:', error)
@@ -356,14 +357,14 @@ export async function searchMemory(
     .select('id, conversation_type, created_at, key_insights, messages')
     .eq('user_id', userId)
     .textSearch('topics_discussed', query, { type: 'plain' })
-    .limit(limit)
+    .limit(limit) as { data: any[] | null; error: any }
 
   if (error || !conversations) {
     console.error('Error searching memory:', error)
     return []
   }
 
-  return conversations.map(conv => {
+  return conversations.map((conv: any) => {
     const insights = (conv.key_insights as KeyInsight[]) || []
     const messages = (conv.messages as any[]) || []
     const relevantQuotes = messages
@@ -375,7 +376,7 @@ export async function searchMemory(
       conversationId: conv.id,
       type: conv.conversation_type as ConversationType,
       date: conv.created_at,
-      relevantInsights: insights.filter(i =>
+      relevantInsights: insights.filter((i: any) =>
         i.description.toLowerCase().includes(query.toLowerCase()) ||
         (i.quote && i.quote.toLowerCase().includes(query.toLowerCase()))
       ),
@@ -426,15 +427,15 @@ async function updateUserStreak(userId: string): Promise<void> {
     .from('user_profiles')
     .select('current_streak, longest_streak, total_checkins')
     .eq('id', userId)
-    .single()
+    .single() as { data: { current_streak: number; longest_streak: number; total_checkins: number } | null }
 
   if (!profile) return
 
   const newStreak = (profile.current_streak || 0) + 1
   const newLongest = Math.max(newStreak, profile.longest_streak || 0)
 
-  await supabase
-    .from('user_profiles')
+  await (supabase
+    .from('user_profiles') as any)
     .update({
       current_streak: newStreak,
       longest_streak: newLongest,
