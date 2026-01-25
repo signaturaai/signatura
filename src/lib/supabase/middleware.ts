@@ -45,14 +45,17 @@ export async function updateSession(request: NextRequest) {
   // Protected routes check
   const isAuthPage = request.nextUrl.pathname.startsWith('/login') ||
                      request.nextUrl.pathname.startsWith('/signup')
-  const isDashboardPage = request.nextUrl.pathname.startsWith('/companion') ||
+  const isOnboardingPage = request.nextUrl.pathname.startsWith('/onboarding')
+  const isProtectedPage = request.nextUrl.pathname.startsWith('/companion') ||
+                          request.nextUrl.pathname.startsWith('/dashboard') ||
                           request.nextUrl.pathname.startsWith('/applications') ||
                           request.nextUrl.pathname.startsWith('/cv') ||
                           request.nextUrl.pathname.startsWith('/interview') ||
-                          request.nextUrl.pathname.startsWith('/settings')
+                          request.nextUrl.pathname.startsWith('/settings') ||
+                          request.nextUrl.pathname.startsWith('/jobs')
 
   // Redirect unauthenticated users to login
-  if (!user && isDashboardPage) {
+  if (!user && (isProtectedPage || isOnboardingPage)) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     url.searchParams.set('redirect', request.nextUrl.pathname)
@@ -63,9 +66,40 @@ export async function updateSession(request: NextRequest) {
   if (user && isAuthPage) {
     const url = request.nextUrl.clone()
     const redirect = request.nextUrl.searchParams.get('redirect')
-    url.pathname = redirect || '/companion'
+    url.pathname = redirect || '/dashboard'
     url.searchParams.delete('redirect')
     return NextResponse.redirect(url)
+  }
+
+  // Check onboarding status for authenticated users on protected pages
+  if (user && isProtectedPage) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('onboarding_completed')
+      .eq('id', user.id)
+      .single()
+
+    // Redirect to onboarding if not completed
+    if (profile && !profile.onboarding_completed) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/onboarding'
+      return NextResponse.redirect(url)
+    }
+  }
+
+  // Redirect already onboarded users away from onboarding page
+  if (user && isOnboardingPage) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('onboarding_completed, user_type')
+      .eq('id', user.id)
+      .single()
+
+    if (profile && profile.onboarding_completed) {
+      const url = request.nextUrl.clone()
+      url.pathname = profile.user_type === 'recruiter' ? '/jobs' : '/dashboard'
+      return NextResponse.redirect(url)
+    }
   }
 
   return supabaseResponse

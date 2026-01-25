@@ -50,12 +50,32 @@ export default function CandidateOnboarding({ userId }: Props) {
   };
 
   const handleCVUpload = async (file: File) => {
+    // Validate file size (10MB max)
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
+    if (file.size > MAX_FILE_SIZE) {
+      alert('File size exceeds 10MB limit. Please upload a smaller file.');
+      return;
+    }
+
+    // Validate file type
+    const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    const fileExt = file.name.split('.').pop()?.toLowerCase();
+    if (!fileExt || !['pdf', 'doc', 'docx'].includes(fileExt)) {
+      alert('Invalid file type. Please upload a PDF, DOC, or DOCX file.');
+      return;
+    }
+
     setLoading(true);
     try {
       const supabase = createClient();
 
+      // Mark all existing CVs as not current
+      await supabase
+        .from('base_cvs')
+        .update({ is_current: false })
+        .eq('user_id', userId);
+
       // Upload to Supabase Storage
-      const fileExt = file.name.split('.').pop();
       const fileName = `${userId}-base-cv-${Date.now()}.${fileExt}`;
       const filePath = `base-cvs/${fileName}`;
 
@@ -439,7 +459,7 @@ export default function CandidateOnboarding({ userId }: Props) {
                 </button>
                 <button
                   onClick={handleNext}
-                  disabled={!cvUploaded && loading}
+                  disabled={!cvUploaded || loading}
                   className="px-6 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
                 >
                   {loading ? 'Uploading...' : 'Next'}
