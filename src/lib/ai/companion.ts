@@ -382,35 +382,120 @@ export async function getMockCompanionResponse(
   // Simulate API delay
   await new Promise(resolve => setTimeout(resolve, 500))
 
-  const isBurnedOut = message.toLowerCase().includes('exhausted') ||
-                      message.toLowerCase().includes('tired') ||
-                      message.toLowerCase().includes('giving up')
+  const lowerMessage = message.toLowerCase()
 
-  const isPositive = message.toLowerCase().includes('good') ||
-                     message.toLowerCase().includes('excited') ||
-                     message.toLowerCase().includes('got an interview')
+  // Detect burnout signals
+  const isBurnedOut = lowerMessage.includes('exhausted') ||
+                      lowerMessage.includes('burned out') ||
+                      lowerMessage.includes('burnout') ||
+                      lowerMessage.includes('can\'t do this anymore') ||
+                      lowerMessage.includes('giving up') ||
+                      (lowerMessage.includes('tired') && lowerMessage.includes('want to give up'))
 
-  return {
-    message: isBurnedOut
-      ? "I can hear how exhausted you are. Job searching is genuinely draining, and it's okay to feel this way. Before we do anything else, let's acknowledge that you've been pushing hard. What would feel supportive right now—a small, gentle goal, or permission to rest?"
-      : isPositive
-      ? "That's wonderful to hear! I can feel your energy shift. Let's build on this momentum—what feels like the right next step while you're feeling good?"
-      : "Thank you for sharing that with me. I'm here to walk through this with you. What's weighing on you most right now?",
-    tone: isBurnedOut ? 'concerned' : isPositive ? 'celebratory' : 'supportive',
-    suggestedGoal: isBurnedOut ? undefined : {
+  // Detect positive signals
+  const isPositive = lowerMessage.includes('excited') ||
+                     lowerMessage.includes('got an interview') ||
+                     lowerMessage.includes('good day') ||
+                     lowerMessage.includes('feel motivated') ||
+                     lowerMessage.includes('feeling great')
+
+  // Detect rejection
+  const isRejection = lowerMessage.includes('rejected') ||
+                      lowerMessage.includes('rejection') ||
+                      lowerMessage.includes('didn\'t get')
+
+  // Detect anxiety
+  const isAnxious = lowerMessage.includes('anxious') ||
+                    lowerMessage.includes('nervous') ||
+                    lowerMessage.includes('worried')
+
+  // Detect hopeful
+  const isHopeful = lowerMessage.includes('hopeful') ||
+                    lowerMessage.includes('optimistic')
+
+  // Build emotional keywords array
+  const emotionalKeywords: string[] = []
+  if (isBurnedOut) emotionalKeywords.push('exhausted', 'overwhelmed')
+  if (isAnxious) emotionalKeywords.push('anxious')
+  if (isHopeful) emotionalKeywords.push('hopeful')
+  if (isPositive && !isHopeful) emotionalKeywords.push('excited')
+  if (isRejection) emotionalKeywords.push('disappointed')
+  if (emotionalKeywords.length === 0) emotionalKeywords.push('uncertain')
+
+  // Generate appropriate message
+  let responseMessage: string
+  if (isBurnedOut) {
+    responseMessage = "I can hear how exhausted you are. Job searching is genuinely draining, and it's okay to feel this way. Before we do anything else, let's acknowledge that you've been pushing hard. What would feel supportive right now—a small, gentle goal, or permission to rest?"
+  } else if (isRejection) {
+    responseMessage = "I'm sorry to hear about the rejection. That's disappointing, and it hurts. It's completely okay to feel this way. Take whatever time you need to process this."
+  } else if (isPositive) {
+    responseMessage = "That's wonderful to hear! I can feel your energy shift. Let's build on this momentum—what feels like the right next step while you're feeling good?"
+  } else if (isAnxious) {
+    responseMessage = "It's natural to feel anxious before something important. Those nerves show you care. What specific aspect is weighing on you most?"
+  } else {
+    responseMessage = "Thank you for sharing that with me. I'm here to walk through this with you. What's weighing on you most right now?"
+  }
+
+  // Determine tone
+  let tone: 'neutral' | 'concerned' | 'celebratory' | 'supportive' | 'encouraging'
+  if (isBurnedOut) tone = 'concerned'
+  else if (isPositive) tone = 'celebratory'
+  else if (isRejection || isAnxious) tone = 'supportive'
+  else tone = 'neutral'
+
+  // Determine mood score
+  let detectedMood: number
+  if (isBurnedOut) detectedMood = 2
+  else if (isRejection) detectedMood = 3
+  else if (isAnxious) detectedMood = 4
+  else if (isPositive) detectedMood = 8
+  else detectedMood = 5
+
+  // Determine energy
+  let detectedEnergy: EnergyLevel
+  if (isBurnedOut) detectedEnergy = 'exhausted'
+  else if (lowerMessage.includes('tired')) detectedEnergy = 'low'
+  else if (isPositive) detectedEnergy = 'energized'
+  else detectedEnergy = 'neutral'
+
+  // Generate suggested goal
+  // When burned out, don't suggest any goal - user needs pure rest without tasks
+  let suggestedGoal: MicroGoal | undefined
+  if (isBurnedOut) {
+    // No goal - user needs unconditional rest
+    suggestedGoal = undefined
+  } else if (lowerMessage.includes('tired') && lowerMessage.includes('give up')) {
+    // Tired but wanting to do something - suggest rest
+    suggestedGoal = {
+      goal: 'Take a complete break from job searching today',
+      reasoning: 'Rest is not giving up—it\'s recharging.',
+      timeEstimate: 'Rest of the day',
+      difficulty: 'small',
+      type: 'rest',
+      completionCriteria: 'You feel a bit more restored',
+      encouragement: 'You deserve rest.',
+    }
+  } else if (!isRejection && !isAnxious) {
+    suggestedGoal = {
       goal: 'Review one job posting that genuinely excites you',
       reasoning: 'Reconnecting with what you actually want can restore motivation.',
       timeEstimate: '15 minutes',
-      difficulty: 'small',
+      difficulty: isPositive ? 'medium' : 'small',
       type: 'reflection',
       completionCriteria: 'You found one posting that made you feel interested',
       encouragement: 'Quality over quantity. Finding the right fit matters.',
-    },
-    detectedMood: isBurnedOut ? 3 : isPositive ? 8 : 5,
-    detectedEnergy: isBurnedOut ? 'exhausted' : isPositive ? 'energized' : 'neutral',
-    emotionalKeywords: isBurnedOut ? ['exhausted', 'overwhelmed'] : isPositive ? ['hopeful', 'excited'] : ['uncertain'],
-    shouldFollowUp: isBurnedOut,
-    followUpTopic: isBurnedOut ? 'burnout_check' : undefined,
+    }
+  }
+
+  return {
+    message: responseMessage,
+    tone,
+    suggestedGoal,
+    detectedMood,
+    detectedEnergy,
+    emotionalKeywords,
+    shouldFollowUp: isBurnedOut || isRejection,
+    followUpTopic: isBurnedOut ? 'burnout_check' : isRejection ? 'rejection_followup' : undefined,
     celebrationDetected: isPositive,
     burnoutWarning: isBurnedOut,
   }
