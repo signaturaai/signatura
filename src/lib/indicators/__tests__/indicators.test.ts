@@ -72,6 +72,76 @@ describe('Indicator Definitions', () => {
 });
 
 // ============================================================================
+// SUB-INDICATOR DEFINITIONS TESTS (70 total)
+// ============================================================================
+
+describe('Sub-Indicator Definitions', () => {
+  it('should have exactly 70 total sub-indicators', () => {
+    const { TOTAL_SUB_INDICATORS } = require('../types');
+    expect(TOTAL_SUB_INDICATORS).toBe(70);
+  });
+
+  it('should have correct sub-indicator counts per indicator', () => {
+    const { SUB_INDICATOR_COUNTS } = require('../types');
+
+    // Indicators 1-7 have 5 sub-indicators each
+    expect(SUB_INDICATOR_COUNTS[1]).toBe(5);
+    expect(SUB_INDICATOR_COUNTS[2]).toBe(5);
+    expect(SUB_INDICATOR_COUNTS[3]).toBe(5);
+    expect(SUB_INDICATOR_COUNTS[4]).toBe(5);
+    expect(SUB_INDICATOR_COUNTS[5]).toBe(5);
+    expect(SUB_INDICATOR_COUNTS[6]).toBe(5);
+    expect(SUB_INDICATOR_COUNTS[7]).toBe(5);
+
+    // Expanded indicators
+    expect(SUB_INDICATOR_COUNTS[8]).toBe(12);  // Leadership & Initiative
+    expect(SUB_INDICATOR_COUNTS[9]).toBe(8);   // Creativity & Innovation
+    expect(SUB_INDICATOR_COUNTS[10]).toBe(15); // Motivation & Drive
+  });
+
+  it('should have matching sub-indicator arrays', () => {
+    const { SUB_INDICATORS, SUB_INDICATOR_COUNTS } = require('../types');
+
+    for (let i = 1; i <= 10; i++) {
+      expect(SUB_INDICATORS[i].length).toBe(SUB_INDICATOR_COUNTS[i]);
+    }
+  });
+
+  it('should have unique sub-indicator names within each indicator', () => {
+    const { SUB_INDICATORS } = require('../types');
+
+    for (let i = 1; i <= 10; i++) {
+      const names = SUB_INDICATORS[i].map((si: { name: string }) => si.name);
+      const uniqueNames = new Set(names);
+      expect(uniqueNames.size).toBe(names.length);
+    }
+  });
+
+  it('should have all required sub-indicators for expanded indicators', () => {
+    const { SUB_INDICATORS } = require('../types');
+
+    // Leadership & Initiative should have 12 specific sub-indicators
+    const leadershipSubNames = SUB_INDICATORS[8].map((si: { name: string }) => si.name);
+    expect(leadershipSubNames).toContain('Goal Setting & Vision');
+    expect(leadershipSubNames).toContain('Mentorship & Coaching');
+    expect(leadershipSubNames).toContain('Crisis Management');
+    expect(leadershipSubNames).toContain('Problem Anticipation');
+
+    // Creativity & Innovation should have 8 specific sub-indicators
+    const creativitySubNames = SUB_INDICATORS[9].map((si: { name: string }) => si.name);
+    expect(creativitySubNames).toContain('Original Thinking');
+    expect(creativitySubNames).toContain('Design Thinking');
+    expect(creativitySubNames).toContain('Trend Spotting');
+
+    // Motivation & Drive should have 15 specific sub-indicators
+    const motivationSubNames = SUB_INDICATORS[10].map((si: { name: string }) => si.name);
+    expect(motivationSubNames).toContain('Proactiveness & Initiative');
+    expect(motivationSubNames).toContain('Persistence & Perseverance');
+    expect(motivationSubNames).toContain('Drive for Impact');
+  });
+});
+
+// ============================================================================
 // INDUSTRY WEIGHTS TESTS
 // ============================================================================
 
