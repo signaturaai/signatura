@@ -34,6 +34,9 @@ import {
   INDICATOR_CATEGORIES,
   getScoreColor,
   getScoreLabel,
+  SUB_INDICATOR_COUNTS,
+  SUB_INDICATORS,
+  TOTAL_SUB_INDICATORS,
 } from '../types';
 
 // ============================================================================
@@ -77,13 +80,10 @@ describe('Indicator Definitions', () => {
 
 describe('Sub-Indicator Definitions', () => {
   it('should have exactly 70 total sub-indicators', () => {
-    const { TOTAL_SUB_INDICATORS } = require('../types');
     expect(TOTAL_SUB_INDICATORS).toBe(70);
   });
 
   it('should have correct sub-indicator counts per indicator', () => {
-    const { SUB_INDICATOR_COUNTS } = require('../types');
-
     // Indicators 1-7 have 5 sub-indicators each
     expect(SUB_INDICATOR_COUNTS[1]).toBe(5);
     expect(SUB_INDICATOR_COUNTS[2]).toBe(5);
@@ -100,41 +100,35 @@ describe('Sub-Indicator Definitions', () => {
   });
 
   it('should have matching sub-indicator arrays', () => {
-    const { SUB_INDICATORS, SUB_INDICATOR_COUNTS } = require('../types');
-
     for (let i = 1; i <= 10; i++) {
       expect(SUB_INDICATORS[i].length).toBe(SUB_INDICATOR_COUNTS[i]);
     }
   });
 
   it('should have unique sub-indicator names within each indicator', () => {
-    const { SUB_INDICATORS } = require('../types');
-
     for (let i = 1; i <= 10; i++) {
-      const names = SUB_INDICATORS[i].map((si: { name: string }) => si.name);
+      const names = SUB_INDICATORS[i].map((si) => si.name);
       const uniqueNames = new Set(names);
       expect(uniqueNames.size).toBe(names.length);
     }
   });
 
   it('should have all required sub-indicators for expanded indicators', () => {
-    const { SUB_INDICATORS } = require('../types');
-
     // Leadership & Initiative should have 12 specific sub-indicators
-    const leadershipSubNames = SUB_INDICATORS[8].map((si: { name: string }) => si.name);
+    const leadershipSubNames = SUB_INDICATORS[8].map((si) => si.name);
     expect(leadershipSubNames).toContain('Goal Setting & Vision');
     expect(leadershipSubNames).toContain('Mentorship & Coaching');
     expect(leadershipSubNames).toContain('Crisis Management');
     expect(leadershipSubNames).toContain('Problem Anticipation');
 
     // Creativity & Innovation should have 8 specific sub-indicators
-    const creativitySubNames = SUB_INDICATORS[9].map((si: { name: string }) => si.name);
+    const creativitySubNames = SUB_INDICATORS[9].map((si) => si.name);
     expect(creativitySubNames).toContain('Original Thinking');
     expect(creativitySubNames).toContain('Design Thinking');
     expect(creativitySubNames).toContain('Trend Spotting');
 
     // Motivation & Drive should have 15 specific sub-indicators
-    const motivationSubNames = SUB_INDICATORS[10].map((si: { name: string }) => si.name);
+    const motivationSubNames = SUB_INDICATORS[10].map((si) => si.name);
     expect(motivationSubNames).toContain('Proactiveness & Initiative');
     expect(motivationSubNames).toContain('Persistence & Perseverance');
     expect(motivationSubNames).toContain('Drive for Impact');
