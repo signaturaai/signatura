@@ -3,10 +3,14 @@
  *
  * Core principle: The tailored CV must NEVER be worse than the original.
  *
- * "Apples-to-Apples" Scoring Philosophy:
- * - A CV's score is a WEIGHTED AVERAGE of:
- *   - Core Content (70%): The 10-Indicator semantic quality
- *   - Landing Page (30%): Visual hygiene, ATS compatibility, formatting
+ * "Holy Trinity" Scoring Philosophy:
+ * - A CV's score is a WEIGHTED AVERAGE of THREE components:
+ *   - Core Content (50%): The 10-Indicator semantic quality
+ *   - ATS Score (30%): Keyword matching and ATS compatibility
+ *   - Landing Page (20%): Visual hygiene and formatting
+ *
+ * Fallback Logic:
+ * - If ATS Score is 0 (missing), fallback to: (Core * 0.7) + (LP * 0.3)
  *
  * Non-Regression Logic:
  * - For each indicator, final score = MAX(base, tailored)
@@ -37,19 +41,26 @@ function getOpenAI(): OpenAI {
 
 const MODEL = process.env.OPENAI_MODEL || 'gpt-4-turbo-preview'
 
-// Scoring weights for the Apples-to-Apples comparison
-const CORE_WEIGHT = 0.70
-const LANDING_PAGE_WEIGHT = 0.30
+// Holy Trinity Scoring Weights
+const CORE_WEIGHT = 0.50
+const ATS_WEIGHT = 0.30
+const LANDING_PAGE_WEIGHT = 0.20
+
+// Fallback weights (when ATS is missing)
+const FALLBACK_CORE_WEIGHT = 0.70
+const FALLBACK_LP_WEIGHT = 0.30
 
 /**
- * Comprehensive score structure for Apples-to-Apples comparison
+ * Comprehensive score structure for Holy Trinity comparison
  */
 export interface CVScore {
-  overall_score: number       // Weighted: (coreScore * 0.7) + (landingPageScore * 0.3)
-  core_score: number          // Average of 10 indicators
-  landing_page_score: number  // Formatting/ATS score
+  overall_score: number       // Weighted: Holy Trinity or Fallback
+  core_score: number          // Average of 10 indicators (50%)
+  ats_score: number           // ATS keyword matching score (30%)
+  landing_page_score: number  // Formatting score (20%)
   indicator_scores: IndicatorScoreEntry[]
   landing_page_metrics?: LandingPageMetrics
+  ats_details?: ATSAnalysisDetails
 }
 
 export interface IndicatorScoreEntry {
@@ -58,6 +69,17 @@ export interface IndicatorScoreEntry {
   score: number
   evidence?: string
   suggestion?: string
+}
+
+/**
+ * ATS Analysis Details
+ */
+export interface ATSAnalysisDetails {
+  keywordsFound: string[]
+  keywordsMissing: string[]
+  matchPercentage: number
+  totalKeywords: number
+  matchedKeywords: number
 }
 
 /**
@@ -116,10 +138,27 @@ export interface InitialAnalysisResult {
 }
 
 /**
- * Calculate weighted overall score
+ * Calculate weighted overall score using Holy Trinity formula
+ * Formula: (Core × 0.5) + (ATS × 0.3) + (Landing Page × 0.2)
+ * Fallback: If ATS = 0, use (Core × 0.7) + (LP × 0.3)
  */
-function calculateWeightedScore(coreScore: number, landingPageScore: number): number {
-  return Math.round((coreScore * CORE_WEIGHT + landingPageScore * LANDING_PAGE_WEIGHT) * 10) / 10
+function calculateWeightedScore(
+  coreScore: number,
+  atsScore: number,
+  landingPageScore: number
+): number {
+  // Fallback to 70/30 if ATS score is missing (0)
+  if (atsScore === 0) {
+    console.log('ATS score missing, using fallback 70/30 formula')
+    return Math.round(
+      (coreScore * FALLBACK_CORE_WEIGHT + landingPageScore * FALLBACK_LP_WEIGHT) * 10
+    ) / 10
+  }
+
+  // Holy Trinity formula: 50/30/20
+  return Math.round(
+    (coreScore * CORE_WEIGHT + atsScore * ATS_WEIGHT + landingPageScore * LANDING_PAGE_WEIGHT) * 10
+  ) / 10
 }
 
 /**
@@ -147,11 +186,163 @@ function calculateCoreAverage(entries: IndicatorScoreEntry[]): number {
 }
 
 /**
+ * ATS Analysis - Strict Mode (Keyword Counting)
+ * Uses temperature: 0.0 for deterministic scoring
+ *
+ * Extracts keywords from job description and counts matches in CV.
+ * Produces a differentiated score between Base and Tailored CVs.
+ */
+export async function analyzeATS(
+  cvText: string,
+  jobDescription: string
+): Promise<{ score: number; details: ATSAnalysisDetails }> {
+  const useMock = process.env.USE_MOCK_AI === 'true'
+
+  if (useMock) {
+    return getMockATSScore(cvText, jobDescription)
+  }
+
+  try {
+    const prompt = `You are an ATS (Applicant Tracking System) keyword analyzer.
+
+TASK: Analyze how well the CV matches the job description keywords.
+
+JOB DESCRIPTION:
+${jobDescription}
+
+CV TEXT:
+${cvText}
+
+INSTRUCTIONS:
+1. Extract the TOP 20 most important keywords/phrases from the job description
+2. Count how many of these keywords appear in the CV (exact or close semantic match)
+3. Calculate a match percentage
+4. Provide a score from 1.0 to 10.0 based on keyword coverage
+
+CRITICAL: Be STRICT in your scoring. Differentiate clearly between CVs that have good keyword coverage vs poor coverage.
+
+Respond ONLY with valid JSON in this exact format:
+{
+  "score": <number 1.0-10.0>,
+  "keywordsFound": ["keyword1", "keyword2", ...],
+  "keywordsMissing": ["keyword1", "keyword2", ...],
+  "matchPercentage": <number 0-100>,
+  "totalKeywords": <number>,
+  "matchedKeywords": <number>
+}`
+
+    const completion = await getOpenAI().chat.completions.create({
+      model: MODEL,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.0, // CRITICAL: Deterministic scoring
+      max_tokens: 1000,
+      response_format: { type: 'json_object' },
+    })
+
+    const responseText = completion.choices[0]?.message?.content?.trim()
+    if (!responseText) {
+      throw new Error('No response from ATS analyzer')
+    }
+
+    const result = JSON.parse(responseText)
+
+    return {
+      score: Math.max(1, Math.min(10, result.score || 5)),
+      details: {
+        keywordsFound: result.keywordsFound || [],
+        keywordsMissing: result.keywordsMissing || [],
+        matchPercentage: result.matchPercentage || 0,
+        totalKeywords: result.totalKeywords || 0,
+        matchedKeywords: result.matchedKeywords || 0,
+      },
+    }
+  } catch (error) {
+    console.error('ATS analysis error:', error)
+    // Fallback to heuristic scoring
+    return getMockATSScore(cvText, jobDescription)
+  }
+}
+
+/**
+ * Mock/Heuristic ATS scoring for testing or fallback
+ */
+function getMockATSScore(
+  cvText: string,
+  jobDescription: string
+): { score: number; details: ATSAnalysisDetails } {
+  const cvLower = cvText.toLowerCase()
+  const jobLower = jobDescription.toLowerCase()
+
+  // Extract significant words from job description (3+ chars, not common words)
+  const commonWords = new Set([
+    'the', 'and', 'for', 'with', 'that', 'this', 'from', 'have', 'will',
+    'are', 'you', 'our', 'your', 'can', 'all', 'been', 'would', 'there',
+    'their', 'what', 'about', 'which', 'when', 'make', 'like', 'time',
+    'just', 'know', 'take', 'come', 'could', 'work', 'year', 'over',
+    'such', 'into', 'other', 'than', 'then', 'now', 'look', 'only',
+    'new', 'more', 'also', 'after', 'use', 'well', 'way', 'want',
+    'because', 'any', 'these', 'give', 'day', 'most', 'ability', 'able'
+  ])
+
+  const jobWords = jobLower
+    .split(/[\s,;:.!?()[\]{}'"]+/)
+    .filter(w => w.length >= 3 && !commonWords.has(w))
+
+  // Get unique keywords
+  const keywords = [...new Set(jobWords)].slice(0, 20)
+
+  // Count matches
+  const found: string[] = []
+  const missing: string[] = []
+
+  for (const keyword of keywords) {
+    if (cvLower.includes(keyword)) {
+      found.push(keyword)
+    } else {
+      missing.push(keyword)
+    }
+  }
+
+  const matchPercentage = keywords.length > 0
+    ? Math.round((found.length / keywords.length) * 100)
+    : 0
+
+  // Score based on match percentage (stricter scoring)
+  let score: number
+  if (matchPercentage >= 80) score = 9
+  else if (matchPercentage >= 70) score = 8
+  else if (matchPercentage >= 60) score = 7
+  else if (matchPercentage >= 50) score = 6
+  else if (matchPercentage >= 40) score = 5
+  else if (matchPercentage >= 30) score = 4
+  else if (matchPercentage >= 20) score = 3
+  else score = 2
+
+  return {
+    score,
+    details: {
+      keywordsFound: found,
+      keywordsMissing: missing,
+      matchPercentage,
+      totalKeywords: keywords.length,
+      matchedKeywords: found.length,
+    },
+  }
+}
+
+/**
  * Perform initial analysis on a CV (Base/Original)
- * This scores both Core Content (70%) and Landing Page (30%)
+ * Sequential execution: Core -> await -> Landing Page -> await -> ATS
+ * This implements the "Holy Trinity" scoring (50/30/20)
+ *
+ * @param cvText - The CV text to analyze
+ * @param jobDescription - Job description for ATS keyword matching (optional for fallback)
+ * @param industry - Industry context for scoring
+ * @param isHtml - Whether the CV is in HTML format
  */
 export async function analyzeInitialCV(
   cvText: string,
+  jobDescription: string = '',
   industry: string = 'generic',
   isHtml: boolean = false
 ): Promise<InitialAnalysisResult> {
@@ -167,7 +358,8 @@ export async function analyzeInitialCV(
       }
     }
 
-    // Score Core Content (10 Indicators)
+    // STEP 1: Score Core Content (10 Indicators) - SEQUENTIAL
+    console.log('Step 1: Scoring Core Content...')
     const context: ScoringContext = { type: 'cv', industry }
     const coreResult = await scoreText(cvText, context)
 
@@ -176,23 +368,37 @@ export async function analyzeInitialCV(
       ? coreResult.scores?.overall || calculateCoreAverage(indicatorEntries)
       : 5
 
-    // Score Landing Page (Formatting/ATS)
+    // STEP 2: Score Landing Page (Formatting) - SEQUENTIAL
+    console.log('Step 2: Scoring Landing Page...')
     const landingPageMetrics = scoreLandingPage(cvText, isHtml)
     const landingPageScore = landingPageMetrics.overall
 
-    // Calculate weighted overall score
-    const overallScore = calculateWeightedScore(coreScore, landingPageScore)
+    // STEP 3: Score ATS (Keyword Matching) - SEQUENTIAL
+    console.log('Step 3: Scoring ATS...')
+    let atsScore = 0
+    let atsDetails: ATSAnalysisDetails | undefined
 
-    console.log(`Initial Analysis: Core=${coreScore}, LandingPage=${landingPageScore}, Overall=${overallScore}`)
+    if (jobDescription && jobDescription.trim().length > 0) {
+      const atsResult = await analyzeATS(cvText, jobDescription)
+      atsScore = atsResult.score
+      atsDetails = atsResult.details
+    }
+
+    // Calculate weighted overall score using Holy Trinity (or fallback)
+    const overallScore = calculateWeightedScore(coreScore, atsScore, landingPageScore)
+
+    console.log(`Initial Analysis: Core=${coreScore}, ATS=${atsScore}, LandingPage=${landingPageScore}, Overall=${overallScore}`)
 
     return {
       success: true,
       scores: {
         overall_score: overallScore,
         core_score: coreScore,
+        ats_score: atsScore,
         landing_page_score: landingPageScore,
         indicator_scores: indicatorEntries,
         landing_page_metrics: landingPageMetrics,
+        ats_details: atsDetails,
       },
       processingTimeMs: Date.now() - startTime,
     }
@@ -208,12 +414,13 @@ export async function analyzeInitialCV(
 }
 
 /**
- * Create empty score structure
+ * Create empty score structure (Holy Trinity)
  */
 function createEmptyScore(): CVScore {
   return {
     overall_score: 0,
     core_score: 0,
+    ats_score: 0,
     landing_page_score: 0,
     indicator_scores: [],
   }
@@ -263,12 +470,12 @@ function applyNonRegressionLogic(
 /**
  * Generate a "Best of Both Worlds" tailored CV
  *
- * Process:
- * 1. Run initial analysis on base CV (Core + Landing Page)
+ * Holy Trinity Process (Sequential Execution):
+ * 1. Run initial analysis on base CV (Core -> Landing Page -> ATS)
  * 2. Generate AI-tailored CV
- * 3. Score tailored CV (Core + Landing Page)
+ * 3. Score tailored CV on the NEW generated text (Core -> Landing Page -> ATS)
  * 4. Apply non-regression: For each indicator, final = MAX(base, tailored)
- * 5. Calculate final weighted score
+ * 5. Calculate final weighted score using Holy Trinity (50/30/20)
  */
 export async function generateBestOfBothWorldsCV(
   baseCVText: string,
@@ -288,16 +495,16 @@ export async function generateBestOfBothWorldsCV(
       return createErrorResult('Job description is too short (minimum 50 characters)', baseCVText, startTime)
     }
 
-    // STEP 1: Initial Analysis of Base CV
-    console.log('Step 1: Analyzing base CV (Core + Landing Page)...')
-    const initialAnalysis = await analyzeInitialCV(baseCVText, industry, false)
+    // STEP 1: Initial Analysis of Base CV (Holy Trinity: Core -> LP -> ATS)
+    console.log('Step 1: Analyzing base CV (Core -> Landing Page -> ATS)...')
+    const initialAnalysis = await analyzeInitialCV(baseCVText, jobDescription, industry, false)
 
     if (!initialAnalysis.success) {
       return createErrorResult(initialAnalysis.error || 'Initial analysis failed', baseCVText, startTime)
     }
 
     const initialScores = initialAnalysis.scores
-    console.log(`Base CV: Core=${initialScores.core_score}, LandingPage=${initialScores.landing_page_score}, Overall=${initialScores.overall_score}`)
+    console.log(`Base CV: Core=${initialScores.core_score}, ATS=${initialScores.ats_score}, LandingPage=${initialScores.landing_page_score}, Overall=${initialScores.overall_score}`)
 
     // STEP 2: Parse base CV into sections
     console.log('Step 2: Parsing base CV into sections...')
@@ -318,7 +525,8 @@ export async function generateBestOfBothWorldsCV(
     const tailoredSections = parseCVIntoSections(tailoredText)
     console.log(`Found ${tailoredSections.length} sections in tailored CV`)
 
-    // STEP 5: Score tailored CV (Core indicators)
+    // STEP 5: Score tailored CV (Core indicators) - SEQUENTIAL
+    // CRITICAL: Score the NEW tailoredText, not the original baseCVText
     console.log('Step 5: Scoring tailored CV (Core indicators)...')
     const context: ScoringContext = {
       type: 'cv',
@@ -331,34 +539,39 @@ export async function generateBestOfBothWorldsCV(
       ? tailoredCoreResult.scores?.overall || calculateCoreAverage(tailoredIndicatorEntries)
       : initialScores.core_score
 
-    // STEP 6: Score tailored CV (Landing Page)
-    // For tailored HTML/text, landing page score should be high
+    // STEP 6: Score tailored CV (Landing Page) - SEQUENTIAL
     console.log('Step 6: Scoring tailored CV (Landing Page)...')
     const tailoredLandingMetrics = scoreLandingPage(tailoredText, false)
     const tailoredLandingScore = tailoredLandingMetrics.overall
 
-    console.log(`Tailored CV: Core=${tailoredCoreScore}, LandingPage=${tailoredLandingScore}`)
+    // STEP 7: Score tailored CV (ATS) - SEQUENTIAL
+    // CRITICAL: Score the NEW tailoredText for keyword matching
+    console.log('Step 7: Scoring tailored CV (ATS)...')
+    const tailoredATSResult = await analyzeATS(tailoredText, jobDescription)
+    const tailoredATSScore = tailoredATSResult.score
+    const tailoredATSDetails = tailoredATSResult.details
 
-    // STEP 7: Apply non-regression logic (Best of Both Worlds)
-    console.log('Step 7: Applying non-regression logic (Best of Both Worlds)...')
+    console.log(`Tailored CV: Core=${tailoredCoreScore}, ATS=${tailoredATSScore}, LandingPage=${tailoredLandingScore}`)
+
+    // STEP 8: Apply non-regression logic (Best of Both Worlds)
+    console.log('Step 8: Applying non-regression logic (Best of Both Worlds)...')
     const bestOfBothIndicators = applyNonRegressionLogic(
       initialScores.indicator_scores,
       tailoredIndicatorEntries
     )
 
-    // Calculate best-of-both core score
+    // Calculate best-of-both scores (use MAX for each metric)
     const bestOfBothCoreScore = calculateCoreAverage(bestOfBothIndicators)
-
-    // Use the better landing page score (tailored usually wins here)
+    const finalATSScore = Math.max(initialScores.ats_score, tailoredATSScore)
     const finalLandingScore = Math.max(initialScores.landing_page_score, tailoredLandingScore)
 
-    // Calculate final weighted score
-    const finalOverallScore = calculateWeightedScore(bestOfBothCoreScore, finalLandingScore)
+    // Calculate final weighted score using Holy Trinity
+    const finalOverallScore = calculateWeightedScore(bestOfBothCoreScore, finalATSScore, finalLandingScore)
 
-    console.log(`Best of Both: Core=${bestOfBothCoreScore}, LandingPage=${finalLandingScore}, Overall=${finalOverallScore}`)
+    console.log(`Best of Both: Core=${bestOfBothCoreScore}, ATS=${finalATSScore}, LandingPage=${finalLandingScore}, Overall=${finalOverallScore}`)
 
-    // STEP 8: Compare sections and choose best versions
-    console.log('Step 8: Comparing sections and choosing best versions...')
+    // STEP 9: Compare sections and choose best versions
+    console.log('Step 9: Comparing sections and choosing best versions...')
     const sectionComparisons: SectionComparison[] = []
     const finalSections: Array<{ name: string; text: string }> = []
     let sectionsImproved = 0
@@ -436,17 +649,19 @@ export async function generateBestOfBothWorldsCV(
       }
     }
 
-    // STEP 9: Assemble final CV
-    console.log('Step 9: Assembling final CV from best sections...')
+    // STEP 10: Assemble final CV
+    console.log('Step 10: Assembling final CV from best sections...')
     const finalCVText = assembleCVFromSections(finalSections)
 
-    // Build final scores object
+    // Build final scores object (Holy Trinity)
     const finalScores: CVScore = {
       overall_score: finalOverallScore,
       core_score: bestOfBothCoreScore,
+      ats_score: finalATSScore,
       landing_page_score: finalLandingScore,
       indicator_scores: bestOfBothIndicators,
       landing_page_metrics: tailoredLandingMetrics,
+      ats_details: tailoredATSDetails,
     }
 
     // Calculate improvement
@@ -460,10 +675,10 @@ export async function generateBestOfBothWorldsCV(
       sectionComparisons,
       // Legacy scores (backward compatibility)
       baseOverallScore: initialScores.overall_score,
-      tailoredOverallScore: calculateWeightedScore(tailoredCoreScore, tailoredLandingScore),
+      tailoredOverallScore: calculateWeightedScore(tailoredCoreScore, tailoredATSScore, tailoredLandingScore),
       finalOverallScore,
       overallImprovement,
-      // New comprehensive scores
+      // New comprehensive scores (Holy Trinity)
       initial_scores: initialScores,
       final_scores: finalScores,
       // Statistics
