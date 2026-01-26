@@ -67,7 +67,8 @@ export async function POST(request: NextRequest) {
     const userAgent = request.headers.get('user-agent')
 
     // Log consent
-    const { error: logError } = await supabase.from('consent_log').insert({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: logError } = await (supabase.from('consent_log') as any).insert({
       user_id: user.id,
       consent_type,
       action,

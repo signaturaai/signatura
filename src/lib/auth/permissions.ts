@@ -45,8 +45,10 @@ export async function getUserPermissions(userId?: string): Promise<UserPermissio
     return null
   }
 
-  const userType = (profile.user_type as UserType) || 'candidate'
-  const isAdmin = profile.is_admin || false
+  // Type assertion for untyped table
+  const typedProfile = profile as unknown as { user_type: string; is_admin: boolean }
+  const userType = (typedProfile.user_type as UserType) || 'candidate'
+  const isAdmin = typedProfile.is_admin || false
 
   return {
     userId: targetUserId,

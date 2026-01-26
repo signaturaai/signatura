@@ -2,18 +2,26 @@
  * CV Tailoring Engine - Best of Both Worlds
  *
  * Core principle: The tailored CV must NEVER be worse than the original.
- * We compare each section and use whichever version scores higher.
+ *
+ * "Apples-to-Apples" Scoring Philosophy:
+ * - A CV's score is a WEIGHTED AVERAGE of:
+ *   - Core Content (70%): The 10-Indicator semantic quality
+ *   - Landing Page (30%): Visual hygiene, ATS compatibility, formatting
+ *
+ * Non-Regression Logic:
+ * - For each indicator, final score = MAX(base, tailored)
+ * - The tailoring can only improve, never regress
  */
 
 import OpenAI from 'openai'
-import { scoreText, ScoringContext } from '@/lib/indicators/scorer'
-import { IndicatorScores } from '@/lib/indicators/types'
+import { scoreText } from '@/lib/indicators/scorer'
+import { IndicatorScores, INDICATOR_NAMES, ScoringContext } from '@/lib/indicators/types'
 import {
   parseCVIntoSections,
   assembleCVFromSections,
-  CVSection,
   sectionsMatch,
 } from './parser'
+import { scoreLandingPage, LandingPageMetrics } from './landing-page-scorer'
 
 // Lazy-initialize OpenAI client
 let openai: OpenAI | null = null
@@ -28,6 +36,29 @@ function getOpenAI(): OpenAI {
 }
 
 const MODEL = process.env.OPENAI_MODEL || 'gpt-4-turbo-preview'
+
+// Scoring weights for the Apples-to-Apples comparison
+const CORE_WEIGHT = 0.70
+const LANDING_PAGE_WEIGHT = 0.30
+
+/**
+ * Comprehensive score structure for Apples-to-Apples comparison
+ */
+export interface CVScore {
+  overall_score: number       // Weighted: (coreScore * 0.7) + (landingPageScore * 0.3)
+  core_score: number          // Average of 10 indicators
+  landing_page_score: number  // Formatting/ATS score
+  indicator_scores: IndicatorScoreEntry[]
+  landing_page_metrics?: LandingPageMetrics
+}
+
+export interface IndicatorScoreEntry {
+  indicator_number: number
+  indicator_name: string
+  score: number
+  evidence?: string
+  suggestion?: string
+}
 
 /**
  * Section score with full details
@@ -51,17 +82,22 @@ export interface SectionComparison {
 }
 
 /**
- * Full tailoring result
+ * Full tailoring result with new score structure
  */
 export interface TailoringResult {
   success: boolean
   error?: string
   finalCVText: string
   sectionComparisons: SectionComparison[]
+  // Legacy scores (for backward compatibility)
   baseOverallScore: number
   tailoredOverallScore: number
   finalOverallScore: number
   overallImprovement: number
+  // New comprehensive scores (Apples-to-Apples)
+  initial_scores: CVScore
+  final_scores: CVScore
+  // Statistics
   sectionsImproved: number
   sectionsKeptOriginal: number
   totalSections: number
@@ -70,14 +106,169 @@ export interface TailoringResult {
 }
 
 /**
+ * Initial analysis result (before tailoring)
+ */
+export interface InitialAnalysisResult {
+  success: boolean
+  error?: string
+  scores: CVScore
+  processingTimeMs: number
+}
+
+/**
+ * Calculate weighted overall score
+ */
+function calculateWeightedScore(coreScore: number, landingPageScore: number): number {
+  return Math.round((coreScore * CORE_WEIGHT + landingPageScore * LANDING_PAGE_WEIGHT) * 10) / 10
+}
+
+/**
+ * Convert IndicatorScores to IndicatorScoreEntry array
+ */
+function convertToIndicatorEntries(scores: IndicatorScores | null): IndicatorScoreEntry[] {
+  if (!scores) return []
+
+  return Object.entries(scores.scores).map(([numStr, score]) => ({
+    indicator_number: parseInt(numStr),
+    indicator_name: INDICATOR_NAMES[parseInt(numStr)] || `Indicator ${numStr}`,
+    score: score.score,
+    evidence: score.evidence,
+    suggestion: score.suggestion,
+  }))
+}
+
+/**
+ * Calculate average from indicator entries
+ */
+function calculateCoreAverage(entries: IndicatorScoreEntry[]): number {
+  if (entries.length === 0) return 5
+  const sum = entries.reduce((acc, e) => acc + e.score, 0)
+  return Math.round((sum / entries.length) * 10) / 10
+}
+
+/**
+ * Perform initial analysis on a CV (Base/Original)
+ * This scores both Core Content (70%) and Landing Page (30%)
+ */
+export async function analyzeInitialCV(
+  cvText: string,
+  industry: string = 'generic',
+  isHtml: boolean = false
+): Promise<InitialAnalysisResult> {
+  const startTime = Date.now()
+
+  try {
+    if (!cvText || cvText.trim().length < 100) {
+      return {
+        success: false,
+        error: 'CV text is too short (minimum 100 characters)',
+        scores: createEmptyScore(),
+        processingTimeMs: Date.now() - startTime,
+      }
+    }
+
+    // Score Core Content (10 Indicators)
+    const context: ScoringContext = { type: 'cv', industry }
+    const coreResult = await scoreText(cvText, context)
+
+    const indicatorEntries = convertToIndicatorEntries(coreResult.scores || null)
+    const coreScore = coreResult.success
+      ? coreResult.scores?.overall || calculateCoreAverage(indicatorEntries)
+      : 5
+
+    // Score Landing Page (Formatting/ATS)
+    const landingPageMetrics = scoreLandingPage(cvText, isHtml)
+    const landingPageScore = landingPageMetrics.overall
+
+    // Calculate weighted overall score
+    const overallScore = calculateWeightedScore(coreScore, landingPageScore)
+
+    console.log(`Initial Analysis: Core=${coreScore}, LandingPage=${landingPageScore}, Overall=${overallScore}`)
+
+    return {
+      success: true,
+      scores: {
+        overall_score: overallScore,
+        core_score: coreScore,
+        landing_page_score: landingPageScore,
+        indicator_scores: indicatorEntries,
+        landing_page_metrics: landingPageMetrics,
+      },
+      processingTimeMs: Date.now() - startTime,
+    }
+  } catch (error) {
+    console.error('Initial analysis error:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      scores: createEmptyScore(),
+      processingTimeMs: Date.now() - startTime,
+    }
+  }
+}
+
+/**
+ * Create empty score structure
+ */
+function createEmptyScore(): CVScore {
+  return {
+    overall_score: 0,
+    core_score: 0,
+    landing_page_score: 0,
+    indicator_scores: [],
+  }
+}
+
+/**
+ * Apply "Best of Both Worlds" non-regression logic
+ * For each indicator: final = MAX(base, tailored)
+ */
+function applyNonRegressionLogic(
+  baseEntries: IndicatorScoreEntry[],
+  tailoredEntries: IndicatorScoreEntry[]
+): IndicatorScoreEntry[] {
+  const result: IndicatorScoreEntry[] = []
+
+  // Create map for quick lookup
+  const tailoredMap = new Map<number, IndicatorScoreEntry>()
+  tailoredEntries.forEach(e => tailoredMap.set(e.indicator_number, e))
+
+  // For each base indicator, take the max score
+  for (const baseEntry of baseEntries) {
+    const tailoredEntry = tailoredMap.get(baseEntry.indicator_number)
+
+    if (tailoredEntry && tailoredEntry.score > baseEntry.score) {
+      // Tailored is better - use it
+      result.push({
+        ...tailoredEntry,
+        evidence: tailoredEntry.evidence || baseEntry.evidence,
+        suggestion: tailoredEntry.suggestion || baseEntry.suggestion,
+      })
+    } else {
+      // Base is same or better - keep it
+      result.push(baseEntry)
+    }
+  }
+
+  // Add any new indicators from tailored that weren't in base
+  for (const tailoredEntry of tailoredEntries) {
+    if (!baseEntries.some(b => b.indicator_number === tailoredEntry.indicator_number)) {
+      result.push(tailoredEntry)
+    }
+  }
+
+  return result.sort((a, b) => a.indicator_number - b.indicator_number)
+}
+
+/**
  * Generate a "Best of Both Worlds" tailored CV
  *
- * This function:
- * 1. Parses the base CV into sections
- * 2. Generates a fully tailored version
- * 3. Scores both versions section-by-section
- * 4. Picks the best version of each section
- * 5. Guarantees final score >= base score
+ * Process:
+ * 1. Run initial analysis on base CV (Core + Landing Page)
+ * 2. Generate AI-tailored CV
+ * 3. Score tailored CV (Core + Landing Page)
+ * 4. Apply non-regression: For each indicator, final = MAX(base, tailored)
+ * 5. Calculate final weighted score
  */
 export async function generateBestOfBothWorldsCV(
   baseCVText: string,
@@ -90,60 +281,31 @@ export async function generateBestOfBothWorldsCV(
   try {
     // Validate inputs
     if (!baseCVText || baseCVText.trim().length < 100) {
-      return {
-        success: false,
-        error: 'Base CV text is too short (minimum 100 characters)',
-        finalCVText: baseCVText,
-        sectionComparisons: [],
-        baseOverallScore: 0,
-        tailoredOverallScore: 0,
-        finalOverallScore: 0,
-        overallImprovement: 0,
-        sectionsImproved: 0,
-        sectionsKeptOriginal: 0,
-        totalSections: 0,
-        processingTimeMs: Date.now() - startTime,
-      }
+      return createErrorResult('Base CV text is too short (minimum 100 characters)', baseCVText, startTime)
     }
 
     if (!jobDescription || jobDescription.trim().length < 50) {
-      return {
-        success: false,
-        error: 'Job description is too short (minimum 50 characters)',
-        finalCVText: baseCVText,
-        sectionComparisons: [],
-        baseOverallScore: 0,
-        tailoredOverallScore: 0,
-        finalOverallScore: 0,
-        overallImprovement: 0,
-        sectionsImproved: 0,
-        sectionsKeptOriginal: 0,
-        totalSections: 0,
-        processingTimeMs: Date.now() - startTime,
-      }
+      return createErrorResult('Job description is too short (minimum 50 characters)', baseCVText, startTime)
     }
 
-    console.log('Step 1: Parsing base CV into sections...')
+    // STEP 1: Initial Analysis of Base CV
+    console.log('Step 1: Analyzing base CV (Core + Landing Page)...')
+    const initialAnalysis = await analyzeInitialCV(baseCVText, industry, false)
+
+    if (!initialAnalysis.success) {
+      return createErrorResult(initialAnalysis.error || 'Initial analysis failed', baseCVText, startTime)
+    }
+
+    const initialScores = initialAnalysis.scores
+    console.log(`Base CV: Core=${initialScores.core_score}, LandingPage=${initialScores.landing_page_score}, Overall=${initialScores.overall_score}`)
+
+    // STEP 2: Parse base CV into sections
+    console.log('Step 2: Parsing base CV into sections...')
     const baseSections = parseCVIntoSections(baseCVText)
     console.log(`Found ${baseSections.length} sections in base CV`)
 
-    // Score full base CV first
-    console.log('Step 2: Scoring base CV overall...')
-    const baseContext: ScoringContext = {
-      type: 'cv',
-      industry,
-      role: extractRoleFromJobDescription(jobDescription),
-    }
-
-    const baseOverallResult = await scoreText(baseCVText, baseContext)
-    const baseOverallScore = baseOverallResult.success
-      ? baseOverallResult.scores?.overall || 5
-      : 5
-
-    console.log(`Base CV overall score: ${baseOverallScore}`)
-
-    // Generate tailored CV
-    console.log('Step 3: Generating fully tailored CV...')
+    // STEP 3: Generate tailored CV
+    console.log('Step 3: Generating AI-tailored CV...')
     const { tailoredText, tokensUsed } = await generateTailoredCVWithAI(
       baseCVText,
       jobDescription,
@@ -151,65 +313,82 @@ export async function generateBestOfBothWorldsCV(
     )
     totalTokens += tokensUsed || 0
 
+    // STEP 4: Parse tailored CV
     console.log('Step 4: Parsing tailored CV into sections...')
     const tailoredSections = parseCVIntoSections(tailoredText)
     console.log(`Found ${tailoredSections.length} sections in tailored CV`)
 
-    // Score tailored CV overall
-    console.log('Step 5: Scoring tailored CV overall...')
-    const tailoredOverallResult = await scoreText(tailoredText, baseContext)
-    const tailoredOverallScore = tailoredOverallResult.success
-      ? tailoredOverallResult.scores?.overall || 5
-      : 5
+    // STEP 5: Score tailored CV (Core indicators)
+    console.log('Step 5: Scoring tailored CV (Core indicators)...')
+    const context: ScoringContext = {
+      type: 'cv',
+      industry,
+      role: extractRoleFromJobDescription(jobDescription),
+    }
+    const tailoredCoreResult = await scoreText(tailoredText, context)
+    const tailoredIndicatorEntries = convertToIndicatorEntries(tailoredCoreResult.scores || null)
+    const tailoredCoreScore = tailoredCoreResult.success
+      ? tailoredCoreResult.scores?.overall || calculateCoreAverage(tailoredIndicatorEntries)
+      : initialScores.core_score
 
-    console.log(`Tailored CV overall score: ${tailoredOverallScore}`)
+    // STEP 6: Score tailored CV (Landing Page)
+    // For tailored HTML/text, landing page score should be high
+    console.log('Step 6: Scoring tailored CV (Landing Page)...')
+    const tailoredLandingMetrics = scoreLandingPage(tailoredText, false)
+    const tailoredLandingScore = tailoredLandingMetrics.overall
 
-    // Compare sections and choose best versions
-    console.log('Step 6: Comparing sections and choosing best versions...')
+    console.log(`Tailored CV: Core=${tailoredCoreScore}, LandingPage=${tailoredLandingScore}`)
+
+    // STEP 7: Apply non-regression logic (Best of Both Worlds)
+    console.log('Step 7: Applying non-regression logic (Best of Both Worlds)...')
+    const bestOfBothIndicators = applyNonRegressionLogic(
+      initialScores.indicator_scores,
+      tailoredIndicatorEntries
+    )
+
+    // Calculate best-of-both core score
+    const bestOfBothCoreScore = calculateCoreAverage(bestOfBothIndicators)
+
+    // Use the better landing page score (tailored usually wins here)
+    const finalLandingScore = Math.max(initialScores.landing_page_score, tailoredLandingScore)
+
+    // Calculate final weighted score
+    const finalOverallScore = calculateWeightedScore(bestOfBothCoreScore, finalLandingScore)
+
+    console.log(`Best of Both: Core=${bestOfBothCoreScore}, LandingPage=${finalLandingScore}, Overall=${finalOverallScore}`)
+
+    // STEP 8: Compare sections and choose best versions
+    console.log('Step 8: Comparing sections and choosing best versions...')
     const sectionComparisons: SectionComparison[] = []
     const finalSections: Array<{ name: string; text: string }> = []
     let sectionsImproved = 0
     let sectionsKeptOriginal = 0
 
     for (const baseSection of baseSections) {
-      // Find matching section in tailored CV
       const tailoredSection = tailoredSections.find((ts) =>
         sectionsMatch(ts.name, baseSection.name)
       )
 
       if (!tailoredSection) {
-        // Tailored CV missing this section - keep original
-        finalSections.push({
-          name: baseSection.name,
-          text: baseSection.text,
-        })
-
+        // Keep original if tailored doesn't have this section
+        finalSections.push({ name: baseSection.name, text: baseSection.text })
         sectionComparisons.push({
           sectionName: baseSection.name,
-          base: { text: baseSection.text, score: baseOverallScore },
+          base: { text: baseSection.text, score: initialScores.core_score },
           tailored: { text: '', score: 0 },
           chosen: 'base',
           improvement: 0,
           reason: 'Section not found in tailored version - keeping original',
         })
-
         sectionsKeptOriginal++
         continue
       }
 
       // Score both sections
-      const baseSectionScore = await scoreSectionText(
-        baseSection.text,
-        jobDescription,
-        industry
-      )
-      const tailoredSectionScore = await scoreSectionText(
-        tailoredSection.text,
-        jobDescription,
-        industry
-      )
+      const baseSectionScore = await scoreSectionText(baseSection.text, jobDescription, industry)
+      const tailoredSectionScore = await scoreSectionText(tailoredSection.text, jobDescription, industry)
 
-      // Choose the better version
+      // Choose the better version (non-regression)
       const useTailored = tailoredSectionScore > baseSectionScore
       const improvement = tailoredSectionScore - baseSectionScore
 
@@ -231,34 +410,19 @@ export async function generateBestOfBothWorldsCV(
             : 'Original version scored higher - keeping it',
       })
 
-      if (useTailored) {
-        sectionsImproved++
-      } else {
-        sectionsKeptOriginal++
-      }
+      if (useTailored) sectionsImproved++
+      else sectionsKeptOriginal++
     }
 
-    // Check for any new sections in tailored CV that weren't in base
+    // Add new sections from tailored that weren't in base
     for (const tailoredSection of tailoredSections) {
-      const hasMatch = baseSections.some((bs) =>
-        sectionsMatch(bs.name, tailoredSection.name)
-      )
+      const hasMatch = baseSections.some((bs) => sectionsMatch(bs.name, tailoredSection.name))
 
       if (!hasMatch && tailoredSection.text.length > 50) {
-        // New section added by tailoring - score it
-        const newSectionScore = await scoreSectionText(
-          tailoredSection.text,
-          jobDescription,
-          industry
-        )
+        const newSectionScore = await scoreSectionText(tailoredSection.text, jobDescription, industry)
 
-        // Only add if it has a good score
         if (newSectionScore >= 5) {
-          finalSections.push({
-            name: tailoredSection.name,
-            text: tailoredSection.text,
-          })
-
+          finalSections.push({ name: tailoredSection.name, text: tailoredSection.text })
           sectionComparisons.push({
             sectionName: tailoredSection.name,
             base: { text: '', score: 0 },
@@ -267,63 +431,42 @@ export async function generateBestOfBothWorldsCV(
             improvement: newSectionScore,
             reason: 'New section added that strengthens the CV',
           })
-
           sectionsImproved++
         }
       }
     }
 
-    // Assemble final CV
-    console.log('Step 7: Assembling final CV from best sections...')
+    // STEP 9: Assemble final CV
+    console.log('Step 9: Assembling final CV from best sections...')
     const finalCVText = assembleCVFromSections(finalSections)
 
-    // Final validation score
-    console.log('Step 8: Final validation...')
-    const finalOverallResult = await scoreText(finalCVText, baseContext)
-    let finalOverallScore = finalOverallResult.success
-      ? finalOverallResult.scores?.overall || baseOverallScore
-      : baseOverallScore
-
-    // SAFETY NET: If final score is somehow worse than base, use base CV
-    if (finalOverallScore < baseOverallScore) {
-      console.warn(
-        `WARNING: Final CV scored ${finalOverallScore} vs base ${baseOverallScore}. ` +
-          `Using base CV as safety fallback.`
-      )
-
-      return {
-        success: true,
-        finalCVText: baseCVText,
-        sectionComparisons: sectionComparisons.map((sc) => ({
-          ...sc,
-          chosen: 'base' as const,
-          improvement: 0,
-          reason: 'Safety fallback: Original CV preserved',
-        })),
-        baseOverallScore,
-        tailoredOverallScore,
-        finalOverallScore: baseOverallScore,
-        overallImprovement: 0,
-        sectionsImproved: 0,
-        sectionsKeptOriginal: baseSections.length,
-        totalSections: baseSections.length,
-        processingTimeMs: Date.now() - startTime,
-        tokensUsed: totalTokens,
-      }
+    // Build final scores object
+    const finalScores: CVScore = {
+      overall_score: finalOverallScore,
+      core_score: bestOfBothCoreScore,
+      landing_page_score: finalLandingScore,
+      indicator_scores: bestOfBothIndicators,
+      landing_page_metrics: tailoredLandingMetrics,
     }
 
-    console.log(
-      `Success! Final score: ${finalOverallScore} (improvement: +${(finalOverallScore - baseOverallScore).toFixed(1)})`
-    )
+    // Calculate improvement
+    const overallImprovement = finalOverallScore - initialScores.overall_score
+
+    console.log(`Success! Improvement: +${overallImprovement.toFixed(1)} points`)
 
     return {
       success: true,
       finalCVText,
       sectionComparisons,
-      baseOverallScore,
-      tailoredOverallScore,
+      // Legacy scores (backward compatibility)
+      baseOverallScore: initialScores.overall_score,
+      tailoredOverallScore: calculateWeightedScore(tailoredCoreScore, tailoredLandingScore),
       finalOverallScore,
-      overallImprovement: finalOverallScore - baseOverallScore,
+      overallImprovement,
+      // New comprehensive scores
+      initial_scores: initialScores,
+      final_scores: finalScores,
+      // Statistics
       sectionsImproved,
       sectionsKeptOriginal,
       totalSections: sectionComparisons.length,
@@ -332,20 +475,34 @@ export async function generateBestOfBothWorldsCV(
     }
   } catch (error) {
     console.error('CV tailoring error:', error)
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error occurred',
-      finalCVText: baseCVText,
-      sectionComparisons: [],
-      baseOverallScore: 0,
-      tailoredOverallScore: 0,
-      finalOverallScore: 0,
-      overallImprovement: 0,
-      sectionsImproved: 0,
-      sectionsKeptOriginal: 0,
-      totalSections: 0,
-      processingTimeMs: Date.now() - startTime,
-    }
+    return createErrorResult(
+      error instanceof Error ? error.message : 'Unknown error occurred',
+      baseCVText,
+      startTime
+    )
+  }
+}
+
+/**
+ * Create error result with empty scores
+ */
+function createErrorResult(error: string, baseCVText: string, startTime: number): TailoringResult {
+  const emptyScore = createEmptyScore()
+  return {
+    success: false,
+    error,
+    finalCVText: baseCVText,
+    sectionComparisons: [],
+    baseOverallScore: 0,
+    tailoredOverallScore: 0,
+    finalOverallScore: 0,
+    overallImprovement: 0,
+    initial_scores: emptyScore,
+    final_scores: emptyScore,
+    sectionsImproved: 0,
+    sectionsKeptOriginal: 0,
+    totalSections: 0,
+    processingTimeMs: Date.now() - startTime,
   }
 }
 
@@ -361,34 +518,19 @@ async function scoreSectionText(
     return 0
   }
 
-  const context: ScoringContext = {
-    type: 'cv',
-    industry,
-  }
+  const context: ScoringContext = { type: 'cv', industry }
 
-  // For short sections, use a simpler scoring approach
+  // For short sections, use heuristic scoring
   if (sectionText.length < 100) {
-    // Quick heuristic scoring for very short sections
     let score = 5
 
-    // Check for numbers (quantifiable achievements)
+    // Check for quantifiable achievements
     if (sectionText.match(/\d+%|\$\d+|\d+ years?|\d+ (people|team|projects?)/i)) {
       score += 1
     }
 
     // Check for action verbs
-    const actionVerbs = [
-      'led',
-      'managed',
-      'developed',
-      'created',
-      'implemented',
-      'increased',
-      'reduced',
-      'improved',
-      'achieved',
-      'delivered',
-    ]
+    const actionVerbs = ['led', 'managed', 'developed', 'created', 'implemented', 'increased', 'reduced', 'improved', 'achieved', 'delivered']
     if (actionVerbs.some((v) => sectionText.toLowerCase().includes(v))) {
       score += 0.5
     }
@@ -400,7 +542,7 @@ async function scoreSectionText(
     const result = await scoreText(sectionText, context)
     return result.success ? result.scores?.overall || 5 : 5
   } catch {
-    return 5 // Default score on error
+    return 5
   }
 }
 
@@ -415,7 +557,6 @@ async function generateTailoredCVWithAI(
   const useMock = process.env.USE_MOCK_AI === 'true'
 
   if (useMock) {
-    // Mock: return enhanced version for testing
     return {
       tailoredText: enhanceCVForMock(baseCVText),
       tokensUsed: 0,
@@ -481,7 +622,6 @@ Return ONLY the tailored CV text. Do not include any explanations, preamble, or 
 function enhanceCVForMock(baseCVText: string): string {
   let enhanced = baseCVText
 
-  // Add some keywords to simulate tailoring
   const enhancements: Array<[RegExp, string]> = [
     [/(\d+) years?/gi, '$1+ years'],
     [/managed/gi, 'effectively managed'],
@@ -504,20 +644,13 @@ function enhanceCVForMock(baseCVText: string): string {
  * Extract role from job description
  */
 function extractRoleFromJobDescription(jobDescription: string): string {
-  // Try to find job title in first few lines
   const lines = jobDescription.split('\n').slice(0, 5)
 
   for (const line of lines) {
     const cleaned = line.trim()
-    // Common job title patterns
-    if (
-      cleaned.match(
-        /^(senior|junior|lead|principal|staff)?\s*(software|product|marketing|sales|data|project|program|account|customer|operations)/i
-      )
-    ) {
+    if (cleaned.match(/^(senior|junior|lead|principal|staff)?\s*(software|product|marketing|sales|data|project|program|account|customer|operations)/i)) {
       return cleaned.substring(0, 100)
     }
-    // Short lines that might be titles
     if (cleaned.length > 5 && cleaned.length < 80 && !cleaned.includes('.')) {
       return cleaned
     }
@@ -547,9 +680,7 @@ export async function quickCompare(
   ])
 
   const baseScore = baseResult.success ? baseResult.scores?.overall || 5 : 5
-  const tailoredScore = tailoredResult.success
-    ? tailoredResult.scores?.overall || 5
-    : 5
+  const tailoredScore = tailoredResult.success ? tailoredResult.scores?.overall || 5 : 5
 
   let recommendation: 'base' | 'tailored' | 'equal' = 'equal'
   if (tailoredScore > baseScore + 0.5) {

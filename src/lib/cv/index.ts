@@ -20,6 +20,7 @@ export type { CVSection, ParsedCV } from './parser'
 // Tailor exports
 export {
   generateBestOfBothWorldsCV,
+  analyzeInitialCV,
   quickCompare,
 } from './tailor'
 
@@ -27,4 +28,18 @@ export type {
   SectionScore,
   SectionComparison,
   TailoringResult,
+  CVScore,
+  IndicatorScoreEntry,
+  InitialAnalysisResult,
 } from './tailor'
+
+// Landing Page scorer exports
+export {
+  scoreLandingPage,
+  getLandingPageAssessment,
+} from './landing-page-scorer'
+
+export type {
+  LandingPageMetrics,
+  LandingPageDetails,
+} from './landing-page-scorer'

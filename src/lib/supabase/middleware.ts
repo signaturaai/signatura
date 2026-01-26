@@ -73,11 +73,14 @@ export async function updateSession(request: NextRequest) {
 
   // Check onboarding status for authenticated users on protected pages
   if (user && isProtectedPage) {
-    const { data: profile } = await supabase
+    const { data: profileData } = await supabase
       .from('profiles')
       .select('onboarding_completed')
       .eq('id', user.id)
       .single()
+
+    // Type assertion for untyped table
+    const profile = profileData as unknown as { onboarding_completed: boolean } | null
 
     // Redirect to onboarding if not completed
     if (profile && !profile.onboarding_completed) {
@@ -89,11 +92,17 @@ export async function updateSession(request: NextRequest) {
 
   // Redirect already onboarded users away from onboarding page
   if (user && isOnboardingPage) {
-    const { data: profile } = await supabase
+    const { data: profileData } = await supabase
       .from('profiles')
       .select('onboarding_completed, user_type')
       .eq('id', user.id)
       .single()
+
+    // Type assertion for untyped table
+    const profile = profileData as unknown as {
+      onboarding_completed: boolean
+      user_type: string
+    } | null
 
     if (profile && profile.onboarding_completed) {
       const url = request.nextUrl.clone()
