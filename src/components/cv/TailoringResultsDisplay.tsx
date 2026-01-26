@@ -270,8 +270,8 @@ export function TailoringResultsDisplay({
 }
 
 /**
- * Apples-to-Apples Score Comparison
- * Shows Core (70%) + Landing Page (30%) = Overall breakdown
+ * Holy Trinity Score Comparison
+ * Shows Core (50%) + ATS (30%) + Landing Page (20%) = Overall breakdown
  */
 interface ApplesToApplesComparisonProps {
   initial: CVScore
@@ -280,11 +280,14 @@ interface ApplesToApplesComparisonProps {
 }
 
 function ApplesToApplesComparison({ initial, final, improvement }: ApplesToApplesComparisonProps) {
+  // Determine if using fallback formula (when ATS = 0)
+  const usingFallback = initial.ats_score === 0 && final.ats_score === 0
+
   return (
     <div className="p-6 bg-white border border-gray-200 rounded-lg">
       <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
         <Target className="w-5 h-5 text-blue-600" />
-        Apples-to-Apples Score Comparison
+        Holy Trinity Score Comparison
       </h3>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -318,20 +321,32 @@ function ApplesToApplesComparison({ initial, final, improvement }: ApplesToApple
 
       {/* Formula explanation */}
       <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-100">
-        <p className="text-sm text-blue-800">
-          <strong>Scoring Formula:</strong> Overall = (Core Content × 70%) + (Landing Page × 30%)
-        </p>
-        <p className="text-xs text-blue-600 mt-1">
-          Core Content measures the 10 indicators (skills, knowledge, etc.). Landing Page measures
-          formatting, ATS compatibility, and visual clarity.
-        </p>
+        {usingFallback ? (
+          <>
+            <p className="text-sm text-blue-800">
+              <strong>Scoring Formula (Fallback):</strong> Overall = (Core Content × 70%) + (Landing Page × 30%)
+            </p>
+            <p className="text-xs text-blue-600 mt-1">
+              ATS score not available. Using fallback formula.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-blue-800">
+              <strong>Holy Trinity Formula:</strong> Overall = (Core × 50%) + (ATS × 30%) + (Landing Page × 20%)
+            </p>
+            <p className="text-xs text-blue-600 mt-1">
+              Core Content measures the 10 indicators. ATS measures keyword matching. Landing Page measures formatting.
+            </p>
+          </>
+        )}
       </div>
     </div>
   )
 }
 
 /**
- * Score Breakdown Component
+ * Score Breakdown Component (Holy Trinity)
  */
 interface ScoreBreakdownProps {
   scores: CVScore
@@ -342,6 +357,9 @@ function ScoreBreakdown({ scores, variant }: ScoreBreakdownProps) {
   const isHighlight = variant === 'final'
   const bgOverall = isHighlight ? 'bg-green-100' : 'bg-gray-200'
   const textOverall = isHighlight ? 'text-green-800' : 'text-gray-800'
+
+  // Determine if using fallback (when ATS = 0)
+  const hasATS = scores.ats_score > 0
 
   return (
     <div className="space-y-3">
@@ -355,22 +373,39 @@ function ScoreBreakdown({ scores, variant }: ScoreBreakdownProps) {
         </div>
       </div>
 
-      {/* Core Content (70%) */}
+      {/* Core Content */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-blue-500" />
-          <span className="text-sm text-gray-600">Core Content (70%)</span>
+          <span className="text-sm text-gray-600">
+            Core Content ({hasATS ? '50%' : '70%'})
+          </span>
         </div>
         <span className="text-sm font-semibold text-gray-900">
           {scores.core_score.toFixed(1)}
         </span>
       </div>
 
-      {/* Landing Page (30%) */}
+      {/* ATS Score (only show if available) */}
+      {hasATS && (
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-orange-500" />
+            <span className="text-sm text-gray-600">ATS Keywords (30%)</span>
+          </div>
+          <span className="text-sm font-semibold text-gray-900">
+            {scores.ats_score.toFixed(1)}
+          </span>
+        </div>
+      )}
+
+      {/* Landing Page */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-purple-500" />
-          <span className="text-sm text-gray-600">Landing Page (30%)</span>
+          <span className="text-sm text-gray-600">
+            Landing Page ({hasATS ? '20%' : '30%'})
+          </span>
         </div>
         <span className="text-sm font-semibold text-gray-900">
           {scores.landing_page_score.toFixed(1)}

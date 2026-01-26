@@ -277,7 +277,7 @@ export async function scoreText(
           content: prompt,
         },
       ],
-      temperature: 0.3, // Lower temperature for consistent scoring
+      temperature: 0.0, // CRITICAL: Deterministic scoring - prevents score fluctuation on reload
       max_tokens: 2000,
     })
 
