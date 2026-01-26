@@ -46,13 +46,19 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (existingRequest) {
+      // Type assertion for untyped table
+      const req = existingRequest as unknown as {
+        id: string
+        scheduled_deletion_date: string
+        requested_at: string
+      }
       return NextResponse.json(
         {
           error: 'A deletion request is already pending',
           existing_request: {
-            id: existingRequest.id,
-            scheduled_date: existingRequest.scheduled_deletion_date,
-            requested_at: existingRequest.requested_at,
+            id: req.id,
+            scheduled_date: req.scheduled_deletion_date,
+            requested_at: req.requested_at,
           },
         },
         { status: 409 }
@@ -88,11 +94,13 @@ export async function POST(request: NextRequest) {
       version: 'account_deletion_requested',
     })
 
+    // Type assertion for untyped table
+    const delReq = deletionRequest as unknown as { id: string }
     return NextResponse.json({
       success: true,
       message: 'Account deletion scheduled',
       deletion_request: {
-        id: deletionRequest.id,
+        id: delReq.id,
         scheduled_date: scheduledDate.toISOString(),
         grace_period_days: GRACE_PERIOD_DAYS,
         can_cancel_until: scheduledDate.toISOString(),
@@ -137,11 +145,14 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
+    // Type assertion for untyped table
+    const pending = pendingRequest as unknown as { id: string }
+
     // Cancel the request
     const { error: updateError } = await supabase
       .from('account_deletion_requests')
       .update({ status: 'cancelled' })
-      .eq('id', pendingRequest.id)
+      .eq('id', pending.id)
 
     if (updateError) {
       throw updateError
@@ -158,7 +169,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: 'Account deletion request cancelled',
-      cancelled_request_id: pendingRequest.id,
+      cancelled_request_id: pending.id,
     })
   } catch (error) {
     console.error('Error cancelling account deletion:', error)
@@ -193,7 +204,15 @@ export async function GET(request: NextRequest) {
       throw fetchError
     }
 
-    const pendingRequest = requests?.find((r) => r.status === 'pending')
+    // Type assertion for untyped table
+    type DeletionRequest = {
+      id: string
+      status: string
+      scheduled_deletion_date: string
+      requested_at: string
+    }
+    const typedRequests = (requests || []) as unknown as DeletionRequest[]
+    const pendingRequest = typedRequests.find((r) => r.status === 'pending')
 
     return NextResponse.json({
       success: true,
@@ -209,7 +228,7 @@ export async function GET(request: NextRequest) {
             ),
           }
         : null,
-      all_requests: requests || [],
+      all_requests: typedRequests,
     })
   } catch (error) {
     console.error('Error fetching deletion status:', error)

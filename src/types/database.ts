@@ -261,6 +261,19 @@ export interface Database {
           created_by: string
           application_status?: ApplicationStatus
           priority_level?: PriorityLevel | null
+          job_url?: string | null
+          job_description?: string | null
+          location?: string | null
+          notes?: string | null
+          user_excitement_level?: number | null
+          salary_min?: number | null
+          salary_max?: number | null
+          salary_currency?: string
+          recruiter_name?: string | null
+          recruiter_email?: string | null
+          referral_name?: string | null
+          referral_email?: string | null
+          hiring_manager_name?: string | null
         }
         Update: Partial<Database['public']['Tables']['job_applications']['Insert']>
       }
@@ -371,6 +384,9 @@ export interface Database {
         }
         Update: Partial<Database['public']['Tables']['application_follow_ups']['Insert']>
       }
+      // Allow access to tables not yet fully typed
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      [key: string]: any
     }
     Views: {
       [_ in never]: never

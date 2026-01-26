@@ -111,8 +111,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<TailorRes
       if (sessionError) {
         console.error('Failed to create tailoring session:', sessionError)
         // Continue without saving - don't fail the request
-      } else {
-        sessionId = session?.id
+      } else if (session) {
+        // Type assertion for untyped table response
+        sessionId = (session as unknown as { id: string }).id
       }
     }
 

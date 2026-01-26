@@ -33,13 +33,19 @@ export function OnboardingWizard() {
           return
         }
 
-        const { data: profile, error } = await supabase
+        const { data: profileData, error } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', user.id)
           .single()
 
         if (error) throw error
+
+        // Type assertion for untyped table
+        const profile = profileData as unknown as {
+          onboarding_completed: boolean
+          user_type: 'candidate' | 'recruiter'
+        }
 
         // Check if already completed onboarding
         if (profile.onboarding_completed) {

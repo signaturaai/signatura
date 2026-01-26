@@ -3,8 +3,12 @@
 /**
  * Section Comparison Viewer
  *
- * Displays side-by-side comparison of base vs tailored CV sections
+ * Displays side-by-side comparison of Base vs Tailored CV sections
  * with scoring and highlighting of which version was chosen.
+ *
+ * Terminology:
+ * - "Base" = the original uploaded CV
+ * - "Tailored" = the AI-optimized version
  */
 
 import { useState } from 'react'
@@ -60,7 +64,7 @@ export function SectionComparisonViewer({
           </span>
           <span className="text-gray-300">|</span>
           <span className="text-sm text-gray-600">
-            {comparisons.filter((c) => c.chosen === 'base').length} sections kept original
+            {comparisons.filter((c) => c.chosen === 'base').length} sections kept base version
           </span>
         </div>
         <div className="flex gap-2">
@@ -144,7 +148,7 @@ function SectionComparisonCard({
           )}
           {isMissingSection && (
             <span className="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-700 rounded">
-              Kept original
+              Kept base
             </span>
           )}
         </div>
@@ -193,7 +197,7 @@ function SectionComparisonCard({
             >
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium text-gray-700">
-                  Original
+                  Base
                   {chosen === 'base' && (
                     <span className="ml-2 text-xs text-blue-600">(chosen)</span>
                   )}

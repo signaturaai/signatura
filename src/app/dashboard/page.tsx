@@ -32,7 +32,8 @@ export default function DashboardPage() {
         .single()
 
       if (data) {
-        setProfile(data)
+        // Type assertion for untyped table
+        setProfile(data as unknown as Profile)
       }
       setLoading(false)
     }

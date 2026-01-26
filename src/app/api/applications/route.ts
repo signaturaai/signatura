@@ -57,19 +57,20 @@ export async function POST(request: NextRequest) {
     }
 
     // Create the application
-    const { data: application, error: insertError } = await supabase
-      .from('job_applications')
+    // Type assertion needed due to Supabase client/types mismatch
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: application, error: insertError } = await (supabase
+      .from('job_applications') as any)
       .insert({
         user_id: user.id,
         company_name: company_name.trim(),
         position_title: position_title.trim(),
         job_description: job_description.trim(),
         job_url: job_url || null,
-        status,
-        excitement_level: excitement_level || null,
-        priority: priority || 'medium',
-        industry: industry || 'generic',
-        source,
+        application_status: status || 'prepared',
+        user_excitement_level: excitement_level || null,
+        priority_level: priority || 'medium',
+        created_by: user.id,
       })
       .select()
       .single()
