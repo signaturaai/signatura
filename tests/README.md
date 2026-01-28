@@ -12,7 +12,9 @@ tests/
 │
 ├── ralph/                   # RALPH specification tests
 │   ├── cv-tailor-holy-trinity.md
-│   └── module-3-interview-coach.md
+│   ├── module-3-interview-coach.md
+│   ├── module-4-compensation-negotiator.md
+│   └── module-5-contract-reviewer.md
 │
 └── README.md
 ```
@@ -62,6 +64,8 @@ npx vitest run tests/unit/indicators/indicators.test.ts
 | AI Companion | ✅ 22 tests | - |
 | CV Tailor - Holy Trinity | - | ✅ 32/32 |
 | Interview Coach Module 3 | - | ✅ 82/82 |
+| Compensation Negotiator Module 4 | - | ✅ 78/78 |
+| Contract Reviewer Module 5 | - | ✅ 52/52 |
 
 ## Writing New Tests
 

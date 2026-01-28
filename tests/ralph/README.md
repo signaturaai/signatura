@@ -8,6 +8,8 @@ RALPH (Requirements Analysis & Logical Path Handler) tests validate that impleme
 |--------|------|--------|--------|
 | CV Tailor - Holy Trinity Scoring | 2026-01-27 | ✅ 32/32 | [cv-tailor-holy-trinity.md](./cv-tailor-holy-trinity.md) |
 | Interview Coach - Module 3 | 2026-01-27 | ✅ 82/82 | [module-3-interview-coach.md](./module-3-interview-coach.md) |
+| Compensation Negotiator - Module 4 | 2026-01-28 | ✅ 78/78 | [module-4-compensation-negotiator.md](./module-4-compensation-negotiator.md) |
+| Contract Reviewer - Module 5 (Final MVP) | 2026-01-28 | ✅ 52/52 | [module-5-contract-reviewer.md](./module-5-contract-reviewer.md) |
 
 ## Test Methodology
 
