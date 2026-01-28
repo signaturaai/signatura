@@ -11,7 +11,7 @@
 import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button, Textarea, Label } from '@/components/ui'
 import { Mic, Play, Sparkles, ArrowLeft, FileText, Loader2 } from 'lucide-react'
-import { InterviewSetupWizard, InterviewDashboard } from '@/components/interview'
+import { InterviewSetupWizard, InterviewSimulationBoard } from '@/components/interview'
 import type { WizardConfig, InterviewPlan } from '@/types/interview'
 
 type Mode = 'landing' | 'wizard' | 'dashboard' | 'loading'
@@ -138,17 +138,15 @@ export default function InterviewPage() {
     )
   }
 
-  // Dashboard mode
+  // Dashboard mode - Show the gamified Simulation Board
   if (mode === 'dashboard' && plan) {
     return (
-      <div className="space-y-6">
-        <InterviewDashboard
-          plan={plan}
-          onRegenerate={handleRegenerate}
-          onNewConfig={handleNewConfig}
-          isRegenerating={isLoading}
-        />
-      </div>
+      <InterviewSimulationBoard
+        plan={plan}
+        onRegenerate={handleRegenerate}
+        onNewConfig={handleNewConfig}
+        isRegenerating={isLoading}
+      />
     )
   }
 
