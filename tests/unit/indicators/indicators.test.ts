@@ -22,13 +22,13 @@ import {
   generateFeedback,
   IndicatorScores,
   ScoringContext,
-} from '../index';
+} from '@/lib/indicators';
 import {
   getIndustryWeights,
   calculateWeightedScore,
   getTopIndicators,
   getSupportedIndustries,
-} from '../weights';
+} from '@/lib/indicators/weights';
 import {
   INDICATOR_NAMES,
   INDICATOR_CATEGORIES,
@@ -37,7 +37,7 @@ import {
   SUB_INDICATOR_COUNTS,
   SUB_INDICATORS,
   TOTAL_SUB_INDICATORS,
-} from '../types';
+} from '@/lib/indicators/types';
 
 // ============================================================================
 // INDICATOR DEFINITIONS TESTS
