@@ -20,7 +20,6 @@ import {
   ChevronLeft,
   Sparkles,
   Check,
-  Briefcase,
   TrendingUp,
   Scale,
   Heart,
@@ -34,7 +33,7 @@ import type {
   RoleLevel,
   NegotiationPriority,
 } from '@/types/compensation'
-import { CURRENCY_SYMBOLS, ROLE_LEVEL_LABELS, PRIORITY_LABELS } from '@/types/compensation'
+import { CURRENCY_SYMBOLS } from '@/types/compensation'
 
 export interface WizardOutput {
   offerDetails: OfferDetails
@@ -209,12 +208,6 @@ export function CompensationWizard({
     onComplete({ offerDetails, userPriorities })
   }
 
-  const formatCurrency = (value: string) => {
-    const num = parseFloat(value.replace(/,/g, ''))
-    if (isNaN(num)) return value
-    return num.toLocaleString()
-  }
-
   const slideVariants = {
     enter: (direction: number) => ({
       x: direction > 0 ? 300 : -300,
@@ -287,9 +280,10 @@ export function CompensationWizard({
       <Card className="shadow-soft-lg overflow-hidden">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            {STEPS[currentStep - 1].icon && (
-              <STEPS[currentStep - 1].icon className="h-5 w-5 text-rose" />
-            )}
+            {(() => {
+              const StepIcon = STEPS[currentStep - 1].icon
+              return StepIcon ? <StepIcon className="h-5 w-5 text-rose" /> : null
+            })()}
             {STEPS[currentStep - 1].title}
           </CardTitle>
           <p className="text-sm text-muted-foreground">{STEPS[currentStep - 1].description}</p>

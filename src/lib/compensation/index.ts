@@ -12,3 +12,5 @@ export {
   generateStrategyWithLLM,
   generateNegotiationStrategy,
 } from './generateStrategy'
+
+export { MOCK_COMPENSATION_STRATEGY, getMockCompensationStrategy } from './mockData'
