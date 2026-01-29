@@ -19,8 +19,10 @@ import {
   ApplicationTableView,
   AdvancedFiltersModal,
   ColumnVisibilityDropdown,
+  ImportApplicationModal,
 } from '@/components/applications'
 import type { ColumnConfig, FilterState } from '@/components/applications'
+import { ToastProvider, useToast } from '@/components/ui'
 import { mockJobApplications } from '@/lib/data/mockData'
 import type { JobApplication, ApplicationStatus } from '@/lib/types/dashboard'
 import {
@@ -67,13 +69,15 @@ const STATUS_OPTIONS: { value: ApplicationStatus | 'all'; label: string }[] = [
   { value: 'withdrawn', label: 'Withdrawn' },
 ]
 
-export default function ApplicationsPage() {
+function ApplicationsPageContent() {
   const router = useRouter()
+  const { showToast } = useToast()
 
   // View state
   const [viewMode, setViewMode] = useState<ViewMode>('cards')
   const [showWizard, setShowWizard] = useState(false)
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
 
   // Filter state
   const [searchQuery, setSearchQuery] = useState('')
@@ -223,9 +227,7 @@ export default function ApplicationsPage() {
         <div className="flex items-center gap-3">
           <Button
             variant="outline"
-            onClick={() => {
-              /* TODO: Implement import */
-            }}
+            onClick={() => setShowImportModal(true)}
             className="hidden sm:flex"
           >
             <Upload className="w-4 h-4 mr-2" />
@@ -479,6 +481,17 @@ export default function ApplicationsPage() {
         }}
       />
 
+      {/* Import Application Modal */}
+      <ImportApplicationModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImport={(application, file) => {
+          console.log('Imported application:', application, file)
+          showToast(`Successfully imported application for ${application.company_name}`, 'success')
+          setShowImportModal(false)
+        }}
+      />
+
       {/* Click outside to close dropdowns */}
       {(statusDropdownOpen || sortDropdownOpen) && (
         <div
@@ -490,5 +503,13 @@ export default function ApplicationsPage() {
         />
       )}
     </div>
+  )
+}
+
+export default function ApplicationsPage() {
+  return (
+    <ToastProvider>
+      <ApplicationsPageContent />
+    </ToastProvider>
   )
 }
