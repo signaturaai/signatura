@@ -1,11 +1,11 @@
 /**
- * Dashboard Home - Redirects to Companion
+ * Dashboard Home - Redirects to Dashboard
  *
- * The companion is the heart of the application.
+ * Main entry point for authenticated users.
  */
 
 import { redirect } from 'next/navigation'
 
 export default function DashboardPage() {
-  redirect('/companion')
+  redirect('/dashboard')
 }

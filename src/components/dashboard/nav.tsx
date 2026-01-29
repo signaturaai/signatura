@@ -4,6 +4,7 @@
  * Dashboard Navigation
  *
  * Main navigation for the dashboard with warm, empathetic styling.
+ * Includes badges for application counts and notifications.
  */
 
 import Link from 'next/link'
@@ -20,6 +21,9 @@ import {
   LogOut,
   Menu,
   X,
+  LayoutDashboard,
+  FileSignature,
+  DollarSign,
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -31,7 +35,27 @@ interface DashboardNavProps {
   }
 }
 
-const navItems = [
+interface NavItem {
+  href: string
+  label: string
+  icon: typeof Heart
+  description: string
+  color: string
+  bgColor: string
+  badge?: number | string
+  badgeColor?: string
+}
+
+// Navigation items with badges
+const navItems: NavItem[] = [
+  {
+    href: '/dashboard',
+    label: 'Dashboard',
+    icon: LayoutDashboard,
+    description: 'Overview',
+    color: 'text-sky-dark',
+    bgColor: 'bg-sky-light',
+  },
   {
     href: '/companion',
     label: 'Companion',
@@ -47,6 +71,8 @@ const navItems = [
     description: 'Track your jobs',
     color: 'text-lavender-dark',
     bgColor: 'bg-lavender-light',
+    badge: 10,
+    badgeColor: 'bg-lavender text-white',
   },
   {
     href: '/cv',
@@ -63,6 +89,26 @@ const navItems = [
     description: 'Practice sessions',
     color: 'text-sky-dark',
     bgColor: 'bg-sky-light',
+    badge: 3,
+    badgeColor: 'bg-sky text-white',
+  },
+  {
+    href: '/compensation',
+    label: 'Offers',
+    icon: DollarSign,
+    description: 'Negotiate offers',
+    color: 'text-success-dark',
+    bgColor: 'bg-success-light',
+    badge: 1,
+    badgeColor: 'bg-success text-white',
+  },
+  {
+    href: '/contract',
+    label: 'Contract',
+    icon: FileSignature,
+    description: 'Review contracts',
+    color: 'text-warning-dark',
+    bgColor: 'bg-warning-light',
   },
   {
     href: '/settings',
@@ -86,12 +132,20 @@ export function DashboardNav({ user }: DashboardNavProps) {
     router.refresh()
   }
 
+  // Check if a nav item is active
+  const isNavActive = (href: string) => {
+    if (href === '/dashboard') {
+      return pathname === '/dashboard' || pathname === '/'
+    }
+    return pathname === href || pathname.startsWith(href + '/')
+  }
+
   return (
     <nav className="border-b border-rose-light/30 bg-white shadow-soft">
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
-          <Link href="/companion" className="flex items-center gap-2">
+          <Link href="/dashboard" className="flex items-center gap-2">
             <div className="h-8 w-8 rounded-lg bg-brand-gradient flex items-center justify-center shadow-soft">
               <Heart className="h-4 w-4 text-white" />
             </div>
@@ -99,15 +153,15 @@ export function DashboardNav({ user }: DashboardNavProps) {
           </Link>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center gap-1">
+          <div className="hidden lg:flex items-center gap-1">
             {navItems.map((item) => {
-              const isActive = pathname === item.href
+              const isActive = isNavActive(item.href)
               return (
                 <Link
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    'flex items-center gap-2 px-4 py-2 rounded-xl text-sm transition-all duration-200',
+                    'relative flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-all duration-200',
                     isActive
                       ? `${item.bgColor} ${item.color} shadow-soft`
                       : 'text-text-secondary hover:text-text-primary hover:bg-rose-light/20'
@@ -115,6 +169,17 @@ export function DashboardNav({ user }: DashboardNavProps) {
                 >
                   <item.icon className={cn('h-4 w-4', isActive && item.color)} />
                   <span className="font-medium">{item.label}</span>
+                  {/* Badge */}
+                  {item.badge && (
+                    <span
+                      className={cn(
+                        'ml-1 px-1.5 py-0.5 text-[10px] font-semibold rounded-full min-w-[18px] text-center',
+                        item.badgeColor || 'bg-rose text-white'
+                      )}
+                    >
+                      {item.badge}
+                    </span>
+                  )}
                 </Link>
               )
             })}
@@ -129,7 +194,7 @@ export function DashboardNav({ user }: DashboardNavProps) {
                   {user.name.charAt(0).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
-              <div className="text-sm">
+              <div className="text-sm hidden xl:block">
                 <p className="font-medium text-text-primary">{user.name}</p>
               </div>
             </div>
@@ -148,7 +213,7 @@ export function DashboardNav({ user }: DashboardNavProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="md:hidden text-text-primary"
+            className="lg:hidden text-text-primary"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           >
             {mobileMenuOpen ? (
@@ -161,9 +226,9 @@ export function DashboardNav({ user }: DashboardNavProps) {
 
         {/* Mobile Navigation */}
         {mobileMenuOpen && (
-          <div className="md:hidden py-4 space-y-2 animate-fade-up">
+          <div className="lg:hidden py-4 space-y-2 animate-fade-up">
             {navItems.map((item) => {
-              const isActive = pathname === item.href
+              const isActive = isNavActive(item.href)
               return (
                 <Link
                   key={item.href}
@@ -182,8 +247,21 @@ export function DashboardNav({ user }: DashboardNavProps) {
                   )}>
                     <item.icon className={cn('h-5 w-5', item.color)} />
                   </div>
-                  <div>
-                    <p className="font-medium text-text-primary">{item.label}</p>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-text-primary">{item.label}</p>
+                      {/* Mobile Badge */}
+                      {item.badge && (
+                        <span
+                          className={cn(
+                            'px-1.5 py-0.5 text-[10px] font-semibold rounded-full min-w-[18px] text-center',
+                            item.badgeColor || 'bg-rose text-white'
+                          )}
+                        >
+                          {item.badge}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-text-tertiary">
                       {item.description}
                     </p>
