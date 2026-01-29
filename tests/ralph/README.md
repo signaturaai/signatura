@@ -12,6 +12,7 @@ RALPH (Requirements Analysis & Logical Path Handler) tests validate that impleme
 | Contract Reviewer - Module 5 (Final MVP) | 2026-01-28 | ✅ 52/52 | [module-5-contract-reviewer.md](./module-5-contract-reviewer.md) |
 | Candidate Dashboard - Base44 Migration | 2026-01-29 | ✅ 36/36 | [candidate-dashboard-migration.md](./candidate-dashboard-migration.md) |
 | Companion - Glassmorphism UI | 2026-01-29 | ✅ 22/22 | [companion-glassmorphism-ui.md](./companion-glassmorphism-ui.md) |
+| Persistent UI Layer - Floating Widgets | 2026-01-29 | ✅ 40/40 | [persistent-ui-layer.md](./persistent-ui-layer.md) |
 
 ## Test Methodology
 
