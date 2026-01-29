@@ -234,13 +234,13 @@
   }
 
   .animate-fade-up {
-    animation: fade-up 0.5s ease-out;
+    animation: fade-up 0.5s ease-out forwards;
   }
 
   @keyframes fade-up {
     0% {
       opacity: 0;
-      transform: translateY(10px);
+      transform: translateY(20px);
     }
     100% {
       opacity: 1;
@@ -259,6 +259,58 @@
     50% {
       opacity: 0.8;
     }
+  }
+
+  /* Breathing animation for avatar border */
+  .animate-pulse-gentle {
+    animation: pulse-gentle 3s ease-in-out infinite;
+  }
+
+  @keyframes pulse-gentle {
+    0%, 100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+    50% {
+      transform: scale(1.02);
+      opacity: 0.85;
+    }
+  }
+
+  /* Custom scrollbar styling for chat */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #F5D5E0 transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: #F5D5E0;
+    border-radius: 3px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: #E8B5CD;
+  }
+
+  /* Staggered animation delays for messages */
+  .animation-delay-100 {
+    animation-delay: 100ms;
+  }
+
+  .animation-delay-200 {
+    animation-delay: 200ms;
+  }
+
+  .animation-delay-300 {
+    animation-delay: 300ms;
   }
 
   /* Text utilities */
