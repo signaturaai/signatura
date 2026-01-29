@@ -6,15 +6,29 @@ All tests for the Signatura application are organized in this directory.
 
 ```
 tests/
-├── unit/                    # Unit tests (Vitest)
-│   ├── indicators/          # 10-Indicator scoring system tests
-│   └── companion/           # AI Companion tests
+├── unit/                        # Unit tests (Vitest)
+│   ├── companion/               # AI Companion tests
+│   │   └── emotional-intelligence.test.ts
+│   └── indicators/              # 10-Indicator scoring system tests
+│       ├── indicators.test.ts
+│       └── test-data.ts
 │
-├── ralph/                   # RALPH specification tests
-│   ├── cv-tailor-holy-trinity.md
-│   ├── module-3-interview-coach.md
-│   ├── module-4-compensation-negotiator.md
-│   └── module-5-contract-reviewer.md
+├── ralph/                       # RALPH specification tests (by module)
+│   ├── cv-tailor/               # CV Tailor module
+│   │   └── holy-trinity.md
+│   ├── companion/               # AI Companion
+│   │   └── glassmorphism-ui.md
+│   ├── interview-coach/         # Interview Coach module
+│   │   └── module-3.md
+│   ├── compensation/            # Compensation Negotiator module
+│   │   └── module-4.md
+│   ├── contract-reviewer/       # Contract Reviewer module
+│   │   └── module-5.md
+│   ├── dashboard/               # Dashboard components
+│   │   └── base44-migration.md
+│   ├── ui/                      # UI components
+│   │   └── persistent-ui-layer.md
+│   └── README.md
 │
 └── README.md
 ```
@@ -23,21 +37,27 @@ tests/
 
 ### Unit Tests (`/unit`)
 
-Automated tests run with Vitest. Execute with:
+Automated tests run with Vitest. These test specific functions and components in isolation.
 
-```bash
-npx vitest run
-```
+**Current Coverage:**
+- `companion/` - AI Companion emotional intelligence tests (22 tests)
+- `indicators/` - 10-Indicator framework scoring tests (44 tests)
 
 ### RALPH Tests (`/ralph`)
 
 **RALPH** (Requirements Analysis & Logical Path Handler) tests are manual verification processes that validate implementations against their specifications.
 
-Each RALPH test documents:
-- Requirements from the specification
-- Pass/Fail status for each requirement
-- Implementation file references
-- Summary statistics
+**Current Coverage:**
+
+| Module | Result | Location |
+|--------|--------|----------|
+| CV Tailor - Holy Trinity | ✅ 32/32 | `ralph/cv-tailor/` |
+| Interview Coach | ✅ 82/82 | `ralph/interview-coach/` |
+| Compensation Negotiator | ✅ 78/78 | `ralph/compensation/` |
+| Contract Reviewer | ✅ 52/52 | `ralph/contract-reviewer/` |
+| Dashboard Migration | ✅ 36/36 | `ralph/dashboard/` |
+| Companion Glassmorphism | ✅ 22/22 | `ralph/companion/` |
+| Persistent UI Layer | ✅ 40/40 | `ralph/ui/` |
 
 ## Running Tests
 
@@ -56,16 +76,18 @@ npx vitest
 npx vitest run tests/unit/indicators/indicators.test.ts
 ```
 
-## Test Coverage
+### Specific Module
+```bash
+npx vitest run tests/unit/companion/
+```
 
-| Module | Unit Tests | RALPH Tests |
-|--------|------------|-------------|
-| 10-Indicator Scoring | ✅ 44 tests | - |
-| AI Companion | ✅ 22 tests | - |
-| CV Tailor - Holy Trinity | - | ✅ 32/32 |
-| Interview Coach Module 3 | - | ✅ 82/82 |
-| Compensation Negotiator Module 4 | - | ✅ 78/78 |
-| Contract Reviewer Module 5 | - | ✅ 52/52 |
+## Test Coverage Summary
+
+| Category | Tests | Status |
+|----------|-------|--------|
+| Unit Tests | 66 | ✅ Passing |
+| RALPH Tests | 342 | ✅ Passing |
+| **Total** | **408** | ✅ |
 
 ## Writing New Tests
 
@@ -75,7 +97,8 @@ npx vitest run tests/unit/indicators/indicators.test.ts
 3. Follow Vitest patterns (describe, it, expect)
 
 ### RALPH Tests
-1. Create markdown file in `tests/ralph/`
-2. Follow the template in existing RALPH reports
+1. Create subdirectory for your module under `tests/ralph/` if needed
+2. Create markdown file following the existing template
 3. Document all requirements from specification
 4. Include Pass/Fail status and file references
+5. Update `tests/ralph/README.md` with the new report link
