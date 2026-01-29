@@ -1,270 +1,494 @@
 'use client'
 
 /**
- * Applications Page
+ * My Applications Page
  *
- * Track and manage job applications with integrated CV tailoring wizard.
+ * Comprehensive job applications management interface with:
+ * - Cards and Table view toggle
+ * - Advanced filtering and search
+ * - Column customization for table view
+ * - Dynamic action buttons based on application status
  */
 
-import { useState, useEffect } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui'
-import { Button } from '@/components/ui'
-import { NewApplicationWizard } from '@/components/applications'
+import { useState, useMemo, useCallback } from 'react'
+import { Card, CardContent } from '@/components/ui'
+import { Button, Input } from '@/components/ui'
 import {
-  Briefcase,
+  NewApplicationWizard,
+  ApplicationCardsView,
+  ApplicationTableView,
+  AdvancedFiltersModal,
+  ColumnVisibilityDropdown,
+} from '@/components/applications'
+import type { ColumnConfig, FilterState } from '@/components/applications'
+import { mockJobApplications } from '@/lib/data/mockData'
+import type { JobApplication, ApplicationStatus } from '@/lib/types/dashboard'
+import {
   Plus,
-  Loader2,
-  Building2,
-  Calendar,
-  Star,
-  ExternalLink,
+  Upload,
+  LayoutGrid,
+  List,
+  Search,
+  SlidersHorizontal,
+  ChevronDown,
+  ArrowUpDown,
+  Briefcase,
 } from 'lucide-react'
-import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 
-interface Application {
-  id: string
-  company_name: string
-  position_title: string
-  status: string
-  priority: string
-  excitement_level: number | null
-  industry: string | null
-  job_url: string | null
-  created_at: string
-}
+// View mode type
+type ViewMode = 'cards' | 'table'
 
-const STATUS_COLORS: Record<string, string> = {
-  preparing: 'bg-gray-100 text-gray-700',
-  applied: 'bg-blue-100 text-blue-700',
-  interviewing: 'bg-purple-100 text-purple-700',
-  offer: 'bg-green-100 text-green-700',
-  rejected: 'bg-red-100 text-red-700',
-  withdrawn: 'bg-yellow-100 text-yellow-700',
-}
+// Sort options
+type SortOption = 'newest' | 'oldest' | 'company_asc' | 'company_desc' | 'status'
 
-const PRIORITY_COLORS: Record<string, string> = {
-  high: 'text-red-600',
-  medium: 'text-yellow-600',
-  low: 'text-gray-500',
-}
+// Default column configuration
+const DEFAULT_COLUMNS: ColumnConfig[] = [
+  { id: 'company', label: 'Company', visible: true },
+  { id: 'position', label: 'Position', visible: true },
+  { id: 'status', label: 'Status', visible: true },
+  { id: 'next_step', label: 'Next Step', visible: true },
+  { id: 'progress', label: 'Progress', visible: true },
+  { id: 'applied_date', label: 'Applied Date', visible: true },
+  { id: 'salary', label: 'Salary', visible: false },
+  { id: 'priority', label: 'Priority', visible: false },
+]
+
+// Status options for quick filter
+const STATUS_OPTIONS: { value: ApplicationStatus | 'all'; label: string }[] = [
+  { value: 'all', label: 'All Statuses' },
+  { value: 'prepared', label: 'Prepared' },
+  { value: 'applied', label: 'Applied' },
+  { value: 'interview_scheduled', label: 'Interview Scheduled' },
+  { value: 'interviewed', label: 'Interviewed' },
+  { value: 'offer_received', label: 'Offer Received' },
+  { value: 'negotiating', label: 'Negotiating' },
+  { value: 'rejected', label: 'Rejected' },
+  { value: 'withdrawn', label: 'Withdrawn' },
+]
 
 export default function ApplicationsPage() {
+  const router = useRouter()
+
+  // View state
+  const [viewMode, setViewMode] = useState<ViewMode>('cards')
   const [showWizard, setShowWizard] = useState(false)
-  const [applications, setApplications] = useState<Application[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
 
-  const fetchApplications = async () => {
-    try {
-      setLoading(true)
-      const response = await fetch('/api/applications')
-      const data = await response.json()
+  // Filter state
+  const [searchQuery, setSearchQuery] = useState('')
+  const [quickStatusFilter, setQuickStatusFilter] = useState<ApplicationStatus | 'all'>('all')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [sortOption, setSortOption] = useState<SortOption>('newest')
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch applications')
-      }
+  // Advanced filter state
+  const [advancedFilters, setAdvancedFilters] = useState<FilterState>({
+    searchQuery: '',
+    statuses: [],
+    dateFrom: '',
+    dateTo: '',
+  })
 
-      setApplications(data.applications || [])
-    } catch (err) {
-      console.error('Error fetching applications:', err)
-      setError(err instanceof Error ? err.message : 'Failed to load applications')
-    } finally {
-      setLoading(false)
+  // Column visibility state (for table view)
+  const [columns, setColumns] = useState<ColumnConfig[]>(DEFAULT_COLUMNS)
+
+  // Status dropdown state
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false)
+  const [sortDropdownOpen, setSortDropdownOpen] = useState(false)
+
+  // Filter and sort applications
+  const filteredApplications = useMemo(() => {
+    let result = [...mockJobApplications]
+
+    // Apply search filter
+    const searchTerm = advancedFilters.searchQuery || searchQuery
+    if (searchTerm) {
+      const lowerSearch = searchTerm.toLowerCase()
+      result = result.filter(
+        (app) =>
+          app.company_name.toLowerCase().includes(lowerSearch) ||
+          app.position_title.toLowerCase().includes(lowerSearch) ||
+          (app.notes && app.notes.toLowerCase().includes(lowerSearch)) ||
+          (app.location && app.location.toLowerCase().includes(lowerSearch))
+      )
     }
-  }
 
-  useEffect(() => {
-    fetchApplications()
+    // Apply status filter (quick filter or advanced)
+    if (advancedFilters.statuses.length > 0) {
+      result = result.filter((app) =>
+        advancedFilters.statuses.includes(app.application_status)
+      )
+    } else if (quickStatusFilter !== 'all') {
+      result = result.filter((app) => app.application_status === quickStatusFilter)
+    }
+
+    // Apply date range filter
+    const fromDate = advancedFilters.dateFrom || dateFrom
+    const toDate = advancedFilters.dateTo || dateTo
+
+    if (fromDate) {
+      const from = new Date(fromDate)
+      result = result.filter((app) => new Date(app.application_date) >= from)
+    }
+    if (toDate) {
+      const to = new Date(toDate)
+      to.setHours(23, 59, 59, 999)
+      result = result.filter((app) => new Date(app.application_date) <= to)
+    }
+
+    // Apply sorting
+    result.sort((a, b) => {
+      switch (sortOption) {
+        case 'newest':
+          return new Date(b.application_date).getTime() - new Date(a.application_date).getTime()
+        case 'oldest':
+          return new Date(a.application_date).getTime() - new Date(b.application_date).getTime()
+        case 'company_asc':
+          return a.company_name.localeCompare(b.company_name)
+        case 'company_desc':
+          return b.company_name.localeCompare(a.company_name)
+        case 'status':
+          return a.application_status.localeCompare(b.application_status)
+        default:
+          return 0
+      }
+    })
+
+    return result
+  }, [searchQuery, quickStatusFilter, dateFrom, dateTo, sortOption, advancedFilters])
+
+  // Handle application action
+  const handleApplicationAction = useCallback(
+    (application: JobApplication, action: string) => {
+      switch (action) {
+        case 'tailor_cv':
+          router.push(`/cv/tailor?application=${application.id}`)
+          break
+        case 'follow_up':
+          router.push(`/applications/${application.id}?action=follow_up`)
+          break
+        default:
+          router.push(`/applications/${application.id}`)
+      }
+    },
+    [router]
+  )
+
+  // Handle advanced filter apply
+  const handleAdvancedFiltersApply = useCallback((filters: FilterState) => {
+    setAdvancedFilters(filters)
+    // Sync with quick filters
+    if (filters.searchQuery) setSearchQuery(filters.searchQuery)
+    if (filters.dateFrom) setDateFrom(filters.dateFrom)
+    if (filters.dateTo) setDateTo(filters.dateTo)
+    if (filters.statuses.length === 1) {
+      setQuickStatusFilter(filters.statuses[0])
+    } else if (filters.statuses.length === 0) {
+      setQuickStatusFilter('all')
+    }
   }, [])
 
-  const handleWizardClose = () => {
-    setShowWizard(false)
-    // Refresh applications list when wizard closes
-    fetchApplications()
-  }
+  // Get active filter count
+  const activeFilterCount = useMemo(() => {
+    let count = 0
+    if (searchQuery || advancedFilters.searchQuery) count++
+    if (quickStatusFilter !== 'all' || advancedFilters.statuses.length > 0) count++
+    if (dateFrom || dateTo || advancedFilters.dateFrom || advancedFilters.dateTo) count++
+    return count
+  }, [searchQuery, quickStatusFilter, dateFrom, dateTo, advancedFilters])
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    })
+  // Sort labels
+  const sortLabels: Record<SortOption, string> = {
+    newest: 'Newest First',
+    oldest: 'Oldest First',
+    company_asc: 'Company A-Z',
+    company_desc: 'Company Z-A',
+    status: 'By Status',
   }
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Applications</h1>
-          <p className="text-muted-foreground">
-            Track your job applications. I&apos;ll help you stay organized.
+          <h1 className="text-2xl font-bold text-text-primary flex items-center gap-2">
+            <Briefcase className="w-6 h-6 text-lavender-dark" />
+            My Applications
+          </h1>
+          <p className="text-text-secondary mt-1">
+            Track and manage your job applications in one place
           </p>
         </div>
-        <Button onClick={() => setShowWizard(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          New Application
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            onClick={() => {
+              /* TODO: Implement import */
+            }}
+            className="hidden sm:flex"
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            Import Past Application
+          </Button>
+          <Button
+            onClick={() => setShowWizard(true)}
+            className="bg-teal-600 hover:bg-teal-700 text-white"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            New Application
+          </Button>
+        </div>
       </div>
 
-      {/* Loading State */}
-      {loading && (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-        </div>
-      )}
+      {/* Controls Bar */}
+      <Card className="border border-gray-100">
+        <CardContent className="p-4">
+          <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+            {/* Search */}
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-tertiary" />
+              <Input
+                type="text"
+                placeholder="Search applications..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
 
-      {/* Error State */}
-      {error && !loading && (
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="pt-6">
-            <p className="text-red-700">{error}</p>
-            <Button
-              variant="outline"
-              onClick={fetchApplications}
-              className="mt-4"
-            >
-              Try Again
-            </Button>
-          </CardContent>
-        </Card>
+            {/* Quick Filters */}
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Status Dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => {
+                    setStatusDropdownOpen(!statusDropdownOpen)
+                    setSortDropdownOpen(false)
+                  }}
+                  className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm text-text-primary hover:bg-gray-50 transition-colors min-w-[140px]"
+                >
+                  <span className="truncate">
+                    {STATUS_OPTIONS.find((s) => s.value === quickStatusFilter)?.label}
+                  </span>
+                  <ChevronDown className="w-4 h-4 text-text-tertiary flex-shrink-0" />
+                </button>
+                {statusDropdownOpen && (
+                  <div className="absolute top-full left-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-20">
+                    {STATUS_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={() => {
+                          setQuickStatusFilter(option.value)
+                          setStatusDropdownOpen(false)
+                          // Clear advanced status filters
+                          setAdvancedFilters((prev) => ({ ...prev, statuses: [] }))
+                        }}
+                        className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors ${
+                          quickStatusFilter === option.value
+                            ? 'bg-lavender-light/30 text-lavender-dark'
+                            : 'text-text-primary'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Date Range */}
+              <div className="flex items-center gap-2">
+                <Input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="w-[130px] text-sm"
+                  placeholder="From"
+                />
+                <span className="text-text-tertiary">to</span>
+                <Input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="w-[130px] text-sm"
+                  placeholder="To"
+                />
+              </div>
+
+              {/* Sort Dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => {
+                    setSortDropdownOpen(!sortDropdownOpen)
+                    setStatusDropdownOpen(false)
+                  }}
+                  className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm text-text-primary hover:bg-gray-50 transition-colors"
+                >
+                  <ArrowUpDown className="w-4 h-4" />
+                  <span className="hidden sm:inline">{sortLabels[sortOption]}</span>
+                  <ChevronDown className="w-4 h-4 text-text-tertiary" />
+                </button>
+                {sortDropdownOpen && (
+                  <div className="absolute top-full right-0 mt-1 w-44 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-20">
+                    {(Object.keys(sortLabels) as SortOption[]).map((option) => (
+                      <button
+                        key={option}
+                        onClick={() => {
+                          setSortOption(option)
+                          setSortDropdownOpen(false)
+                        }}
+                        className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors ${
+                          sortOption === option
+                            ? 'bg-lavender-light/30 text-lavender-dark'
+                            : 'text-text-primary'
+                        }`}
+                      >
+                        {sortLabels[option]}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Action Bar */}
+          <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
+            <div className="flex items-center gap-3">
+              {/* Column Visibility (Table view only) */}
+              {viewMode === 'table' && (
+                <ColumnVisibilityDropdown columns={columns} onChange={setColumns} />
+              )}
+
+              {/* Advanced Filters */}
+              <Button
+                variant="outline"
+                onClick={() => setShowAdvancedFilters(true)}
+                size="sm"
+                className="relative"
+              >
+                <SlidersHorizontal className="w-4 h-4 mr-2" />
+                Advanced Filters
+                {activeFilterCount > 0 && (
+                  <span className="ml-2 px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded text-xs font-medium">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </Button>
+
+              {/* Results count */}
+              <span className="text-sm text-text-secondary">
+                {filteredApplications.length} application
+                {filteredApplications.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+
+            {/* View Toggle */}
+            <div className="flex items-center bg-gray-100 rounded-lg p-1">
+              <button
+                onClick={() => setViewMode('cards')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  viewMode === 'cards'
+                    ? 'bg-white text-text-primary shadow-sm'
+                    : 'text-text-secondary hover:text-text-primary'
+                }`}
+                aria-label="Cards view"
+              >
+                <LayoutGrid className="w-4 h-4" />
+                <span className="hidden sm:inline">Cards</span>
+              </button>
+              <button
+                onClick={() => setViewMode('table')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  viewMode === 'table'
+                    ? 'bg-white text-text-primary shadow-sm'
+                    : 'text-text-secondary hover:text-text-primary'
+                }`}
+                aria-label="Table view"
+              >
+                <List className="w-4 h-4" />
+                <span className="hidden sm:inline">Table</span>
+              </button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Applications View */}
+      {viewMode === 'cards' ? (
+        <ApplicationCardsView
+          applications={filteredApplications}
+          onAction={handleApplicationAction}
+        />
+      ) : (
+        <ApplicationTableView
+          applications={filteredApplications}
+          columns={columns}
+          onAction={handleApplicationAction}
+        />
       )}
 
       {/* Empty State */}
-      {!loading && !error && applications.length === 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Briefcase className="h-5 w-5" />
-              No applications yet
-            </CardTitle>
-            <CardDescription>
-              Start tracking your job search journey. Add your first application to get started.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              When you add applications, I&apos;ll help you:
+      {filteredApplications.length === 0 && mockJobApplications.length > 0 && (
+        <Card className="border border-gray-100">
+          <CardContent className="py-12 text-center">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Search className="w-8 h-8 text-gray-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-text-primary mb-2">
+              No matching applications
+            </h3>
+            <p className="text-text-secondary mb-4">
+              Try adjusting your filters or search terms
             </p>
-            <ul className="mt-3 space-y-2 text-sm">
-              <li className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                Track status and follow-ups
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                Tailor your CV automatically for each role
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                Generate professional follow-up emails
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                Celebrate wins and support you through rejections
-              </li>
-            </ul>
-
-            <Button onClick={() => setShowWizard(true)} className="mt-6">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Your First Application
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSearchQuery('')
+                setQuickStatusFilter('all')
+                setDateFrom('')
+                setDateTo('')
+                setAdvancedFilters({
+                  searchQuery: '',
+                  statuses: [],
+                  dateFrom: '',
+                  dateTo: '',
+                })
+              }}
+            >
+              Clear All Filters
             </Button>
           </CardContent>
         </Card>
       )}
 
-      {/* Applications List */}
-      {!loading && !error && applications.length > 0 && (
-        <div className="space-y-4">
-          {/* Stats Summary */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card className="p-4">
-              <div className="text-2xl font-bold">{applications.length}</div>
-              <div className="text-sm text-gray-500">Total Applications</div>
-            </Card>
-            <Card className="p-4">
-              <div className="text-2xl font-bold text-blue-600">
-                {applications.filter((a) => a.status === 'applied').length}
-              </div>
-              <div className="text-sm text-gray-500">Applied</div>
-            </Card>
-            <Card className="p-4">
-              <div className="text-2xl font-bold text-purple-600">
-                {applications.filter((a) => a.status === 'interviewing').length}
-              </div>
-              <div className="text-sm text-gray-500">Interviewing</div>
-            </Card>
-            <Card className="p-4">
-              <div className="text-2xl font-bold text-green-600">
-                {applications.filter((a) => a.status === 'offer').length}
-              </div>
-              <div className="text-sm text-gray-500">Offers</div>
-            </Card>
-          </div>
-
-          {/* Applications Grid */}
-          <div className="grid gap-4">
-            {applications.map((app) => (
-              <Link key={app.id} href={`/applications/${app.id}`}>
-                <Card className="hover:shadow-md transition-shadow cursor-pointer">
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-semibold text-lg">{app.position_title}</h3>
-                          {app.priority && (
-                            <Star
-                              className={`w-4 h-4 ${PRIORITY_COLORS[app.priority] || ''}`}
-                              fill={app.priority === 'high' ? 'currentColor' : 'none'}
-                            />
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 text-gray-600 text-sm">
-                          <Building2 className="w-4 h-4" />
-                          {app.company_name}
-                          {app.job_url && (
-                            <ExternalLink className="w-3 h-3 text-gray-400" />
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col items-end gap-2">
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${
-                            STATUS_COLORS[app.status] || 'bg-gray-100 text-gray-700'
-                          }`}
-                        >
-                          {app.status}
-                        </span>
-                        <div className="flex items-center gap-1 text-xs text-gray-500">
-                          <Calendar className="w-3 h-3" />
-                          {formatDate(app.created_at)}
-                        </div>
-                      </div>
-                    </div>
-
-                    {app.excitement_level && (
-                      <div className="mt-3 flex items-center gap-2">
-                        <span className="text-xs text-gray-500">Excitement:</span>
-                        <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden max-w-32">
-                          <div
-                            className="h-full bg-gradient-to-r from-rose-400 to-pink-500 rounded-full"
-                            style={{ width: `${app.excitement_level * 10}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-gray-600">{app.excitement_level}/10</span>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* New Application Wizard Modal */}
-      <NewApplicationWizard isOpen={showWizard} onClose={handleWizardClose} />
+      <NewApplicationWizard isOpen={showWizard} onClose={() => setShowWizard(false)} />
+
+      {/* Advanced Filters Modal */}
+      <AdvancedFiltersModal
+        isOpen={showAdvancedFilters}
+        onClose={() => setShowAdvancedFilters(false)}
+        filters={advancedFilters}
+        onApply={handleAdvancedFiltersApply}
+        onSavePreference={(filters) => {
+          // TODO: Save to user preferences
+          console.log('Save preference:', filters)
+          handleAdvancedFiltersApply(filters)
+        }}
+      />
+
+      {/* Click outside to close dropdowns */}
+      {(statusDropdownOpen || sortDropdownOpen) && (
+        <div
+          className="fixed inset-0 z-10"
+          onClick={() => {
+            setStatusDropdownOpen(false)
+            setSortDropdownOpen(false)
+          }}
+        />
+      )}
     </div>
   )
 }

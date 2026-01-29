@@ -34,6 +34,7 @@ ralph/
 | Candidate Dashboard - Base44 Migration | 2026-01-29 | ✅ 36/36 | [dashboard/base44-migration.md](./dashboard/base44-migration.md) |
 | Companion - Glassmorphism UI | 2026-01-29 | ✅ 22/22 | [companion/glassmorphism-ui.md](./companion/glassmorphism-ui.md) |
 | Persistent UI Layer - Floating Widgets | 2026-01-29 | ✅ 40/40 | [ui/persistent-ui-layer.md](./ui/persistent-ui-layer.md) |
+| My Applications Page - Full Feature | 2026-01-29 | ✅ 72/72 | [dashboard/my-applications-page.md](./dashboard/my-applications-page.md) |
 
 ## Test Methodology
 
