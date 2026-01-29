@@ -2,13 +2,13 @@
  * Dashboard Layout
  *
  * Main layout for authenticated users.
- * Includes navigation and the companion presence indicator.
+ * Includes navigation and the persistent global overlay (FABs + Siggy).
  */
 
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { DashboardNav } from '@/components/dashboard/nav'
-import { CompanionPresence } from '@/components/companion/presence'
+import { GlobalOverlay } from '@/components/global'
 
 export default async function DashboardLayout({
   children,
@@ -29,12 +29,15 @@ export default async function DashboardLayout({
     .eq('id', user.id)
     .single() as { data: { full_name: string | null; profile_image: string | null; current_streak: number } | null }
 
+  const userName = (profile?.full_name as string) || user.email || 'User'
+  const streak = (profile?.current_streak as number) || 0
+
   return (
     <div className="min-h-screen bg-background">
       {/* Top navigation */}
       <DashboardNav
         user={{
-          name: (profile?.full_name as string) || user.email || 'User',
+          name: userName,
           email: user.email || '',
           image: profile?.profile_image as string | null,
         }}
@@ -45,9 +48,11 @@ export default async function DashboardLayout({
         {children}
       </main>
 
-      {/* Companion presence indicator */}
-      <CompanionPresence
-        streak={(profile?.current_streak as number) || 0}
+      {/* Global Overlay: FABs + Siggy AI Companion */}
+      <GlobalOverlay
+        userId={user.id}
+        userName={userName}
+        streak={streak}
       />
     </div>
   )
