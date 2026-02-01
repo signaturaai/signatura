@@ -50,3 +50,22 @@ export {
   buildFollowUpEmailPrompt,
   buildContextRetrievalPrompt,
 } from './prompts'
+
+// PM Intelligence - Senior PM coaching brain for CV Tailor and Interview Coach
+export {
+  PM_CORE_PRINCIPLES,
+  PM_FRAMEWORKS,
+  PM_COACHING_CONTEXTS,
+  getPrinciplesForContext,
+  analyzeWithPMPrinciples,
+  generateSiggyPMContext,
+  type PMPrinciple,
+  type PMFramework,
+} from './siggy-pm-intelligence'
+
+// PM Integration Guide - System prompt generation and content analysis
+export {
+  generateSiggySystemPrompt,
+  analyzePMContent,
+  getCoachingPrompt,
+} from './siggy-integration-guide'

@@ -11,10 +11,10 @@
 import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button, Textarea, Label } from '@/components/ui'
 import { Mic, Play, Sparkles, ArrowLeft, FileText, Loader2 } from 'lucide-react'
-import { InterviewSetupWizard, InterviewSimulationBoard } from '@/components/interview'
+import { InterviewSetupWizard, InterviewSimulationBoard, STARBuilder } from '@/components/interview'
 import type { WizardConfig, InterviewPlan } from '@/types/interview'
 
-type Mode = 'landing' | 'wizard' | 'dashboard' | 'loading'
+type Mode = 'landing' | 'wizard' | 'dashboard' | 'loading' | 'star-builder'
 
 export default function InterviewPage() {
   const [mode, setMode] = useState<Mode>('landing')
@@ -248,6 +248,28 @@ export default function InterviewPage() {
     )
   }
 
+  // STAR Builder mode
+  if (mode === 'star-builder') {
+    return (
+      <div className="max-w-3xl mx-auto space-y-6">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="sm" onClick={() => setMode('landing')}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold">STAR Story Builder</h1>
+            <p className="text-muted-foreground">
+              Structure your interview answers using the STAR method with PM coaching
+            </p>
+          </div>
+        </div>
+
+        <STARBuilder />
+      </div>
+    )
+  }
+
   // Landing mode (default)
   return (
     <div className="space-y-6">
@@ -297,9 +319,9 @@ export default function InterviewPage() {
               I&apos;ll ask you questions, listen to your answers, and give you constructive feedback.
               Struggling is part of learning—that&apos;s why we practice here, where it&apos;s safe.
             </p>
-            <Button variant="outline">
+            <Button variant="outline" onClick={() => setMode('star-builder')}>
               <Play className="h-4 w-4 mr-2" />
-              Quick Practice
+              STAR Story Builder
             </Button>
           </CardContent>
         </Card>
