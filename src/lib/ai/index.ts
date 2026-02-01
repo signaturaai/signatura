@@ -63,9 +63,21 @@ export {
   type PMFramework,
 } from './siggy-pm-intelligence'
 
-// PM Integration Guide - System prompt generation and content analysis
+// PM Integration Guide - System prompt generation, content analysis, and Score Arbiter
 export {
   generateSiggySystemPrompt,
   analyzePMContent,
   getCoachingPrompt,
+  analyzeIndicators,
+  analyzeATS,
+  analyzeRecruiterUX,
+  analyzePMStage,
+  analyzeCVContent,
+  arbitrateBullet,
+  scoreArbiter,
+  STAGE_WEIGHTS,
+  type StageScore,
+  type FourStageAnalysis,
+  type ArbiterDecision,
+  type ArbiterResult,
 } from './siggy-integration-guide'
