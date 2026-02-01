@@ -12,8 +12,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui'
 import { TailoringResultsDisplay } from '@/components/cv'
 import { TailoringResult } from '@/lib/cv'
-import { Sparkles, FileText, Briefcase, Loader2, ArrowLeft, Info } from 'lucide-react'
+import { Sparkles, FileText, Briefcase, Loader2, ArrowLeft, Info, Brain, Target, AlertTriangle, CheckCircle } from 'lucide-react'
 import Link from 'next/link'
+import { usePMAnalysis } from '@/hooks/usePMAnalysis'
+import { getPrinciplesForContext } from '@/lib/ai/siggy-pm-intelligence'
 
 const INDUSTRIES = [
   { value: 'generic', label: 'General / Other' },
@@ -31,6 +33,11 @@ export default function CVTailorPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<TailoringResult | null>(null)
+  const [showPMPanel, setShowPMPanel] = useState(false)
+
+  // PM Intelligence: Real-time analysis of CV text
+  const { analysis: pmAnalysis, isAnalyzing: isPMAnalyzing } = usePMAnalysis(baseCVText)
+  const cvPrinciples = getPrinciplesForContext('cvTailor')
 
   const canSubmit =
     baseCVText.length >= 100 && jobDescription.length >= 50 && !isLoading
@@ -173,6 +180,29 @@ BS Computer Science | University of Technology | 2018"
                 </span>
               )}
             </div>
+
+            {/* PM Score Badge */}
+            {pmAnalysis && (
+              <div className="mt-3 flex items-center gap-3">
+                <div
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium ${
+                    pmAnalysis.score >= 80
+                      ? 'bg-green-100 text-green-800 border border-green-200'
+                      : pmAnalysis.score >= 60
+                        ? 'bg-yellow-100 text-yellow-800 border border-yellow-200'
+                        : pmAnalysis.score >= 40
+                          ? 'bg-orange-100 text-orange-800 border border-orange-200'
+                          : 'bg-red-100 text-red-800 border border-red-200'
+                  }`}
+                >
+                  <Brain className="w-3.5 h-3.5" />
+                  PM Score: {pmAnalysis.score}/100
+                </div>
+                {isPMAnalyzing && (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -246,6 +276,103 @@ Responsibilities:
           </CardContent>
         </Card>
       </div>
+
+      {/* Siggy's PM Suggestions Panel */}
+      {pmAnalysis && baseCVText.length >= 100 && (
+        <Card className="border-purple-200 bg-gradient-to-br from-purple-50/80 to-white">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center justify-between">
+              <span className="flex items-center gap-2 text-base">
+                <Target className="h-5 w-5 text-purple-600" />
+                Siggy&apos;s PM Suggestions
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowPMPanel(!showPMPanel)}
+                className="text-purple-600 hover:text-purple-800 hover:bg-purple-100"
+              >
+                {showPMPanel ? 'Hide Details' : 'Show Details'}
+              </Button>
+            </CardTitle>
+            <CardDescription>
+              {pmAnalysis.feedback.strengths}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Quick suggestions */}
+            {pmAnalysis.feedback.suggestions.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-purple-900">Quick Wins:</p>
+                <ul className="space-y-1.5">
+                  {pmAnalysis.feedback.suggestions.map((suggestion: string, idx: number) => (
+                    <li key={idx} className="flex items-start gap-2 text-sm text-purple-800">
+                      <AlertTriangle className="w-3.5 h-3.5 mt-0.5 text-amber-500 flex-shrink-0" />
+                      {suggestion}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {pmAnalysis.score >= 80 && (
+              <div className="flex items-center gap-2 text-sm text-green-700">
+                <CheckCircle className="w-4 h-4" />
+                Strong PM framing detected. Your CV speaks the language hiring managers look for.
+              </div>
+            )}
+
+            {/* Expandable: Missing principles + PM Principles Reference */}
+            {showPMPanel && (
+              <div className="space-y-4 pt-2 border-t border-purple-100">
+                {/* Missing Principles */}
+                {pmAnalysis.feedback.missingPrinciples.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-purple-900">Missing PM Principles:</p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {pmAnalysis.feedback.missingPrinciples.map(
+                        (p: { id: string; name: string; howToApply: string }) => (
+                          <div
+                            key={p.id}
+                            className="p-3 bg-white rounded-lg border border-purple-100 shadow-sm"
+                          >
+                            <p className="text-sm font-semibold text-purple-800">{p.name}</p>
+                            <p className="text-xs text-gray-600 mt-1">{p.howToApply}</p>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* PM Principles Reference */}
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-purple-900">PM Principles for CV Writing:</p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {cvPrinciples.map((principle) => (
+                      <div
+                        key={principle.id}
+                        className="p-3 bg-purple-50/50 rounded-lg border border-purple-100"
+                      >
+                        <p className="text-sm font-semibold text-purple-800">{principle.name}</p>
+                        <p className="text-xs text-gray-600 mt-1">{principle.description}</p>
+                        <div className="mt-2 space-y-1">
+                          <p className="text-xs text-red-600">
+                            Weak: &quot;{principle.exampleFraming.weak}&quot;
+                          </p>
+                          <p className="text-xs text-green-700">
+                            Strong: &quot;{principle.exampleFraming.strong.slice(0, 120)}...&quot;
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Error display */}
       {error && (
