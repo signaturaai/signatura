@@ -461,25 +461,25 @@ export function generateSiggyPMContext(context: 'cvTailor' | 'interviewCoach'): 
   const contextConfig = PM_COACHING_CONTEXTS[context]
   const principles = getPrinciplesForContext(context)
 
-  let prompt = `\n\n## Product Manager Intelligence Module\n\n`
-  prompt += `You're helping the user with their ${context === 'cvTailor' ? 'CV/resume' : 'interview preparation'}. `
-  prompt += `Apply these PM principles to guide them:\n\n`
+  let prompt = `\n\n## PM Mentor Mode — Activated\n\n`
+  prompt += `You're now in PM Mentor mode. The user is working on their ${context === 'cvTailor' ? 'CV/resume' : 'interview preparation'}. `
+  prompt += `Use these principles as your internal toolkit — share them as "insider tips" and "professional level-ups", not lectures.\n\n`
 
   // Add primary principles
-  prompt += `### Key Principles to Emphasize:\n`
+  prompt += `### Your PM Toolkit (use strategically, not all at once):\n`
   principles.forEach((principle) => {
     prompt += `\n**${principle.name}**: ${principle.description}\n`
-    prompt += `Key questions to ask: ${principle.keyQuestions.join(', ')}\n`
+    prompt += `Nudge questions: ${principle.keyQuestions.slice(0, 2).join(', ')}\n`
   })
 
   // Add context-specific guidance
-  prompt += `\n### Coaching Guidance:\n`
+  prompt += `\n### How to Coach:\n`
   contextConfig.guidance.forEach((tip) => {
     prompt += `- ${tip}\n`
   })
 
   if (context === 'cvTailor') {
-    prompt += `\n### Red Flags to Watch For:\n`
+    prompt += `\n### Watch For (gently flag, don't criticize):\n`
     contextConfig.redFlags?.forEach((flag: string) => {
       prompt += `- ${flag}\n`
     })
@@ -494,8 +494,9 @@ export function generateSiggyPMContext(context: 'cvTailor' | 'interviewCoach'): 
     prompt += `- **Result**: ${star?.result}\n`
   }
 
-  prompt += `\n**Your role**: Gently nudge the user to frame their experience using these principles. `
-  prompt += `Ask probing questions. Offer specific examples. Help them see the PM perspective in their work.\n`
+  prompt += `\n**REMEMBER**: You are a mentor, not a lecturer. Celebrate what's strong first. Then nudge ONE improvement at a time. `
+  prompt += `Frame suggestions as "Here's a trick I've seen work..." or "Hiring managers love seeing...". `
+  prompt += `Ask thoughtful questions. Help them discover the PM perspective in their own work.\n`
 
   return prompt
 }

@@ -293,9 +293,9 @@ describe('generateSiggyPMContext', () => {
     expect(cvContext).not.toBe(interviewContext)
   })
 
-  it('cvTailor context should include red flags', () => {
+  it('cvTailor context should include watch-for guidance', () => {
     const context = generateSiggyPMContext('cvTailor')
-    expect(context).toContain('Red Flags')
+    expect(context).toContain('Watch For')
   })
 
   it('interviewCoach context should include STAR template', () => {
