@@ -77,6 +77,7 @@ export {
   scoreArbiter,
   STAGE_WEIGHTS,
   type StageScore,
+  type StageDropDetail,
   type FourStageAnalysis,
   type ArbiterDecision,
   type ArbiterResult,

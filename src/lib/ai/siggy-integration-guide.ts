@@ -37,6 +37,19 @@ export interface FourStageAnalysis {
   totalScore: number
 }
 
+export interface StageDropDetail {
+  /** Which stage dropped */
+  stage: 'indicators' | 'ats' | 'recruiterUX' | 'pmIntelligence'
+  /** Human-readable stage name */
+  stageName: string
+  /** Original stage score */
+  originalScore: number
+  /** Tailored stage score */
+  tailoredScore: number
+  /** How much this stage dropped */
+  drop: number
+}
+
 export interface ArbiterDecision {
   /** The winning bullet text */
   bullet: string
@@ -48,6 +61,8 @@ export interface ArbiterDecision {
   tailoredAnalysis: FourStageAnalysis
   /** Score delta (tailored - original). Positive = tailored is better */
   scoreDelta: number
+  /** When winner is 'original', lists every stage where the tailored version dropped */
+  rejectionReasons: StageDropDetail[]
 }
 
 export interface ArbiterResult {
@@ -65,13 +80,13 @@ export interface ArbiterResult {
 
 // ---------------------------------------------------------------------------
 // Stage Weights — configurable balance across the 4 dimensions
-//   Core (Indicators): 25%  |  ATS: 30%  |  Recruiter UX: 25%  |  PM: 20%
+//   ATS Compatibility: 30%  |  Cold Indicators: 20%  |  Recruiter UX: 20%  |  PM Intelligence: 30%
 // ---------------------------------------------------------------------------
 const STAGE_WEIGHTS = {
-  indicators: 0.25,
+  indicators: 0.20,
   ats: 0.30,
-  recruiterUX: 0.25,
-  pmIntelligence: 0.20,
+  recruiterUX: 0.20,
+  pmIntelligence: 0.30,
 } as const
 
 // ---------------------------------------------------------------------------
@@ -325,10 +340,10 @@ export function analyzePMStage(text: string): StageScore {
 /**
  * Run the complete 4-stage analysis on a single CV bullet point.
  *
- * Stage 1 (Indicators):     25% weight — raw keywords & sub-indicators
- * Stage 2 (ATS Robot):      30% weight — machine-readability & structure
- * Stage 3 (Recruiter UX):   25% weight — "Tired Recruiter at 4 PM" scan-ability
- * Stage 4 (PM Intelligence): 20% weight — 10 PM principles scoring
+ * Stage 1 (Cold Indicators): 20% weight — raw keywords & sub-indicators
+ * Stage 2 (ATS Robot):       30% weight — machine-readability & structure
+ * Stage 3 (Recruiter UX):    20% weight — "Tired Recruiter at 4 PM" scan-ability
+ * Stage 4 (PM Intelligence): 30% weight — 10 PM principles scoring
  */
 export function analyzeCVContent(text: string): FourStageAnalysis {
   const indicators = analyzeIndicators(text)
@@ -350,9 +365,18 @@ export function analyzeCVContent(text: string): FourStageAnalysis {
 // Score Arbiter — "Best of Both Worlds" Optimizer
 // ---------------------------------------------------------------------------
 
+const STAGE_NAMES: Record<string, string> = {
+  indicators: 'Cold Indicators',
+  ats: 'ATS Compatibility',
+  recruiterUX: 'Recruiter UX',
+  pmIntelligence: 'PM Intelligence',
+}
+
 /**
  * Compare a single original bullet against its tailored version.
  * Runs the full 4-stage pipeline on both and picks the winner.
+ * When the tailored version is rejected, `rejectionReasons` lists
+ * every stage where the tailored score dropped below the original.
  */
 export function arbitrateBullet(
   originalBullet: string,
@@ -362,10 +386,29 @@ export function arbitrateBullet(
   const tailoredAnalysis = analyzeCVContent(tailoredBullet)
   const scoreDelta = tailoredAnalysis.totalScore - originalAnalysis.totalScore
 
+  // Build per-stage drop details
+  const rejectionReasons: StageDropDetail[] = []
+  const stageKeys: Array<'indicators' | 'ats' | 'recruiterUX' | 'pmIntelligence'> = [
+    'indicators', 'ats', 'recruiterUX', 'pmIntelligence',
+  ]
+  for (const stage of stageKeys) {
+    const origScore = originalAnalysis[stage].score
+    const tailScore = tailoredAnalysis[stage].score
+    if (tailScore < origScore) {
+      rejectionReasons.push({
+        stage,
+        stageName: STAGE_NAMES[stage],
+        originalScore: origScore,
+        tailoredScore: tailScore,
+        drop: origScore - tailScore,
+      })
+    }
+  }
+
   const winner: 'original' | 'tailored' = scoreDelta >= 0 ? 'tailored' : 'original'
   const bullet = winner === 'tailored' ? tailoredBullet : originalBullet
 
-  return { bullet, winner, originalAnalysis, tailoredAnalysis, scoreDelta }
+  return { bullet, winner, originalAnalysis, tailoredAnalysis, scoreDelta, rejectionReasons }
 }
 
 /**
@@ -402,6 +445,7 @@ export function scoreArbiter(
         originalAnalysis: emptyAnalysis,
         tailoredAnalysis,
         scoreDelta: tailoredAnalysis.totalScore,
+        rejectionReasons: [],
       })
     } else {
       decisions.push(arbitrateBullet(original, tailored))
