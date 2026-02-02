@@ -745,6 +745,223 @@ What part would you like to flesh out first?`
   return ''
 }
 
+// ---------------------------------------------------------------------------
+// Gap Identification — surfaces competency gaps as mentoring questions
+// ---------------------------------------------------------------------------
+
+export interface GapQuestion {
+  /** Unique ID for this gap */
+  id: string
+  /** PM principle or competency this gap relates to */
+  principleId: string
+  /** Human-readable principle name */
+  principleName: string
+  /** The question Siggy asks the user */
+  question: string
+  /** "Why we ask this" explanation */
+  whyWeAsk: string
+  /** Estimated score boost if answered well (percentage points) */
+  potentialBoost: number
+  /** AI draft hint — context for generating a suggested answer */
+  draftContext: string
+}
+
+export interface GapAnalysisResult {
+  /** Identified gaps sorted by potential impact (highest first) */
+  gaps: GapQuestion[]
+  /** Current total score before gap-filling */
+  currentScore: number
+  /** Projected score if all gaps are filled */
+  projectedScore: number
+  /** Number of principles that are weak (<40% of max) */
+  weakPrincipleCount: number
+}
+
+/**
+ * Identify competency gaps from CV content analysis.
+ * Uses the 4-stage pipeline + PM principle analysis to surface the
+ * highest-impact questions that would close score gaps.
+ *
+ * Returns questions sorted by potential boost (highest first),
+ * capped at `maxQuestions` (default 5).
+ */
+export function identifyGaps(
+  bullets: string[],
+  jobTitle?: string,
+  jobDescription?: string,
+  maxQuestions: number = 5
+): GapAnalysisResult {
+  const combined = bullets.join(' ')
+  const analysis = analyzeCVContent(combined, jobTitle)
+  const pmAnalysis = analyzeWithPMPrinciples(combined)
+  const isProductRoleFlag = jobTitle ? isProductRole(jobTitle) : true
+
+  const gaps: GapQuestion[] = []
+
+  // ---- Stage-level gap detection ----
+
+  // Indicators gap: missing metrics/numbers
+  if (analysis.indicators.score < 50) {
+    const boost = Math.round((50 - analysis.indicators.score) * 0.20)
+    gaps.push({
+      id: 'gap-metrics',
+      principleId: 'data-driven-decisions',
+      principleName: 'Quantified Impact',
+      question: 'Can you share specific numbers from your work? For example: team size, users served, percentage improvements, revenue impact, or time saved?',
+      whyWeAsk: `This role values measurable impact. Adding concrete metrics could boost your score by ~${boost}%.`,
+      potentialBoost: boost,
+      draftContext: 'User needs help quantifying their achievements with specific numbers and percentages.',
+    })
+  }
+
+  // ATS gap: structure or terminology
+  if (analysis.ats.score < 50) {
+    const boost = Math.round((50 - analysis.ats.score) * 0.30)
+    gaps.push({
+      id: 'gap-ats-keywords',
+      principleId: 'strategic-thinking',
+      principleName: 'Industry Keywords',
+      question: jobDescription
+        ? 'Looking at the job description, are there specific tools, technologies, or methodologies you\'ve used that we should highlight?'
+        : 'What tools, technologies, or industry-specific methodologies have you used in your work?',
+      whyWeAsk: `ATS systems scan for relevant keywords. Strengthening this area could boost your match by ~${boost}%.`,
+      potentialBoost: boost,
+      draftContext: `User needs to surface industry keywords and terminology. ${jobDescription ? 'Job description available for keyword matching.' : 'No job description provided.'}`,
+    })
+  }
+
+  // Recruiter UX gap: "so what?" factor
+  if (analysis.recruiterUX.score < 50) {
+    const boost = Math.round((50 - analysis.recruiterUX.score) * 0.20)
+    gaps.push({
+      id: 'gap-so-what',
+      principleId: 'outcome-over-output',
+      principleName: 'Clear Impact Story',
+      question: 'What\'s the single most impressive result from your work that a recruiter should notice in the first 5 seconds of reading your CV?',
+      whyWeAsk: `Recruiters spend ~6 seconds per CV. A clear impact story could boost readability by ~${boost}%.`,
+      potentialBoost: boost,
+      draftContext: 'User needs to articulate their most impressive achievement in a recruiter-scannable way.',
+    })
+  }
+
+  // ---- PM Principle-level gap detection ----
+
+  const principleGapMap: Record<string, { question: string; whyWeAsk: string; draftContext: string }> = {
+    'outcome-over-output': {
+      question: 'For your biggest project, what changed because of your work? Think: before vs. after — what metric moved?',
+      whyWeAsk: 'Hiring managers want to see outcomes, not just activities. This is often the #1 differentiator.',
+      draftContext: 'User needs to reframe work from tasks completed to outcomes achieved.',
+    },
+    'data-driven-decisions': {
+      question: 'Was there a time you used data or research to make a key decision? What data did you look at, and what did you decide?',
+      whyWeAsk: isProductRoleFlag
+        ? 'Data-driven decision making is a core PM competency that hiring managers specifically look for.'
+        : 'Employers value professionals who can back up decisions with evidence.',
+      draftContext: 'User needs to describe a data-informed decision with specific metrics.',
+    },
+    'user-centricity': {
+      question: 'Who were the end users or customers of your work? How did you understand their needs?',
+      whyWeAsk: 'Showing you understand the people you serve demonstrates empathy and strategic thinking.',
+      draftContext: 'User needs to articulate who they served and how they gathered user/customer insights.',
+    },
+    'cross-functional-leadership': {
+      question: 'Tell me about a time you worked across teams or departments. Who was involved and how did you align everyone?',
+      whyWeAsk: isProductRoleFlag
+        ? 'Cross-functional leadership is essential for PM roles — it shows you can lead without authority.'
+        : 'Collaboration across teams shows leadership potential and organizational awareness.',
+      draftContext: 'User needs to describe cross-team collaboration and stakeholder alignment.',
+    },
+    'problem-solving': {
+      question: 'What was the trickiest problem you solved at work? Walk me through how you approached it.',
+      whyWeAsk: 'Problem-solving ability is one of the top 3 things interviewers assess. This will strengthen both your CV and interview prep.',
+      draftContext: 'User needs to describe a structured approach to solving a complex problem.',
+    },
+  }
+
+  for (const principle of pmAnalysis.missingPrinciples) {
+    const gapConfig = principleGapMap[principle.id]
+    if (!gapConfig) continue
+    // Skip if we already have a stage-level gap covering similar ground
+    if (principle.id === 'data-driven-decisions' && gaps.some(g => g.id === 'gap-metrics')) continue
+    if (principle.id === 'outcome-over-output' && gaps.some(g => g.id === 'gap-so-what')) continue
+
+    const boost = Math.round(20 * getWeightsForRole(jobTitle).pmIntelligence)
+    gaps.push({
+      id: `gap-${principle.id}`,
+      principleId: principle.id,
+      principleName: principle.name,
+      question: gapConfig.question,
+      whyWeAsk: gapConfig.whyWeAsk,
+      potentialBoost: Math.max(boost, 3), // minimum 3% boost
+      draftContext: gapConfig.draftContext,
+    })
+  }
+
+  // Sort by potential boost (highest first) and cap
+  gaps.sort((a, b) => b.potentialBoost - a.potentialBoost)
+  const capped = gaps.slice(0, maxQuestions)
+
+  const projectedBoost = capped.reduce((sum, g) => sum + g.potentialBoost, 0)
+
+  return {
+    gaps: capped,
+    currentScore: analysis.totalScore,
+    projectedScore: Math.min(analysis.totalScore + projectedBoost, 100),
+    weakPrincipleCount: pmAnalysis.missingPrinciples.length,
+  }
+}
+
+/**
+ * Generate an AI-drafted answer suggestion for a gap question.
+ * Uses the user's existing CV bullets + job context to produce
+ * a professional draft the user can edit for authenticity.
+ */
+export function draftGapAnswer(
+  gap: GapQuestion,
+  existingBullets: string[],
+  jobTitle?: string,
+  jobDescription?: string
+): string {
+  const isProductRoleFlag = jobTitle ? isProductRole(jobTitle) : true
+  const combined = existingBullets.join('. ')
+
+  // Extract context clues from existing bullets
+  const hasNumbers = /\d+%|\$\d+|\d+x|\d+ (users|customers|people|patients|deliveries)/.test(combined)
+  const hasTeamMention = /\b(team|cross-functional|collaborated|partnered)\b/i.test(combined)
+  const hasTools = /\b(api|platform|dashboard|system|tool|software)\b/i.test(combined)
+
+  switch (gap.principleId) {
+    case 'data-driven-decisions':
+      return hasNumbers
+        ? 'Based on my analysis of [specific data source], I identified [key insight] which led to [decision]. This resulted in [X%] improvement in [metric], validated through [method].'
+        : 'I regularly tracked [key metrics] to inform my decisions. For example, when I noticed [observation], I [action taken], which led to [measurable result].'
+
+    case 'outcome-over-output':
+      return 'Before my involvement, [situation/problem]. I [specific action], which resulted in [measurable outcome — e.g., X% improvement, $Y saved, Z users impacted]. This mattered because [business context].'
+
+    case 'user-centricity':
+      return 'I served [specific user group — e.g., 500 enterprise customers, 40 patients daily]. To understand their needs, I [research method — e.g., conducted interviews, analyzed feedback]. This insight led me to [action], improving [user metric] by [amount].'
+
+    case 'cross-functional-leadership':
+      return hasTeamMention
+        ? 'I led a cross-functional effort with [teams involved — e.g., engineering, design, marketing]. I aligned the group by [method — e.g., weekly syncs, shared dashboards], navigating [challenge] to deliver [outcome] on time.'
+        : 'I collaborated with [departments/teams] to [goal]. By [coordination method], we achieved [result] despite [constraint or challenge].'
+
+    case 'problem-solving':
+      return 'The challenge was [specific problem]. I diagnosed the root cause by [method — e.g., data analysis, user feedback, 5 Whys]. After evaluating [N alternatives], I chose [solution] because [reasoning]. The result: [measurable improvement].'
+
+    case 'strategic-thinking':
+      return isProductRoleFlag
+        ? 'I evaluated the opportunity using [framework — e.g., RICE, impact/effort matrix], balancing [trade-off A] against [trade-off B]. This strategic choice aligned with [company goal] and delivered [outcome].'
+        : 'I assessed the situation by considering [factors], prioritized [approach] over alternatives because [reasoning], and this decision led to [measurable result].'
+
+    default:
+      return hasTools
+        ? `In my role, I [relevant action using ${gap.principleName.toLowerCase()} skills], leveraging [tools/methods] to achieve [specific result]. This experience demonstrates [key competency].`
+        : `I [relevant action], focusing on [key aspect of ${gap.principleName.toLowerCase()}]. For example, [specific situation] where I [action] resulting in [outcome].`
+  }
+}
+
 export {
   generateSiggyPMContext,
   analyzeWithPMPrinciples,
