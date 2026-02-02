@@ -63,7 +63,7 @@ export {
   type PMFramework,
 } from './siggy-pm-intelligence'
 
-// PM Integration Guide - System prompt generation, content analysis, and Score Arbiter
+// PM Integration Guide - System prompt generation, content analysis, Score Arbiter, and Gap Filling
 export {
   generateSiggySystemPrompt,
   analyzePMContent,
@@ -75,9 +75,23 @@ export {
   analyzeCVContent,
   arbitrateBullet,
   scoreArbiter,
+  isProductRole,
+  getWeightsForRole,
+  identifyGaps,
+  draftGapAnswer,
+  analyzeIndicatorDetail,
   STAGE_WEIGHTS,
+  PM_SPECIALIST_WEIGHTS,
+  GENERAL_PROFESSIONAL_WEIGHTS,
   type StageScore,
+  type StageDropDetail,
+  type WeightProfile,
   type FourStageAnalysis,
   type ArbiterDecision,
   type ArbiterResult,
+  type GapQuestion,
+  type GapAnalysisResult,
+  type SubIndicator,
+  type EvidenceHighlight,
+  type IndicatorDetail,
 } from './siggy-integration-guide'

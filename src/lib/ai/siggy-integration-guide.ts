@@ -37,6 +37,19 @@ export interface FourStageAnalysis {
   totalScore: number
 }
 
+export interface StageDropDetail {
+  /** Which stage dropped */
+  stage: 'indicators' | 'ats' | 'recruiterUX' | 'pmIntelligence'
+  /** Human-readable stage name */
+  stageName: string
+  /** Original stage score */
+  originalScore: number
+  /** Tailored stage score */
+  tailoredScore: number
+  /** How much this stage dropped */
+  drop: number
+}
+
 export interface ArbiterDecision {
   /** The winning bullet text */
   bullet: string
@@ -48,6 +61,8 @@ export interface ArbiterDecision {
   tailoredAnalysis: FourStageAnalysis
   /** Score delta (tailored - original). Positive = tailored is better */
   scoreDelta: number
+  /** When winner is 'original', lists every stage where the tailored version dropped */
+  rejectionReasons: StageDropDetail[]
 }
 
 export interface ArbiterResult {
@@ -64,15 +79,83 @@ export interface ArbiterResult {
 }
 
 // ---------------------------------------------------------------------------
-// Stage Weights — configurable balance across the 4 dimensions
-//   Core (Indicators): 25%  |  ATS: 30%  |  Recruiter UX: 25%  |  PM: 20%
+// Role Detection — determines whether to use PM Specialist or General weights
 // ---------------------------------------------------------------------------
-const STAGE_WEIGHTS = {
-  indicators: 0.25,
+
+const PRODUCT_ROLE_KEYWORDS = [
+  'product manager', 'product owner', 'pm', 'cpo', 'chief product',
+  'product lead', 'product director', 'product analyst', 'product strategist',
+  'product marketing', 'head of product', 'vp of product', 'vp product',
+  'group product manager', 'senior product manager', 'associate product manager',
+  'technical product manager', 'principal product manager',
+]
+
+/**
+ * Detect whether a job title refers to a product-related role.
+ * Used to dynamically switch between PM Specialist and General Professional
+ * weight profiles in the scoring pipeline.
+ */
+export function isProductRole(jobTitle: string): boolean {
+  if (!jobTitle || jobTitle.trim().length === 0) return false
+  const lower = jobTitle.toLowerCase().trim()
+  return PRODUCT_ROLE_KEYWORDS.some(keyword => lower.includes(keyword))
+}
+
+// ---------------------------------------------------------------------------
+// Stage Weights — dynamic profiles based on role detection
+// ---------------------------------------------------------------------------
+
+export interface WeightProfile {
+  indicators: number
+  ats: number
+  recruiterUX: number
+  pmIntelligence: number
+}
+
+/**
+ * Default weights (used when no jobTitle is provided).
+ * ATS Compatibility: 30%  |  Cold Indicators: 20%  |  Recruiter UX: 20%  |  PM Intelligence: 30%
+ */
+const STAGE_WEIGHTS: WeightProfile = {
+  indicators: 0.20,
   ats: 0.30,
-  recruiterUX: 0.25,
-  pmIntelligence: 0.20,
-} as const
+  recruiterUX: 0.20,
+  pmIntelligence: 0.30,
+}
+
+/**
+ * Scenario A — Product-Related Roles (The Specialist)
+ * Heavy PM Intelligence emphasis to leverage frameworks.
+ */
+const PM_SPECIALIST_WEIGHTS: WeightProfile = {
+  indicators: 0.20,
+  ats: 0.25,
+  recruiterUX: 0.20,
+  pmIntelligence: 0.35,
+}
+
+/**
+ * Scenario B — General / Non-Product Roles (The Professional)
+ * PM Intelligence drops to 5% — focus on ATS readability, recruiter clarity,
+ * and standard industry keywords. PM jargon should NOT dominate.
+ */
+const GENERAL_PROFESSIONAL_WEIGHTS: WeightProfile = {
+  indicators: 0.30,
+  ats: 0.35,
+  recruiterUX: 0.30,
+  pmIntelligence: 0.05,
+}
+
+/**
+ * Get the appropriate weight profile for a given job title.
+ * - Product roles → PM Specialist weights (PM Intelligence at 35%)
+ * - Non-product roles → General Professional weights (PM Intelligence at 5%)
+ * - No job title → Default balanced weights
+ */
+export function getWeightsForRole(jobTitle?: string): WeightProfile {
+  if (!jobTitle || jobTitle.trim().length === 0) return STAGE_WEIGHTS
+  return isProductRole(jobTitle) ? PM_SPECIALIST_WEIGHTS : GENERAL_PROFESSIONAL_WEIGHTS
+}
 
 // ---------------------------------------------------------------------------
 // Stage 1 — Indicator Scan
@@ -208,9 +291,10 @@ export function analyzeATS(text: string): StageScore {
 // Stage 3 — Recruiter UX ("Tired Recruiter at 4 PM" Lens)
 // ---------------------------------------------------------------------------
 
-export function analyzeRecruiterUX(text: string): StageScore {
+export function analyzeRecruiterUX(text: string, jobTitle?: string): StageScore {
   const details: string[] = []
   let raw = 0
+  const isNonPM = jobTitle ? !isProductRole(jobTitle) : false
 
   // Scan-ability: Can the key achievement be understood in <5 seconds? (0-30)
   // Heuristic: first 8 words should contain a verb and hint at impact
@@ -266,20 +350,38 @@ export function analyzeRecruiterUX(text: string): StageScore {
   }
 
   // Jargon density — too much jargon is bad for non-technical recruiters (0-15)
-  const jargonTerms = [
+  const techJargonTerms = [
     'api', 'sdk', 'cicd', 'ci/cd', 'kubernetes', 'docker',
     'terraform', 'graphql', 'microservices', 'monorepo',
   ]
+  const pmJargonTerms = [
+    'rice', 'okr', 'aarrr', 'north star', 'kano',
+    'roadmap', 'backlog', 'sprint', 'stakeholder',
+    'cross-functional', 'prioritization framework',
+  ]
   const lower = text.toLowerCase()
-  const jargonCount = jargonTerms.filter(j => lower.includes(j)).length
-  if (jargonCount <= 1) {
+  const techJargonCount = techJargonTerms.filter(j => lower.includes(j)).length
+  // For non-PM roles, PM jargon is also confusing to industry-specific recruiters
+  const pmJargonCount = isNonPM ? pmJargonTerms.filter(j => lower.includes(j)).length : 0
+  const totalJargonCount = techJargonCount + pmJargonCount
+
+  if (totalJargonCount === 0) {
     raw += 15
     details.push('Jargon-light — accessible to non-technical recruiters')
-  } else if (jargonCount <= 2) {
-    raw += 8
+  } else if (totalJargonCount <= 1) {
+    raw += 10
+    details.push('Minimal jargon — mostly accessible')
+  } else if (totalJargonCount <= 2) {
+    raw += 5
     details.push('Moderate jargon — consider simplifying for broader audiences')
   } else {
-    details.push('Heavy jargon — may lose non-technical recruiters')
+    // Heavy jargon: actively penalise (subtract from raw score)
+    raw -= Math.min(totalJargonCount * 5, 15)
+    if (pmJargonCount > 0 && isNonPM) {
+      details.push(`PM jargon inappropriate for ${jobTitle} role — recruiter will be confused`)
+    } else {
+      details.push('Heavy jargon — may lose non-technical recruiters')
+    }
   }
 
   // Uniqueness / Specificity — generic bullets score lower (0-10)
@@ -324,23 +426,24 @@ export function analyzePMStage(text: string): StageScore {
 
 /**
  * Run the complete 4-stage analysis on a single CV bullet point.
- *
- * Stage 1 (Indicators):     25% weight — raw keywords & sub-indicators
- * Stage 2 (ATS Robot):      30% weight — machine-readability & structure
- * Stage 3 (Recruiter UX):   25% weight — "Tired Recruiter at 4 PM" scan-ability
- * Stage 4 (PM Intelligence): 20% weight — 10 PM principles scoring
+ * When `jobTitle` is provided, weights are dynamically adjusted:
+ *   - Product roles → PM Specialist (PM Intelligence 35%)
+ *   - Non-product roles → General Professional (PM Intelligence 5%)
+ *   - No job title → Default balanced weights
  */
-export function analyzeCVContent(text: string): FourStageAnalysis {
+export function analyzeCVContent(text: string, jobTitle?: string): FourStageAnalysis {
   const indicators = analyzeIndicators(text)
   const ats = analyzeATS(text)
-  const recruiterUX = analyzeRecruiterUX(text)
+  const recruiterUX = analyzeRecruiterUX(text, jobTitle)
   const pmIntelligence = analyzePMStage(text)
 
+  const weights = getWeightsForRole(jobTitle)
+
   const totalScore = Math.round(
-    indicators.score * STAGE_WEIGHTS.indicators +
-    ats.score * STAGE_WEIGHTS.ats +
-    recruiterUX.score * STAGE_WEIGHTS.recruiterUX +
-    pmIntelligence.score * STAGE_WEIGHTS.pmIntelligence
+    indicators.score * weights.indicators +
+    ats.score * weights.ats +
+    recruiterUX.score * weights.recruiterUX +
+    pmIntelligence.score * weights.pmIntelligence
   )
 
   return { indicators, ats, recruiterUX, pmIntelligence, totalScore }
@@ -350,22 +453,53 @@ export function analyzeCVContent(text: string): FourStageAnalysis {
 // Score Arbiter — "Best of Both Worlds" Optimizer
 // ---------------------------------------------------------------------------
 
+const STAGE_NAMES: Record<string, string> = {
+  indicators: 'Cold Indicators',
+  ats: 'ATS Compatibility',
+  recruiterUX: 'Recruiter UX',
+  pmIntelligence: 'PM Intelligence',
+}
+
 /**
  * Compare a single original bullet against its tailored version.
  * Runs the full 4-stage pipeline on both and picks the winner.
+ * When the tailored version is rejected, `rejectionReasons` lists
+ * every stage where the tailored score dropped below the original.
+ *
+ * When `jobTitle` is provided, uses context-aware dynamic weighting.
  */
 export function arbitrateBullet(
   originalBullet: string,
-  tailoredBullet: string
+  tailoredBullet: string,
+  jobTitle?: string
 ): ArbiterDecision {
-  const originalAnalysis = analyzeCVContent(originalBullet)
-  const tailoredAnalysis = analyzeCVContent(tailoredBullet)
+  const originalAnalysis = analyzeCVContent(originalBullet, jobTitle)
+  const tailoredAnalysis = analyzeCVContent(tailoredBullet, jobTitle)
   const scoreDelta = tailoredAnalysis.totalScore - originalAnalysis.totalScore
+
+  // Build per-stage drop details
+  const rejectionReasons: StageDropDetail[] = []
+  const stageKeys: Array<'indicators' | 'ats' | 'recruiterUX' | 'pmIntelligence'> = [
+    'indicators', 'ats', 'recruiterUX', 'pmIntelligence',
+  ]
+  for (const stage of stageKeys) {
+    const origScore = originalAnalysis[stage].score
+    const tailScore = tailoredAnalysis[stage].score
+    if (tailScore < origScore) {
+      rejectionReasons.push({
+        stage,
+        stageName: STAGE_NAMES[stage],
+        originalScore: origScore,
+        tailoredScore: tailScore,
+        drop: origScore - tailScore,
+      })
+    }
+  }
 
   const winner: 'original' | 'tailored' = scoreDelta >= 0 ? 'tailored' : 'original'
   const bullet = winner === 'tailored' ? tailoredBullet : originalBullet
 
-  return { bullet, winner, originalAnalysis, tailoredAnalysis, scoreDelta }
+  return { bullet, winner, originalAnalysis, tailoredAnalysis, scoreDelta, rejectionReasons }
 }
 
 /**
@@ -374,15 +508,20 @@ export function arbitrateBullet(
  *
  * For each bullet pair (original vs tailored):
  *   1. Runs the full 4-stage analysis on BOTH versions
- *   2. Compares weighted total scores
+ *   2. Compares weighted total scores (context-aware if jobTitle provided)
  *   3. If tailoredScore < originalScore → reverts to the original
  *   4. Otherwise → keeps the tailored version
+ *
+ * When `jobTitle` is provided, weights adapt dynamically:
+ *   - Product roles → PM Specialist profile (PM Intelligence 35%)
+ *   - Non-product roles → General Professional profile (PM Intelligence 5%)
  *
  * Guarantees: The final optimised CV will have a total score >= the original.
  */
 export function scoreArbiter(
   originalBullets: string[],
-  tailoredBullets: string[]
+  tailoredBullets: string[],
+  jobTitle?: string
 ): ArbiterResult {
   // Handle mismatched lengths: pair up what we can, keep originals for extras
   const maxLen = Math.max(originalBullets.length, tailoredBullets.length)
@@ -394,17 +533,18 @@ export function scoreArbiter(
 
     if (!original && tailored) {
       // New bullet added by tailoring — only keep if it scores > 0
-      const tailoredAnalysis = analyzeCVContent(tailored)
-      const emptyAnalysis = analyzeCVContent('')
+      const tailoredAnalysis = analyzeCVContent(tailored, jobTitle)
+      const emptyAnalysis = analyzeCVContent('', jobTitle)
       decisions.push({
         bullet: tailored,
         winner: 'tailored',
         originalAnalysis: emptyAnalysis,
         tailoredAnalysis,
         scoreDelta: tailoredAnalysis.totalScore,
+        rejectionReasons: [],
       })
     } else {
-      decisions.push(arbitrateBullet(original, tailored))
+      decisions.push(arbitrateBullet(original, tailored, jobTitle))
     }
   }
 
@@ -506,31 +646,62 @@ WHAT YOU NEVER DO:
  * Analyze user's CV bullet points or interview answers.
  * Returns a score, strengths summary, suggestions, and missing principles.
  * Feedback uses Siggy's warm, encouraging voice.
+ *
+ * When `jobTitle` is provided and is NOT a product role, the feedback
+ * softens PM jargon and focuses on universal professional advice instead.
  */
-export function analyzePMContent(userText: string) {
+export function analyzePMContent(userText: string, jobTitle?: string) {
   const analysis = analyzeWithPMPrinciples(userText)
+  const productRole = jobTitle ? isProductRole(jobTitle) : true
 
-  // Siggy's voice: encouraging at every level, insider framing
+  // Siggy's voice adapts: PM insider framing for product roles,
+  // professional coaching for everyone else
   let strengths: string
-  if (analysis.score >= 80) {
-    strengths = 'This reads like a seasoned PM wrote it. Really strong framing.'
-  } else if (analysis.score >= 60) {
-    strengths = 'Solid foundation here. A few insider tricks could take this to the next level.'
-  } else if (analysis.score >= 40) {
-    strengths = "Good start — I see some PM thinking in here. Let's sharpen it together."
+  if (productRole) {
+    if (analysis.score >= 80) {
+      strengths = 'This reads like a seasoned PM wrote it. Really strong framing.'
+    } else if (analysis.score >= 60) {
+      strengths = 'Solid foundation here. A few insider tricks could take this to the next level.'
+    } else if (analysis.score >= 40) {
+      strengths = "Good start — I see some PM thinking in here. Let's sharpen it together."
+    } else {
+      strengths = "Great that you're writing this out. I have a few tricks that could really level this up."
+    }
   } else {
-    strengths = "Great that you're writing this out. I have a few tricks that could really level this up."
+    // Non-PM: universal professional coaching — no PM jargon
+    if (analysis.score >= 80) {
+      strengths = 'This is really well written. Clear impact and strong professional framing.'
+    } else if (analysis.score >= 60) {
+      strengths = 'Good foundation here. A few tweaks could make this stand out even more.'
+    } else if (analysis.score >= 40) {
+      strengths = "Nice start — I can see the experience coming through. Let's make it shine."
+    } else {
+      strengths = "Great that you're putting this together. I have a few tips to make it really stand out."
+    }
   }
+
+  // Filter suggestions: for non-PM roles, translate PM-specific advice to universal language
+  const suggestions = productRole
+    ? analysis.suggestions
+    : analysis.suggestions.map(s =>
+        s.replace(/PM principles/gi, 'professional best practices')
+         .replace(/cross-functional/gi, 'across teams')
+         .replace(/stakeholder/gi, 'key people')
+      )
 
   return {
     score: analysis.score,
     feedback: {
       strengths,
-      suggestions: analysis.suggestions,
+      suggestions,
       missingPrinciples: analysis.missingPrinciples.map((p) => ({
         id: p.id,
         name: p.name,
-        howToApply: p.applicationTips[0],
+        howToApply: productRole
+          ? p.applicationTips[0]
+          : p.applicationTips[0]
+              .replace(/PM/g, 'professional')
+              .replace(/product/gi, 'work'),
       })),
     },
   }
@@ -574,6 +745,435 @@ What part would you like to flesh out first?`
   return ''
 }
 
+// ---------------------------------------------------------------------------
+// Indicator Detail Analysis — sub-indicators, evidence, and action items
+// ---------------------------------------------------------------------------
+
+export interface SubIndicator {
+  /** Sub-criterion name (e.g., "Metric Usage") */
+  name: string
+  /** Score 0-10 for this sub-criterion */
+  score: number
+  /** Max possible score */
+  maxScore: number
+}
+
+export interface EvidenceHighlight {
+  /** The bullet text excerpt that contributed to this score */
+  text: string
+  /** Whether this is positive evidence or needs improvement */
+  sentiment: 'positive' | 'needs-work'
+}
+
+export interface IndicatorDetail {
+  /** Principle ID this detail belongs to */
+  principleId: string
+  /** 3-5 sub-indicators with individual scores */
+  subIndicators: SubIndicator[]
+  /** 2-3 evidence highlights from the user's CV */
+  evidence: EvidenceHighlight[]
+  /** Siggy's specific one-sentence action item to reach 10/10 */
+  actionItem: string
+}
+
+// Sub-indicator definitions per principle
+const PRINCIPLE_SUB_INDICATORS: Record<string, { name: string; keywords: string[]; weight: number }[]> = {
+  'outcome-over-output': [
+    { name: 'Result Language', keywords: ['increased', 'improved', 'reduced', 'achieved', 'resulted', 'enabled', 'generated'], weight: 3 },
+    { name: 'Before/After Contrast', keywords: ['from', 'to', 'before', 'after', 'previously', 'now'], weight: 2 },
+    { name: 'Business Connection', keywords: ['revenue', 'growth', 'retention', 'efficiency', 'adoption', 'engagement'], weight: 3 },
+    { name: '"So What?" Closure', keywords: ['resulting in', 'leading to', 'which led', 'thereby', 'enabling'], weight: 2 },
+  ],
+  'data-driven-decisions': [
+    { name: 'Metric Usage', keywords: ['%', '$', 'kpi', 'metric', 'nps', 'csat', 'arr', 'mrr'], weight: 3 },
+    { name: 'Outcome Alignment', keywords: ['improved', 'increased', 'reduced', 'optimized', 'achieved'], weight: 2 },
+    { name: 'Methodology', keywords: ['a/b', 'test', 'experiment', 'analysis', 'analytics', 'measured', 'tracked'], weight: 3 },
+    { name: 'Scale Accuracy', keywords: ['users', 'customers', 'transactions', 'sessions', 'people', 'teams'], weight: 2 },
+  ],
+  'user-centricity': [
+    { name: 'User Mention', keywords: ['user', 'customer', 'client', 'patient', 'people', 'persona'], weight: 3 },
+    { name: 'Pain Point Framing', keywords: ['pain point', 'struggle', 'challenge', 'need', 'frustration', 'problem'], weight: 2 },
+    { name: 'Research Methods', keywords: ['interview', 'survey', 'usability', 'feedback', 'research', 'insights'], weight: 3 },
+    { name: 'User Impact Metric', keywords: ['satisfaction', 'nps', 'adoption', 'engagement', 'retention', 'experience'], weight: 2 },
+  ],
+  'strategic-thinking': [
+    { name: 'Vision & Direction', keywords: ['strategy', 'strategic', 'vision', 'long-term', 'mission'], weight: 3 },
+    { name: 'Prioritization', keywords: ['prioriti', 'roadmap', 'trade-off', 'decision', 'framework', 'rice'], weight: 3 },
+    { name: 'Market Awareness', keywords: ['market', 'competitive', 'competitor', 'industry', 'trend', 'opportunity'], weight: 2 },
+    { name: 'Business Alignment', keywords: ['alignment', 'aligned', 'initiative', 'objective', 'goal', 'okr'], weight: 2 },
+  ],
+  'cross-functional-leadership': [
+    { name: 'Team Breadth', keywords: ['cross-functional', 'engineering', 'design', 'marketing', 'sales', 'operations'], weight: 3 },
+    { name: 'Leadership Signal', keywords: ['led', 'drove', 'spearheaded', 'orchestrated', 'managed', 'directed'], weight: 3 },
+    { name: 'Stakeholder Alignment', keywords: ['stakeholder', 'aligned', 'consensus', 'buy-in', 'c-suite', 'executive'], weight: 2 },
+    { name: 'Team Scale', keywords: ['team of', 'engineers', 'members', 'people', 'direct reports'], weight: 2 },
+  ],
+  'problem-solving': [
+    { name: 'Problem Framing', keywords: ['problem', 'challenge', 'issue', 'bottleneck', 'gap', 'blocker'], weight: 3 },
+    { name: 'Diagnosis Method', keywords: ['root cause', 'diagnosed', 'identified', 'analyzed', '5 whys', 'investigation'], weight: 3 },
+    { name: 'Solution Evaluation', keywords: ['evaluated', 'alternative', 'option', 'approach', 'solution', 'resolved'], weight: 2 },
+    { name: 'Outcome Proof', keywords: ['resolved', 'fixed', 'eliminated', 'reduced', 'solved', 'improved'], weight: 2 },
+  ],
+  'iterative-development': [
+    { name: 'MVP / Scoping', keywords: ['mvp', 'prototype', 'pilot', 'beta', 'scope', 'minimal'], weight: 3 },
+    { name: 'Iteration Cycles', keywords: ['iterated', 'iteration', 'version', 'v2', 'refined', 'improved'], weight: 2 },
+    { name: 'Speed Signal', keywords: ['sprint', 'agile', 'shipped', 'launched', 'week', 'rapid'], weight: 3 },
+    { name: 'Learning Loop', keywords: ['learned', 'feedback', 'tested', 'experiment', 'validated', 'adapted'], weight: 2 },
+  ],
+  'communication-storytelling': [
+    { name: 'Presentation Skill', keywords: ['presented', 'communicated', 'pitch', 'demo', 'all-hands', 'board'], weight: 3 },
+    { name: 'Audience Tailoring', keywords: ['executive', 'stakeholder', 'team', 'engineering', 'non-technical', 'customer'], weight: 2 },
+    { name: 'Narrative Structure', keywords: ['narrative', 'story', 'vision', 'case study', 'report', 'prd'], weight: 3 },
+    { name: 'Action Driven', keywords: ['buy-in', 'approved', 'secured', 'convinced', 'influenced', 'aligned'], weight: 2 },
+  ],
+  'technical-aptitude': [
+    { name: 'System Knowledge', keywords: ['platform', 'api', 'infrastructure', 'system', 'architecture', 'database'], weight: 3 },
+    { name: 'Technical Decisions', keywords: ['technical', 'trade-off', 'scalab', 'performance', 'reliability', 'latency'], weight: 3 },
+    { name: 'Tooling Reference', keywords: ['integration', 'pipeline', 'deployment', 'automation', 'monitoring', 'ci/cd'], weight: 2 },
+    { name: 'Eng Collaboration', keywords: ['engineering', 'engineer', 'developer', 'architect', 'feasibility'], weight: 2 },
+  ],
+  'business-acumen': [
+    { name: 'Revenue Impact', keywords: ['revenue', 'profit', 'arr', 'mrr', '$', 'monetization', 'pricing'], weight: 3 },
+    { name: 'Growth Metrics', keywords: ['growth', 'acquisition', 'conversion', 'churn', 'ltv', 'retention'], weight: 3 },
+    { name: 'ROI / Efficiency', keywords: ['roi', 'cost', 'savings', 'efficiency', 'budget', 'margin'], weight: 2 },
+    { name: 'Market Dynamics', keywords: ['market', 'competitive', 'positioning', 'segment', 'opportunity'], weight: 2 },
+  ],
+}
+
+// Action items per principle per score range
+const PRINCIPLE_ACTION_ITEMS: Record<string, { high: string; mid: string; low: string }> = {
+  'outcome-over-output': {
+    high: 'Add a "before vs after" contrast to your strongest bullet to make the transformation even more vivid.',
+    mid: 'Rewrite your top bullet using the formula: "[Action verb] [what you did], resulting in [specific metric]."',
+    low: 'Pick your biggest achievement and answer: "What changed because of my work?" — that answer IS your bullet.',
+  },
+  'data-driven-decisions': {
+    high: 'Mention the specific tool or method you used to gather data (e.g., "using Mixpanel analytics" or "through A/B testing").',
+    mid: 'Add at least one concrete number to each bullet — even "5 stakeholders" or "3 iterations" counts.',
+    low: 'Start one bullet with: "Analyzed [data source] to discover [insight], leading to [action] that improved [metric] by [X%]."',
+  },
+  'user-centricity': {
+    high: 'Name the specific user segment (e.g., "enterprise customers" or "first-time mobile users") instead of generic "users".',
+    mid: 'Add how you gathered user insights — even "based on 50+ customer support tickets" shows user awareness.',
+    low: 'Answer this in your strongest bullet: "Who specifically benefited from my work, and what was their pain point?"',
+  },
+  'strategic-thinking': {
+    high: 'Reference a specific framework or trade-off decision to show your strategic process, not just the outcome.',
+    mid: 'Connect one bullet to a larger business objective: "...aligned with the company\'s goal to expand into [market]."',
+    low: 'Add "prioritized X over Y because [strategic reason]" to show you think beyond the immediate task.',
+  },
+  'cross-functional-leadership': {
+    high: 'Add the team scale (e.g., "team of 12 across 4 departments") to quantify the collaboration scope.',
+    mid: 'Replace "worked with" with "led" or "aligned" to signal leadership, even if your title wasn\'t "lead".',
+    low: 'Add one bullet that mentions at least two different teams you worked with and the outcome you achieved together.',
+  },
+  'problem-solving': {
+    high: 'Mention one alternative you considered and why you chose your approach — this shows analytical depth.',
+    mid: 'Frame one bullet as "Identified [problem] through [method], then [solution] resulting in [outcome]."',
+    low: 'Start a bullet with the challenge first: "Faced [X problem] and solved it by [approach], reducing [metric] by [Y%]."',
+  },
+  'iterative-development': {
+    high: 'Add a "shipped in X weeks" timeline to showcase speed alongside quality.',
+    mid: 'Mention a learning you took from v1 to v2: "Based on beta feedback, iterated to improve [metric] by [X%]."',
+    low: 'Add one reference to shipping fast: "Launched MVP in [timeframe]" or "Ran [N] iteration cycles."',
+  },
+  'communication-storytelling': {
+    high: 'Mention the audience size or seniority: "Presented to 200+ at all-hands" or "Secured C-suite approval."',
+    mid: 'Use the Action → Method → Outcome structure consistently: it makes every bullet tell a complete story.',
+    low: 'Add one bullet about presenting, writing, or communicating that led to a concrete decision or approval.',
+  },
+  'technical-aptitude': {
+    high: 'Show a technical trade-off you navigated: "Chose X over Y for [performance/scalability reason]."',
+    mid: 'Name the specific platform, tool, or technology you used — even "using our REST API" adds credibility.',
+    low: 'Mention one technical context: the system you worked with, the tool you evaluated, or the constraint you managed.',
+  },
+  'business-acumen': {
+    high: 'Add a revenue timeline: "$X ARR generated in first [N] months" makes the business impact concrete.',
+    mid: 'Connect one achievement to a business metric: revenue, cost savings, conversion rate, or customer LTV.',
+    low: 'End your strongest bullet with a business result: "...saving $X per quarter" or "...growing revenue by Y%."',
+  },
+}
+
+/**
+ * Analyze a principle in detail: produces sub-indicator scores,
+ * evidence highlights from specific bullets, and a targeted action item.
+ *
+ * This powers the accordion detail view in the CV Analysis Dashboard.
+ */
+export function analyzeIndicatorDetail(
+  principleId: string,
+  bullets: string[],
+  overallScore: number
+): IndicatorDetail {
+  const subDefs = PRINCIPLE_SUB_INDICATORS[principleId] || []
+  const lower = bullets.map(b => b.toLowerCase())
+  const combined = lower.join(' ')
+
+  // Score each sub-indicator
+  const subIndicators: SubIndicator[] = subDefs.map(sub => {
+    const hits = sub.keywords.filter(kw => combined.includes(kw)).length
+    const maxHits = Math.max(sub.keywords.length * 0.4, 1)
+    const raw = Math.min(Math.round((hits / maxHits) * 10), 10)
+    return { name: sub.name, score: raw, maxScore: 10 }
+  })
+
+  // Extract evidence highlights — find bullets that match this principle's keywords
+  const allKeywords = subDefs.flatMap(s => s.keywords)
+  const evidence: EvidenceHighlight[] = []
+
+  for (const bullet of bullets) {
+    if (evidence.length >= 3) break
+    if (bullet.trim().length < 10) continue
+
+    const bl = bullet.toLowerCase()
+    const matchCount = allKeywords.filter(kw => bl.includes(kw)).length
+
+    if (matchCount >= 2) {
+      evidence.push({ text: bullet.trim(), sentiment: 'positive' })
+    } else if (matchCount === 0 && evidence.length < 2) {
+      // This bullet has no signal for this principle — it needs work
+      evidence.push({ text: bullet.trim(), sentiment: 'needs-work' })
+    }
+  }
+
+  // If we found no positive evidence, grab the best available bullet as needs-work
+  if (evidence.length === 0 && bullets.length > 0) {
+    const best = bullets.find(b => b.trim().length >= 10) || bullets[0]
+    if (best) evidence.push({ text: best.trim(), sentiment: 'needs-work' })
+  }
+
+  // Select action item based on score
+  const actions = PRINCIPLE_ACTION_ITEMS[principleId] || {
+    high: 'Continue refining this area — small details compound.',
+    mid: 'Focus on adding one concrete example or metric.',
+    low: 'Start by answering "What changed because of my work?" for this dimension.',
+  }
+
+  let actionItem: string
+  if (overallScore >= 7) actionItem = actions.high
+  else if (overallScore >= 4) actionItem = actions.mid
+  else actionItem = actions.low
+
+  return { principleId, subIndicators, evidence, actionItem }
+}
+
+// ---------------------------------------------------------------------------
+// Gap Identification — surfaces competency gaps as mentoring questions
+// ---------------------------------------------------------------------------
+
+export interface GapQuestion {
+  /** Unique ID for this gap */
+  id: string
+  /** PM principle or competency this gap relates to */
+  principleId: string
+  /** Human-readable principle name */
+  principleName: string
+  /** The question Siggy asks the user */
+  question: string
+  /** "Why we ask this" explanation */
+  whyWeAsk: string
+  /** Estimated score boost if answered well (percentage points) */
+  potentialBoost: number
+  /** AI draft hint — context for generating a suggested answer */
+  draftContext: string
+}
+
+export interface GapAnalysisResult {
+  /** Identified gaps sorted by potential impact (highest first) */
+  gaps: GapQuestion[]
+  /** Current total score before gap-filling */
+  currentScore: number
+  /** Projected score if all gaps are filled */
+  projectedScore: number
+  /** Number of principles that are weak (<40% of max) */
+  weakPrincipleCount: number
+}
+
+/**
+ * Identify competency gaps from CV content analysis.
+ * Uses the 4-stage pipeline + PM principle analysis to surface the
+ * highest-impact questions that would close score gaps.
+ *
+ * Returns questions sorted by potential boost (highest first),
+ * capped at `maxQuestions` (default 5).
+ */
+export function identifyGaps(
+  bullets: string[],
+  jobTitle?: string,
+  jobDescription?: string,
+  maxQuestions: number = 5
+): GapAnalysisResult {
+  const combined = bullets.join(' ')
+  const analysis = analyzeCVContent(combined, jobTitle)
+  const pmAnalysis = analyzeWithPMPrinciples(combined)
+  const isProductRoleFlag = jobTitle ? isProductRole(jobTitle) : true
+
+  const gaps: GapQuestion[] = []
+
+  // ---- Stage-level gap detection ----
+
+  // Indicators gap: missing metrics/numbers
+  if (analysis.indicators.score < 50) {
+    const boost = Math.round((50 - analysis.indicators.score) * 0.20)
+    gaps.push({
+      id: 'gap-metrics',
+      principleId: 'data-driven-decisions',
+      principleName: 'Quantified Impact',
+      question: 'Can you share specific numbers from your work? For example: team size, users served, percentage improvements, revenue impact, or time saved?',
+      whyWeAsk: `This role values measurable impact. Adding concrete metrics could boost your score by ~${boost}%.`,
+      potentialBoost: boost,
+      draftContext: 'User needs help quantifying their achievements with specific numbers and percentages.',
+    })
+  }
+
+  // ATS gap: structure or terminology
+  if (analysis.ats.score < 50) {
+    const boost = Math.round((50 - analysis.ats.score) * 0.30)
+    gaps.push({
+      id: 'gap-ats-keywords',
+      principleId: 'strategic-thinking',
+      principleName: 'Industry Keywords',
+      question: jobDescription
+        ? 'Looking at the job description, are there specific tools, technologies, or methodologies you\'ve used that we should highlight?'
+        : 'What tools, technologies, or industry-specific methodologies have you used in your work?',
+      whyWeAsk: `ATS systems scan for relevant keywords. Strengthening this area could boost your match by ~${boost}%.`,
+      potentialBoost: boost,
+      draftContext: `User needs to surface industry keywords and terminology. ${jobDescription ? 'Job description available for keyword matching.' : 'No job description provided.'}`,
+    })
+  }
+
+  // Recruiter UX gap: "so what?" factor
+  if (analysis.recruiterUX.score < 50) {
+    const boost = Math.round((50 - analysis.recruiterUX.score) * 0.20)
+    gaps.push({
+      id: 'gap-so-what',
+      principleId: 'outcome-over-output',
+      principleName: 'Clear Impact Story',
+      question: 'What\'s the single most impressive result from your work that a recruiter should notice in the first 5 seconds of reading your CV?',
+      whyWeAsk: `Recruiters spend ~6 seconds per CV. A clear impact story could boost readability by ~${boost}%.`,
+      potentialBoost: boost,
+      draftContext: 'User needs to articulate their most impressive achievement in a recruiter-scannable way.',
+    })
+  }
+
+  // ---- PM Principle-level gap detection ----
+
+  const principleGapMap: Record<string, { question: string; whyWeAsk: string; draftContext: string }> = {
+    'outcome-over-output': {
+      question: 'For your biggest project, what changed because of your work? Think: before vs. after — what metric moved?',
+      whyWeAsk: 'Hiring managers want to see outcomes, not just activities. This is often the #1 differentiator.',
+      draftContext: 'User needs to reframe work from tasks completed to outcomes achieved.',
+    },
+    'data-driven-decisions': {
+      question: 'Was there a time you used data or research to make a key decision? What data did you look at, and what did you decide?',
+      whyWeAsk: isProductRoleFlag
+        ? 'Data-driven decision making is a core PM competency that hiring managers specifically look for.'
+        : 'Employers value professionals who can back up decisions with evidence.',
+      draftContext: 'User needs to describe a data-informed decision with specific metrics.',
+    },
+    'user-centricity': {
+      question: 'Who were the end users or customers of your work? How did you understand their needs?',
+      whyWeAsk: 'Showing you understand the people you serve demonstrates empathy and strategic thinking.',
+      draftContext: 'User needs to articulate who they served and how they gathered user/customer insights.',
+    },
+    'cross-functional-leadership': {
+      question: 'Tell me about a time you worked across teams or departments. Who was involved and how did you align everyone?',
+      whyWeAsk: isProductRoleFlag
+        ? 'Cross-functional leadership is essential for PM roles — it shows you can lead without authority.'
+        : 'Collaboration across teams shows leadership potential and organizational awareness.',
+      draftContext: 'User needs to describe cross-team collaboration and stakeholder alignment.',
+    },
+    'problem-solving': {
+      question: 'What was the trickiest problem you solved at work? Walk me through how you approached it.',
+      whyWeAsk: 'Problem-solving ability is one of the top 3 things interviewers assess. This will strengthen both your CV and interview prep.',
+      draftContext: 'User needs to describe a structured approach to solving a complex problem.',
+    },
+  }
+
+  for (const principle of pmAnalysis.missingPrinciples) {
+    const gapConfig = principleGapMap[principle.id]
+    if (!gapConfig) continue
+    // Skip if we already have a stage-level gap covering similar ground
+    if (principle.id === 'data-driven-decisions' && gaps.some(g => g.id === 'gap-metrics')) continue
+    if (principle.id === 'outcome-over-output' && gaps.some(g => g.id === 'gap-so-what')) continue
+
+    const boost = Math.round(20 * getWeightsForRole(jobTitle).pmIntelligence)
+    gaps.push({
+      id: `gap-${principle.id}`,
+      principleId: principle.id,
+      principleName: principle.name,
+      question: gapConfig.question,
+      whyWeAsk: gapConfig.whyWeAsk,
+      potentialBoost: Math.max(boost, 3), // minimum 3% boost
+      draftContext: gapConfig.draftContext,
+    })
+  }
+
+  // Sort by potential boost (highest first) and cap
+  gaps.sort((a, b) => b.potentialBoost - a.potentialBoost)
+  const capped = gaps.slice(0, maxQuestions)
+
+  const projectedBoost = capped.reduce((sum, g) => sum + g.potentialBoost, 0)
+
+  return {
+    gaps: capped,
+    currentScore: analysis.totalScore,
+    projectedScore: Math.min(analysis.totalScore + projectedBoost, 100),
+    weakPrincipleCount: pmAnalysis.missingPrinciples.length,
+  }
+}
+
+/**
+ * Generate an AI-drafted answer suggestion for a gap question.
+ * Uses the user's existing CV bullets + job context to produce
+ * a professional draft the user can edit for authenticity.
+ */
+export function draftGapAnswer(
+  gap: GapQuestion,
+  existingBullets: string[],
+  jobTitle?: string,
+  jobDescription?: string
+): string {
+  const isProductRoleFlag = jobTitle ? isProductRole(jobTitle) : true
+  const combined = existingBullets.join('. ')
+
+  // Extract context clues from existing bullets
+  const hasNumbers = /\d+%|\$\d+|\d+x|\d+ (users|customers|people|patients|deliveries)/.test(combined)
+  const hasTeamMention = /\b(team|cross-functional|collaborated|partnered)\b/i.test(combined)
+  const hasTools = /\b(api|platform|dashboard|system|tool|software)\b/i.test(combined)
+
+  switch (gap.principleId) {
+    case 'data-driven-decisions':
+      return hasNumbers
+        ? 'Based on my analysis of [specific data source], I identified [key insight] which led to [decision]. This resulted in [X%] improvement in [metric], validated through [method].'
+        : 'I regularly tracked [key metrics] to inform my decisions. For example, when I noticed [observation], I [action taken], which led to [measurable result].'
+
+    case 'outcome-over-output':
+      return 'Before my involvement, [situation/problem]. I [specific action], which resulted in [measurable outcome — e.g., X% improvement, $Y saved, Z users impacted]. This mattered because [business context].'
+
+    case 'user-centricity':
+      return 'I served [specific user group — e.g., 500 enterprise customers, 40 patients daily]. To understand their needs, I [research method — e.g., conducted interviews, analyzed feedback]. This insight led me to [action], improving [user metric] by [amount].'
+
+    case 'cross-functional-leadership':
+      return hasTeamMention
+        ? 'I led a cross-functional effort with [teams involved — e.g., engineering, design, marketing]. I aligned the group by [method — e.g., weekly syncs, shared dashboards], navigating [challenge] to deliver [outcome] on time.'
+        : 'I collaborated with [departments/teams] to [goal]. By [coordination method], we achieved [result] despite [constraint or challenge].'
+
+    case 'problem-solving':
+      return 'The challenge was [specific problem]. I diagnosed the root cause by [method — e.g., data analysis, user feedback, 5 Whys]. After evaluating [N alternatives], I chose [solution] because [reasoning]. The result: [measurable improvement].'
+
+    case 'strategic-thinking':
+      return isProductRoleFlag
+        ? 'I evaluated the opportunity using [framework — e.g., RICE, impact/effort matrix], balancing [trade-off A] against [trade-off B]. This strategic choice aligned with [company goal] and delivered [outcome].'
+        : 'I assessed the situation by considering [factors], prioritized [approach] over alternatives because [reasoning], and this decision led to [measurable result].'
+
+    default:
+      return hasTools
+        ? `In my role, I [relevant action using ${gap.principleName.toLowerCase()} skills], leveraging [tools/methods] to achieve [specific result]. This experience demonstrates [key competency].`
+        : `I [relevant action], focusing on [key aspect of ${gap.principleName.toLowerCase()}]. For example, [specific situation] where I [action] resulting in [outcome].`
+  }
+}
+
 export {
   generateSiggyPMContext,
   analyzeWithPMPrinciples,
@@ -581,4 +1181,4 @@ export {
   getPrinciplesForContext,
 }
 
-export { STAGE_WEIGHTS }
+export { STAGE_WEIGHTS, PM_SPECIALIST_WEIGHTS, GENERAL_PROFESSIONAL_WEIGHTS }
