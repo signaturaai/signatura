@@ -15,10 +15,16 @@ import {
   analyzeCVContent,
   arbitrateBullet,
   scoreArbiter,
+  isProductRole,
+  getWeightsForRole,
+  analyzePMContent,
   STAGE_WEIGHTS,
+  PM_SPECIALIST_WEIGHTS,
+  GENERAL_PROFESSIONAL_WEIGHTS,
   type StageDropDetail,
   type ArbiterDecision,
   type ArbiterResult,
+  type WeightProfile,
 } from '@/lib/ai/siggy-integration-guide'
 
 // =========================================================================
@@ -26,29 +32,61 @@ import {
 // =========================================================================
 
 describe('R — Requirements: Stage Weight Configuration', () => {
-  it('ATS Compatibility weight should be 30%', () => {
+  it('default ATS Compatibility weight should be 30%', () => {
     expect(STAGE_WEIGHTS.ats).toBe(0.30)
   })
 
-  it('Cold Indicators weight should be 20%', () => {
+  it('default Cold Indicators weight should be 20%', () => {
     expect(STAGE_WEIGHTS.indicators).toBe(0.20)
   })
 
-  it('Recruiter UX weight should be 20%', () => {
+  it('default Recruiter UX weight should be 20%', () => {
     expect(STAGE_WEIGHTS.recruiterUX).toBe(0.20)
   })
 
-  it('PM Intelligence weight should be 30%', () => {
+  it('default PM Intelligence weight should be 30%', () => {
     expect(STAGE_WEIGHTS.pmIntelligence).toBe(0.30)
   })
 
-  it('all weights should sum to exactly 1.0', () => {
+  it('default weights should sum to exactly 1.0', () => {
     const sum = STAGE_WEIGHTS.indicators + STAGE_WEIGHTS.ats +
       STAGE_WEIGHTS.recruiterUX + STAGE_WEIGHTS.pmIntelligence
     expect(sum).toBeCloseTo(1.0, 10)
   })
 
-  it('totalScore should reflect the updated weights', () => {
+  it('PM Specialist weights should sum to 1.0', () => {
+    const sum = PM_SPECIALIST_WEIGHTS.indicators + PM_SPECIALIST_WEIGHTS.ats +
+      PM_SPECIALIST_WEIGHTS.recruiterUX + PM_SPECIALIST_WEIGHTS.pmIntelligence
+    expect(sum).toBeCloseTo(1.0, 10)
+  })
+
+  it('General Professional weights should sum to 1.0', () => {
+    const sum = GENERAL_PROFESSIONAL_WEIGHTS.indicators + GENERAL_PROFESSIONAL_WEIGHTS.ats +
+      GENERAL_PROFESSIONAL_WEIGHTS.recruiterUX + GENERAL_PROFESSIONAL_WEIGHTS.pmIntelligence
+    expect(sum).toBeCloseTo(1.0, 10)
+  })
+
+  it('PM Specialist should have PM Intelligence at 35%', () => {
+    expect(PM_SPECIALIST_WEIGHTS.pmIntelligence).toBe(0.35)
+  })
+
+  it('General Professional should have PM Intelligence at 5%', () => {
+    expect(GENERAL_PROFESSIONAL_WEIGHTS.pmIntelligence).toBe(0.05)
+  })
+
+  it('General Professional should have ATS at 35%', () => {
+    expect(GENERAL_PROFESSIONAL_WEIGHTS.ats).toBe(0.35)
+  })
+
+  it('General Professional should have Recruiter UX at 30%', () => {
+    expect(GENERAL_PROFESSIONAL_WEIGHTS.recruiterUX).toBe(0.30)
+  })
+
+  it('General Professional should have Cold Indicators at 30%', () => {
+    expect(GENERAL_PROFESSIONAL_WEIGHTS.indicators).toBe(0.30)
+  })
+
+  it('totalScore with no jobTitle should use default weights', () => {
     const result = analyzeCVContent(
       'Led product roadmap strategy for analytics platform serving 50K users, resulting in 35% increase in daily active users'
     )
@@ -61,16 +99,10 @@ describe('R — Requirements: Stage Weight Configuration', () => {
     expect(result.totalScore).toBe(expected)
   })
 
-  it('PM Intelligence now has higher influence than Cold Indicators', () => {
-    // A bullet rich in PM signals but weak on raw keywords should score
-    // higher under the new weights than under equal weighting
+  it('PM Intelligence now has higher influence than Cold Indicators by default', () => {
     const pmRichBullet = 'Led team to solve customer churn problem, increased user retention by 40% through data-driven decisions'
     const result = analyzeCVContent(pmRichBullet)
-
-    // PM Intelligence (30% weight) should contribute more than Indicators (20%)
     const pmContribution = result.pmIntelligence.score * STAGE_WEIGHTS.pmIntelligence
-    const indicatorContribution = result.indicators.score * STAGE_WEIGHTS.indicators
-    // For a PM-rich bullet, the PM stage should contribute meaningfully
     expect(pmContribution).toBeGreaterThan(0)
     expect(result.totalScore).toBeGreaterThan(30)
   })
@@ -537,5 +569,409 @@ describe('Integration: Full 4-Stage Pipeline on Arbiter Decisions', () => {
 
     // The total delta should be significantly negative
     expect(decision.scoreDelta).toBeLessThan(-20)
+  })
+})
+
+// =========================================================================
+// Role Detection: isProductRole()
+// =========================================================================
+
+describe('Role Detection: isProductRole()', () => {
+  it('should detect "Product Manager" as product role', () => {
+    expect(isProductRole('Product Manager')).toBe(true)
+  })
+
+  it('should detect "Senior Product Manager" as product role', () => {
+    expect(isProductRole('Senior Product Manager')).toBe(true)
+  })
+
+  it('should detect "PM" as product role', () => {
+    expect(isProductRole('PM')).toBe(true)
+  })
+
+  it('should detect "Product Owner" as product role', () => {
+    expect(isProductRole('Product Owner')).toBe(true)
+  })
+
+  it('should detect "CPO" as product role', () => {
+    expect(isProductRole('CPO')).toBe(true)
+  })
+
+  it('should detect "Chief Product Officer" as product role', () => {
+    expect(isProductRole('Chief Product Officer')).toBe(true)
+  })
+
+  it('should detect "Technical Product Manager" as product role', () => {
+    expect(isProductRole('Technical Product Manager')).toBe(true)
+  })
+
+  it('should detect "VP of Product" as product role', () => {
+    expect(isProductRole('VP of Product')).toBe(true)
+  })
+
+  it('should detect "Group Product Manager" as product role', () => {
+    expect(isProductRole('Group Product Manager')).toBe(true)
+  })
+
+  it('should detect "Head of Product" as product role', () => {
+    expect(isProductRole('Head of Product')).toBe(true)
+  })
+
+  it('should NOT detect "Registered Nurse" as product role', () => {
+    expect(isProductRole('Registered Nurse')).toBe(false)
+  })
+
+  it('should NOT detect "Delivery Driver" as product role', () => {
+    expect(isProductRole('Delivery Driver')).toBe(false)
+  })
+
+  it('should NOT detect "Software Engineer" as product role', () => {
+    expect(isProductRole('Software Engineer')).toBe(false)
+  })
+
+  it('should NOT detect "Marketing Manager" as product role', () => {
+    expect(isProductRole('Marketing Manager')).toBe(false)
+  })
+
+  it('should NOT detect "Lawyer" as product role', () => {
+    expect(isProductRole('Lawyer')).toBe(false)
+  })
+
+  it('should NOT detect "Teacher" as product role', () => {
+    expect(isProductRole('Teacher')).toBe(false)
+  })
+
+  it('should NOT detect "Data Scientist" as product role', () => {
+    expect(isProductRole('Data Scientist')).toBe(false)
+  })
+
+  it('should handle empty string', () => {
+    expect(isProductRole('')).toBe(false)
+  })
+
+  it('should be case-insensitive', () => {
+    expect(isProductRole('PRODUCT MANAGER')).toBe(true)
+    expect(isProductRole('product manager')).toBe(true)
+    expect(isProductRole('Product manager')).toBe(true)
+  })
+
+  it('should handle whitespace-padded input', () => {
+    expect(isProductRole('  Product Manager  ')).toBe(true)
+  })
+})
+
+// =========================================================================
+// Dynamic Weight Selection: getWeightsForRole()
+// =========================================================================
+
+describe('Dynamic Weight Selection: getWeightsForRole()', () => {
+  it('should return default weights for undefined jobTitle', () => {
+    const weights = getWeightsForRole()
+    expect(weights).toEqual(STAGE_WEIGHTS)
+  })
+
+  it('should return default weights for empty string', () => {
+    const weights = getWeightsForRole('')
+    expect(weights).toEqual(STAGE_WEIGHTS)
+  })
+
+  it('should return PM Specialist weights for product roles', () => {
+    const weights = getWeightsForRole('Senior Product Manager')
+    expect(weights).toEqual(PM_SPECIALIST_WEIGHTS)
+    expect(weights.pmIntelligence).toBe(0.35)
+  })
+
+  it('should return General Professional weights for non-product roles', () => {
+    const weights = getWeightsForRole('Registered Nurse')
+    expect(weights).toEqual(GENERAL_PROFESSIONAL_WEIGHTS)
+    expect(weights.pmIntelligence).toBe(0.05)
+  })
+
+  it('should return General Professional weights for Delivery Driver', () => {
+    const weights = getWeightsForRole('Delivery Driver')
+    expect(weights.pmIntelligence).toBe(0.05)
+    expect(weights.ats).toBe(0.35)
+    expect(weights.recruiterUX).toBe(0.30)
+    expect(weights.indicators).toBe(0.30)
+  })
+})
+
+// =========================================================================
+// PART 1: PM Specialist Test (High-Intelligence Mode)
+// =========================================================================
+
+describe('PART 1 — PM Specialist Test: Senior Product Manager', () => {
+  const JOB_TITLE = 'Senior Product Manager'
+
+  it('should use PM Specialist weights (PM Intelligence >= 30%)', () => {
+    const weights = getWeightsForRole(JOB_TITLE)
+    expect(weights.pmIntelligence).toBeGreaterThanOrEqual(0.30)
+  })
+
+  it('should reject weak bullet in favour of PM-enriched tailored version', () => {
+    const original = 'Led the development of a user analytics dashboard'
+    const tailored = 'Led cross-functional team to launch user analytics dashboard, reducing time-to-insight by 40% and increasing data-driven decisions across 15 stakeholders'
+
+    const decision = arbitrateBullet(original, tailored, JOB_TITLE)
+
+    expect(decision.winner).toBe('tailored')
+    expect(decision.bullet).toBe(tailored)
+    expect(decision.scoreDelta).toBeGreaterThan(0)
+  })
+
+  it('PM Intelligence should carry significant weight in total score', () => {
+    const bullet = 'Led cross-functional team to solve customer churn problem, increased user retention by 40% through data-driven decisions'
+    const result = analyzeCVContent(bullet, JOB_TITLE)
+
+    const weights = getWeightsForRole(JOB_TITLE)
+    const pmContribution = result.pmIntelligence.score * weights.pmIntelligence
+    const totalContribution = result.totalScore
+
+    // PM should contribute at least 25% of the total score for PM-rich bullet
+    expect(pmContribution / totalContribution).toBeGreaterThan(0.20)
+  })
+
+  it('scoreArbiter should use PM Specialist weights when jobTitle is PM', () => {
+    const originals = ['Led the development of a user analytics dashboard']
+    const tailored = ['Led cross-functional team to launch user analytics dashboard, reducing time-to-insight by 40% for 50K users']
+
+    const result = scoreArbiter(originals, tailored, JOB_TITLE)
+    expect(result.decisions[0].winner).toBe('tailored')
+    expect(result.optimisedTotalScore).toBeGreaterThan(result.originalTotalScore)
+  })
+
+  it('PM Specialist scoring should differ from default scoring', () => {
+    const bullet = 'Led cross-functional team to solve customer churn problem, increased user retention by 40% through data-driven decisions'
+
+    const defaultResult = analyzeCVContent(bullet)
+    const pmResult = analyzeCVContent(bullet, JOB_TITLE)
+
+    // Stage scores are the same (same analyzers), but totalScore differs due to weights
+    expect(defaultResult.indicators.score).toBe(pmResult.indicators.score)
+    expect(defaultResult.ats.score).toBe(pmResult.ats.score)
+    // Total scores should differ because weights differ
+    expect(defaultResult.totalScore).not.toBe(pmResult.totalScore)
+  })
+})
+
+// =========================================================================
+// PART 2: Generalist Test (Safety Mode — Nurse / Driver)
+// =========================================================================
+
+describe('PART 2 — Generalist Test: Registered Nurse', () => {
+  const JOB_TITLE = 'Registered Nurse'
+
+  it('should use General Professional weights (PM Intelligence at 5%)', () => {
+    const weights = getWeightsForRole(JOB_TITLE)
+    expect(weights.pmIntelligence).toBe(0.05)
+    expect(weights.ats).toBe(0.35)
+    expect(weights.recruiterUX).toBe(0.30)
+    expect(weights.indicators).toBe(0.30)
+  })
+
+  it('should REJECT hallucinated PM jargon injected into nurse CV', () => {
+    const original = 'Administered medication to 40 patients daily with 100% accuracy'
+    const hallucinated = 'Optimized patient roadmap using RICE prioritization framework to deliver cross-functional healthcare outcomes'
+
+    const decision = arbitrateBullet(original, hallucinated, JOB_TITLE)
+
+    expect(decision.winner).toBe('original')
+    expect(decision.bullet).toBe(original)
+    // The hallucinated version should trigger rejection reasons
+    expect(decision.rejectionReasons.length).toBeGreaterThan(0)
+  })
+
+  it('should preserve clear nurse bullet over PM-jargon version', () => {
+    const originals = [
+      'Administered medication to 40 patients daily with 100% accuracy',
+      'Managed triage for 200 patients per shift in Level 1 trauma center',
+      'Trained 12 new nurses on emergency protocols, reducing onboarding time by 30%',
+    ]
+    const hallucinated = [
+      'Optimized patient roadmap using RICE prioritization framework',
+      'Drove stakeholder alignment on patient intake using North Star metrics',
+      'Spearheaded cross-functional sprint planning for nurse onboarding backlog',
+    ]
+
+    const result = scoreArbiter(originals, hallucinated, JOB_TITLE)
+
+    // All originals should win — PM jargon is harmful for nurse CVs
+    result.decisions.forEach((d, i) => {
+      expect(d.winner).toBe('original')
+      expect(d.bullet).toBe(originals[i])
+    })
+
+    expect(result.methodologyPreserved).toBe(true)
+  })
+
+  it('PM Intelligence should have minimal influence for nurse role', () => {
+    const bullet = 'Administered medication to 40 patients daily with 100% accuracy'
+    const result = analyzeCVContent(bullet, JOB_TITLE)
+
+    const weights = getWeightsForRole(JOB_TITLE)
+    const pmContribution = result.pmIntelligence.score * weights.pmIntelligence
+    const atsContribution = result.ats.score * weights.ats
+
+    // ATS should contribute far more than PM Intelligence for a nurse
+    expect(atsContribution).toBeGreaterThan(pmContribution)
+  })
+
+  it('should ALLOW genuinely improved nurse bullet (no PM jargon)', () => {
+    const original = 'Gave medication to patients'
+    const improved = 'Administered medication to 40 patients daily with 100% accuracy, reducing medication errors by 25%'
+
+    const decision = arbitrateBullet(original, improved, JOB_TITLE)
+
+    expect(decision.winner).toBe('tailored')
+    expect(decision.bullet).toBe(improved)
+  })
+})
+
+describe('PART 2 — Generalist Test: Delivery Driver', () => {
+  const JOB_TITLE = 'Delivery Driver'
+
+  it('should use General Professional weights', () => {
+    const weights = getWeightsForRole(JOB_TITLE)
+    expect(weights.pmIntelligence).toBe(0.05)
+  })
+
+  it('should REJECT PM jargon injected into driver CV', () => {
+    const original = 'Completed 150 deliveries daily with 99.5% on-time rate across 3 zones'
+    const hallucinated = 'Leveraged AARRR pirate metrics to optimize delivery funnel and drive stakeholder alignment on logistics roadmap'
+
+    const decision = arbitrateBullet(original, hallucinated, JOB_TITLE)
+
+    expect(decision.winner).toBe('original')
+    expect(decision.bullet).toBe(original)
+  })
+
+  it('ATS and Recruiter UX should dominate for driver role', () => {
+    const bullet = 'Completed 150 deliveries daily with 99.5% on-time rate across 3 zones'
+    const result = analyzeCVContent(bullet, JOB_TITLE)
+
+    const weights = getWeightsForRole(JOB_TITLE)
+    const atsContribution = result.ats.score * weights.ats
+    const uxContribution = result.recruiterUX.score * weights.recruiterUX
+    const indicatorContribution = result.indicators.score * weights.indicators
+    const pmContribution = result.pmIntelligence.score * weights.pmIntelligence
+
+    // ATS + UX + Indicators should massively outweigh PM
+    expect(atsContribution + uxContribution + indicatorContribution).toBeGreaterThan(pmContribution * 5)
+  })
+})
+
+// =========================================================================
+// PART 3: Cross-Industry Discrepancy Audit
+// =========================================================================
+
+describe('PART 3 — Cross-Industry Discrepancy Audit', () => {
+  it('isProductRole should correctly distinguish PM from Nurse', () => {
+    expect(isProductRole('Senior Product Manager')).toBe(true)
+    expect(isProductRole('Registered Nurse')).toBe(false)
+  })
+
+  it('isProductRole should correctly distinguish PM from Driver', () => {
+    expect(isProductRole('Product Owner')).toBe(true)
+    expect(isProductRole('Delivery Driver')).toBe(false)
+  })
+
+  it('same bullet should score differently under PM vs Nurse weights', () => {
+    const bullet = 'Led cross-functional team to solve customer churn problem, increased user retention by 40%'
+
+    const pmResult = analyzeCVContent(bullet, 'Senior Product Manager')
+    const nurseResult = analyzeCVContent(bullet, 'Registered Nurse')
+
+    // Indicators, ATS, PM Intelligence stage scores are the same (role-agnostic analyzers)
+    expect(pmResult.indicators.score).toBe(nurseResult.indicators.score)
+    expect(pmResult.ats.score).toBe(nurseResult.ats.score)
+    expect(pmResult.pmIntelligence.score).toBe(nurseResult.pmIntelligence.score)
+
+    // Recruiter UX may differ — PM jargon ("cross-functional") is penalised for non-PM roles
+    // Total scores should differ due to different weights AND potential recruiter UX penalty
+    expect(pmResult.totalScore).not.toBe(nurseResult.totalScore)
+  })
+
+  it('no hallucinated PM terms should leak into nurse optimised bullets', () => {
+    const nurseOriginals = [
+      'Administered medication to 40 patients daily with 100% accuracy',
+      'Managed triage for 200 patients per shift in Level 1 trauma center',
+    ]
+    const pmHallucinations = [
+      'Optimized patient outcome roadmap using OKR-driven sprint planning',
+      'Drove North Star metric alignment across cross-functional clinical stakeholders',
+    ]
+
+    const result = scoreArbiter(nurseOriginals, pmHallucinations, 'Registered Nurse')
+
+    // Originals should win — no PM jargon in the final output
+    result.optimisedBullets.forEach((bullet, i) => {
+      expect(bullet).toBe(nurseOriginals[i])
+      // Verify no PM jargon leaked
+      const lower = bullet.toLowerCase()
+      expect(lower).not.toContain('roadmap')
+      expect(lower).not.toContain('okr')
+      expect(lower).not.toContain('sprint')
+      expect(lower).not.toContain('north star')
+      expect(lower).not.toContain('stakeholder')
+    })
+  })
+
+  it('PM role should accept PM-enriched content that nurse role would reject', () => {
+    const original = 'Improved the onboarding process'
+    const tailored = 'Led cross-functional team to redesign onboarding using RICE prioritization, increasing activation by 35% for 10K users'
+
+    const pmDecision = arbitrateBullet(original, tailored, 'Senior Product Manager')
+    const nurseDecision = arbitrateBullet(original, tailored, 'Registered Nurse')
+
+    // PM should accept — high PM Intelligence weight rewards the PM frameworks
+    expect(pmDecision.winner).toBe('tailored')
+    // Nurse may or may not accept — but PM Intelligence carries almost no weight
+    // The key validation: PM total delta should be larger than nurse total delta
+    expect(pmDecision.scoreDelta).toBeGreaterThanOrEqual(nurseDecision.scoreDelta)
+  })
+
+  it('coaching tone should soften for non-PM roles', () => {
+    const text = 'Managed a team of 5 nurses'
+
+    const pmFeedback = analyzePMContent(text, 'Product Manager')
+    const nurseFeedback = analyzePMContent(text, 'Registered Nurse')
+
+    // Non-PM feedback should NOT contain PM-specific jargon
+    expect(nurseFeedback.feedback.strengths).not.toContain('PM')
+    expect(nurseFeedback.feedback.strengths).not.toContain('seasoned PM')
+    // PM feedback should be PM-specific
+    // (Score will be the same — it's the framing that differs)
+  })
+
+  it('coaching tone should use PM insider language for PM roles', () => {
+    const strongBullet = 'Led cross-functional team to solve customer churn problem, increased user retention by 40% through data-driven decisions'
+
+    const pmFeedback = analyzePMContent(strongBullet, 'Product Manager')
+
+    // High score → PM-specific praise
+    expect(pmFeedback.feedback.strengths).toContain('PM')
+  })
+
+  it('full arbiter pipeline should be deterministic across roles', () => {
+    const original = 'Managed the product roadmap'
+    const tailored = 'Led product roadmap strategy for analytics platform, resulting in 35% DAU increase'
+
+    const pmResults = Array(3).fill(null).map(() => arbitrateBullet(original, tailored, 'Product Manager'))
+    const nurseResults = Array(3).fill(null).map(() => arbitrateBullet(original, tailored, 'Registered Nurse'))
+
+    expect(new Set(pmResults.map(r => r.scoreDelta)).size).toBe(1)
+    expect(new Set(nurseResults.map(r => r.scoreDelta)).size).toBe(1)
+  })
+
+  it('performance: context-aware arbiter should process 20 pairs under 100ms', () => {
+    const originals = Array(20).fill('Managed the product roadmap and worked with teams')
+    const tailored = Array(20).fill('Led roadmap strategy for analytics platform serving 50K users, resulting in 35% DAU increase')
+
+    const start = performance.now()
+    scoreArbiter(originals, tailored, 'Senior Product Manager')
+    scoreArbiter(originals, tailored, 'Registered Nurse')
+    const duration = performance.now() - start
+
+    expect(duration).toBeLessThan(100)
   })
 })

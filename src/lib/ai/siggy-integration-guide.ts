@@ -79,15 +79,83 @@ export interface ArbiterResult {
 }
 
 // ---------------------------------------------------------------------------
-// Stage Weights — configurable balance across the 4 dimensions
-//   ATS Compatibility: 30%  |  Cold Indicators: 20%  |  Recruiter UX: 20%  |  PM Intelligence: 30%
+// Role Detection — determines whether to use PM Specialist or General weights
 // ---------------------------------------------------------------------------
-const STAGE_WEIGHTS = {
+
+const PRODUCT_ROLE_KEYWORDS = [
+  'product manager', 'product owner', 'pm', 'cpo', 'chief product',
+  'product lead', 'product director', 'product analyst', 'product strategist',
+  'product marketing', 'head of product', 'vp of product', 'vp product',
+  'group product manager', 'senior product manager', 'associate product manager',
+  'technical product manager', 'principal product manager',
+]
+
+/**
+ * Detect whether a job title refers to a product-related role.
+ * Used to dynamically switch between PM Specialist and General Professional
+ * weight profiles in the scoring pipeline.
+ */
+export function isProductRole(jobTitle: string): boolean {
+  if (!jobTitle || jobTitle.trim().length === 0) return false
+  const lower = jobTitle.toLowerCase().trim()
+  return PRODUCT_ROLE_KEYWORDS.some(keyword => lower.includes(keyword))
+}
+
+// ---------------------------------------------------------------------------
+// Stage Weights — dynamic profiles based on role detection
+// ---------------------------------------------------------------------------
+
+export interface WeightProfile {
+  indicators: number
+  ats: number
+  recruiterUX: number
+  pmIntelligence: number
+}
+
+/**
+ * Default weights (used when no jobTitle is provided).
+ * ATS Compatibility: 30%  |  Cold Indicators: 20%  |  Recruiter UX: 20%  |  PM Intelligence: 30%
+ */
+const STAGE_WEIGHTS: WeightProfile = {
   indicators: 0.20,
   ats: 0.30,
   recruiterUX: 0.20,
   pmIntelligence: 0.30,
-} as const
+}
+
+/**
+ * Scenario A — Product-Related Roles (The Specialist)
+ * Heavy PM Intelligence emphasis to leverage frameworks.
+ */
+const PM_SPECIALIST_WEIGHTS: WeightProfile = {
+  indicators: 0.20,
+  ats: 0.25,
+  recruiterUX: 0.20,
+  pmIntelligence: 0.35,
+}
+
+/**
+ * Scenario B — General / Non-Product Roles (The Professional)
+ * PM Intelligence drops to 5% — focus on ATS readability, recruiter clarity,
+ * and standard industry keywords. PM jargon should NOT dominate.
+ */
+const GENERAL_PROFESSIONAL_WEIGHTS: WeightProfile = {
+  indicators: 0.30,
+  ats: 0.35,
+  recruiterUX: 0.30,
+  pmIntelligence: 0.05,
+}
+
+/**
+ * Get the appropriate weight profile for a given job title.
+ * - Product roles → PM Specialist weights (PM Intelligence at 35%)
+ * - Non-product roles → General Professional weights (PM Intelligence at 5%)
+ * - No job title → Default balanced weights
+ */
+export function getWeightsForRole(jobTitle?: string): WeightProfile {
+  if (!jobTitle || jobTitle.trim().length === 0) return STAGE_WEIGHTS
+  return isProductRole(jobTitle) ? PM_SPECIALIST_WEIGHTS : GENERAL_PROFESSIONAL_WEIGHTS
+}
 
 // ---------------------------------------------------------------------------
 // Stage 1 — Indicator Scan
@@ -223,9 +291,10 @@ export function analyzeATS(text: string): StageScore {
 // Stage 3 — Recruiter UX ("Tired Recruiter at 4 PM" Lens)
 // ---------------------------------------------------------------------------
 
-export function analyzeRecruiterUX(text: string): StageScore {
+export function analyzeRecruiterUX(text: string, jobTitle?: string): StageScore {
   const details: string[] = []
   let raw = 0
+  const isNonPM = jobTitle ? !isProductRole(jobTitle) : false
 
   // Scan-ability: Can the key achievement be understood in <5 seconds? (0-30)
   // Heuristic: first 8 words should contain a verb and hint at impact
@@ -281,20 +350,38 @@ export function analyzeRecruiterUX(text: string): StageScore {
   }
 
   // Jargon density — too much jargon is bad for non-technical recruiters (0-15)
-  const jargonTerms = [
+  const techJargonTerms = [
     'api', 'sdk', 'cicd', 'ci/cd', 'kubernetes', 'docker',
     'terraform', 'graphql', 'microservices', 'monorepo',
   ]
+  const pmJargonTerms = [
+    'rice', 'okr', 'aarrr', 'north star', 'kano',
+    'roadmap', 'backlog', 'sprint', 'stakeholder',
+    'cross-functional', 'prioritization framework',
+  ]
   const lower = text.toLowerCase()
-  const jargonCount = jargonTerms.filter(j => lower.includes(j)).length
-  if (jargonCount <= 1) {
+  const techJargonCount = techJargonTerms.filter(j => lower.includes(j)).length
+  // For non-PM roles, PM jargon is also confusing to industry-specific recruiters
+  const pmJargonCount = isNonPM ? pmJargonTerms.filter(j => lower.includes(j)).length : 0
+  const totalJargonCount = techJargonCount + pmJargonCount
+
+  if (totalJargonCount === 0) {
     raw += 15
     details.push('Jargon-light — accessible to non-technical recruiters')
-  } else if (jargonCount <= 2) {
-    raw += 8
+  } else if (totalJargonCount <= 1) {
+    raw += 10
+    details.push('Minimal jargon — mostly accessible')
+  } else if (totalJargonCount <= 2) {
+    raw += 5
     details.push('Moderate jargon — consider simplifying for broader audiences')
   } else {
-    details.push('Heavy jargon — may lose non-technical recruiters')
+    // Heavy jargon: actively penalise (subtract from raw score)
+    raw -= Math.min(totalJargonCount * 5, 15)
+    if (pmJargonCount > 0 && isNonPM) {
+      details.push(`PM jargon inappropriate for ${jobTitle} role — recruiter will be confused`)
+    } else {
+      details.push('Heavy jargon — may lose non-technical recruiters')
+    }
   }
 
   // Uniqueness / Specificity — generic bullets score lower (0-10)
@@ -339,23 +426,24 @@ export function analyzePMStage(text: string): StageScore {
 
 /**
  * Run the complete 4-stage analysis on a single CV bullet point.
- *
- * Stage 1 (Cold Indicators): 20% weight — raw keywords & sub-indicators
- * Stage 2 (ATS Robot):       30% weight — machine-readability & structure
- * Stage 3 (Recruiter UX):    20% weight — "Tired Recruiter at 4 PM" scan-ability
- * Stage 4 (PM Intelligence): 30% weight — 10 PM principles scoring
+ * When `jobTitle` is provided, weights are dynamically adjusted:
+ *   - Product roles → PM Specialist (PM Intelligence 35%)
+ *   - Non-product roles → General Professional (PM Intelligence 5%)
+ *   - No job title → Default balanced weights
  */
-export function analyzeCVContent(text: string): FourStageAnalysis {
+export function analyzeCVContent(text: string, jobTitle?: string): FourStageAnalysis {
   const indicators = analyzeIndicators(text)
   const ats = analyzeATS(text)
-  const recruiterUX = analyzeRecruiterUX(text)
+  const recruiterUX = analyzeRecruiterUX(text, jobTitle)
   const pmIntelligence = analyzePMStage(text)
 
+  const weights = getWeightsForRole(jobTitle)
+
   const totalScore = Math.round(
-    indicators.score * STAGE_WEIGHTS.indicators +
-    ats.score * STAGE_WEIGHTS.ats +
-    recruiterUX.score * STAGE_WEIGHTS.recruiterUX +
-    pmIntelligence.score * STAGE_WEIGHTS.pmIntelligence
+    indicators.score * weights.indicators +
+    ats.score * weights.ats +
+    recruiterUX.score * weights.recruiterUX +
+    pmIntelligence.score * weights.pmIntelligence
   )
 
   return { indicators, ats, recruiterUX, pmIntelligence, totalScore }
@@ -377,13 +465,16 @@ const STAGE_NAMES: Record<string, string> = {
  * Runs the full 4-stage pipeline on both and picks the winner.
  * When the tailored version is rejected, `rejectionReasons` lists
  * every stage where the tailored score dropped below the original.
+ *
+ * When `jobTitle` is provided, uses context-aware dynamic weighting.
  */
 export function arbitrateBullet(
   originalBullet: string,
-  tailoredBullet: string
+  tailoredBullet: string,
+  jobTitle?: string
 ): ArbiterDecision {
-  const originalAnalysis = analyzeCVContent(originalBullet)
-  const tailoredAnalysis = analyzeCVContent(tailoredBullet)
+  const originalAnalysis = analyzeCVContent(originalBullet, jobTitle)
+  const tailoredAnalysis = analyzeCVContent(tailoredBullet, jobTitle)
   const scoreDelta = tailoredAnalysis.totalScore - originalAnalysis.totalScore
 
   // Build per-stage drop details
@@ -417,15 +508,20 @@ export function arbitrateBullet(
  *
  * For each bullet pair (original vs tailored):
  *   1. Runs the full 4-stage analysis on BOTH versions
- *   2. Compares weighted total scores
+ *   2. Compares weighted total scores (context-aware if jobTitle provided)
  *   3. If tailoredScore < originalScore → reverts to the original
  *   4. Otherwise → keeps the tailored version
+ *
+ * When `jobTitle` is provided, weights adapt dynamically:
+ *   - Product roles → PM Specialist profile (PM Intelligence 35%)
+ *   - Non-product roles → General Professional profile (PM Intelligence 5%)
  *
  * Guarantees: The final optimised CV will have a total score >= the original.
  */
 export function scoreArbiter(
   originalBullets: string[],
-  tailoredBullets: string[]
+  tailoredBullets: string[],
+  jobTitle?: string
 ): ArbiterResult {
   // Handle mismatched lengths: pair up what we can, keep originals for extras
   const maxLen = Math.max(originalBullets.length, tailoredBullets.length)
@@ -437,8 +533,8 @@ export function scoreArbiter(
 
     if (!original && tailored) {
       // New bullet added by tailoring — only keep if it scores > 0
-      const tailoredAnalysis = analyzeCVContent(tailored)
-      const emptyAnalysis = analyzeCVContent('')
+      const tailoredAnalysis = analyzeCVContent(tailored, jobTitle)
+      const emptyAnalysis = analyzeCVContent('', jobTitle)
       decisions.push({
         bullet: tailored,
         winner: 'tailored',
@@ -448,7 +544,7 @@ export function scoreArbiter(
         rejectionReasons: [],
       })
     } else {
-      decisions.push(arbitrateBullet(original, tailored))
+      decisions.push(arbitrateBullet(original, tailored, jobTitle))
     }
   }
 
@@ -550,31 +646,62 @@ WHAT YOU NEVER DO:
  * Analyze user's CV bullet points or interview answers.
  * Returns a score, strengths summary, suggestions, and missing principles.
  * Feedback uses Siggy's warm, encouraging voice.
+ *
+ * When `jobTitle` is provided and is NOT a product role, the feedback
+ * softens PM jargon and focuses on universal professional advice instead.
  */
-export function analyzePMContent(userText: string) {
+export function analyzePMContent(userText: string, jobTitle?: string) {
   const analysis = analyzeWithPMPrinciples(userText)
+  const productRole = jobTitle ? isProductRole(jobTitle) : true
 
-  // Siggy's voice: encouraging at every level, insider framing
+  // Siggy's voice adapts: PM insider framing for product roles,
+  // professional coaching for everyone else
   let strengths: string
-  if (analysis.score >= 80) {
-    strengths = 'This reads like a seasoned PM wrote it. Really strong framing.'
-  } else if (analysis.score >= 60) {
-    strengths = 'Solid foundation here. A few insider tricks could take this to the next level.'
-  } else if (analysis.score >= 40) {
-    strengths = "Good start — I see some PM thinking in here. Let's sharpen it together."
+  if (productRole) {
+    if (analysis.score >= 80) {
+      strengths = 'This reads like a seasoned PM wrote it. Really strong framing.'
+    } else if (analysis.score >= 60) {
+      strengths = 'Solid foundation here. A few insider tricks could take this to the next level.'
+    } else if (analysis.score >= 40) {
+      strengths = "Good start — I see some PM thinking in here. Let's sharpen it together."
+    } else {
+      strengths = "Great that you're writing this out. I have a few tricks that could really level this up."
+    }
   } else {
-    strengths = "Great that you're writing this out. I have a few tricks that could really level this up."
+    // Non-PM: universal professional coaching — no PM jargon
+    if (analysis.score >= 80) {
+      strengths = 'This is really well written. Clear impact and strong professional framing.'
+    } else if (analysis.score >= 60) {
+      strengths = 'Good foundation here. A few tweaks could make this stand out even more.'
+    } else if (analysis.score >= 40) {
+      strengths = "Nice start — I can see the experience coming through. Let's make it shine."
+    } else {
+      strengths = "Great that you're putting this together. I have a few tips to make it really stand out."
+    }
   }
+
+  // Filter suggestions: for non-PM roles, translate PM-specific advice to universal language
+  const suggestions = productRole
+    ? analysis.suggestions
+    : analysis.suggestions.map(s =>
+        s.replace(/PM principles/gi, 'professional best practices')
+         .replace(/cross-functional/gi, 'across teams')
+         .replace(/stakeholder/gi, 'key people')
+      )
 
   return {
     score: analysis.score,
     feedback: {
       strengths,
-      suggestions: analysis.suggestions,
+      suggestions,
       missingPrinciples: analysis.missingPrinciples.map((p) => ({
         id: p.id,
         name: p.name,
-        howToApply: p.applicationTips[0],
+        howToApply: productRole
+          ? p.applicationTips[0]
+          : p.applicationTips[0]
+              .replace(/PM/g, 'professional')
+              .replace(/product/gi, 'work'),
       })),
     },
   }
@@ -625,4 +752,4 @@ export {
   getPrinciplesForContext,
 }
 
-export { STAGE_WEIGHTS }
+export { STAGE_WEIGHTS, PM_SPECIALIST_WEIGHTS, GENERAL_PROFESSIONAL_WEIGHTS }
