@@ -746,6 +746,218 @@ What part would you like to flesh out first?`
 }
 
 // ---------------------------------------------------------------------------
+// Indicator Detail Analysis — sub-indicators, evidence, and action items
+// ---------------------------------------------------------------------------
+
+export interface SubIndicator {
+  /** Sub-criterion name (e.g., "Metric Usage") */
+  name: string
+  /** Score 0-10 for this sub-criterion */
+  score: number
+  /** Max possible score */
+  maxScore: number
+}
+
+export interface EvidenceHighlight {
+  /** The bullet text excerpt that contributed to this score */
+  text: string
+  /** Whether this is positive evidence or needs improvement */
+  sentiment: 'positive' | 'needs-work'
+}
+
+export interface IndicatorDetail {
+  /** Principle ID this detail belongs to */
+  principleId: string
+  /** 3-5 sub-indicators with individual scores */
+  subIndicators: SubIndicator[]
+  /** 2-3 evidence highlights from the user's CV */
+  evidence: EvidenceHighlight[]
+  /** Siggy's specific one-sentence action item to reach 10/10 */
+  actionItem: string
+}
+
+// Sub-indicator definitions per principle
+const PRINCIPLE_SUB_INDICATORS: Record<string, { name: string; keywords: string[]; weight: number }[]> = {
+  'outcome-over-output': [
+    { name: 'Result Language', keywords: ['increased', 'improved', 'reduced', 'achieved', 'resulted', 'enabled', 'generated'], weight: 3 },
+    { name: 'Before/After Contrast', keywords: ['from', 'to', 'before', 'after', 'previously', 'now'], weight: 2 },
+    { name: 'Business Connection', keywords: ['revenue', 'growth', 'retention', 'efficiency', 'adoption', 'engagement'], weight: 3 },
+    { name: '"So What?" Closure', keywords: ['resulting in', 'leading to', 'which led', 'thereby', 'enabling'], weight: 2 },
+  ],
+  'data-driven-decisions': [
+    { name: 'Metric Usage', keywords: ['%', '$', 'kpi', 'metric', 'nps', 'csat', 'arr', 'mrr'], weight: 3 },
+    { name: 'Outcome Alignment', keywords: ['improved', 'increased', 'reduced', 'optimized', 'achieved'], weight: 2 },
+    { name: 'Methodology', keywords: ['a/b', 'test', 'experiment', 'analysis', 'analytics', 'measured', 'tracked'], weight: 3 },
+    { name: 'Scale Accuracy', keywords: ['users', 'customers', 'transactions', 'sessions', 'people', 'teams'], weight: 2 },
+  ],
+  'user-centricity': [
+    { name: 'User Mention', keywords: ['user', 'customer', 'client', 'patient', 'people', 'persona'], weight: 3 },
+    { name: 'Pain Point Framing', keywords: ['pain point', 'struggle', 'challenge', 'need', 'frustration', 'problem'], weight: 2 },
+    { name: 'Research Methods', keywords: ['interview', 'survey', 'usability', 'feedback', 'research', 'insights'], weight: 3 },
+    { name: 'User Impact Metric', keywords: ['satisfaction', 'nps', 'adoption', 'engagement', 'retention', 'experience'], weight: 2 },
+  ],
+  'strategic-thinking': [
+    { name: 'Vision & Direction', keywords: ['strategy', 'strategic', 'vision', 'long-term', 'mission'], weight: 3 },
+    { name: 'Prioritization', keywords: ['prioriti', 'roadmap', 'trade-off', 'decision', 'framework', 'rice'], weight: 3 },
+    { name: 'Market Awareness', keywords: ['market', 'competitive', 'competitor', 'industry', 'trend', 'opportunity'], weight: 2 },
+    { name: 'Business Alignment', keywords: ['alignment', 'aligned', 'initiative', 'objective', 'goal', 'okr'], weight: 2 },
+  ],
+  'cross-functional-leadership': [
+    { name: 'Team Breadth', keywords: ['cross-functional', 'engineering', 'design', 'marketing', 'sales', 'operations'], weight: 3 },
+    { name: 'Leadership Signal', keywords: ['led', 'drove', 'spearheaded', 'orchestrated', 'managed', 'directed'], weight: 3 },
+    { name: 'Stakeholder Alignment', keywords: ['stakeholder', 'aligned', 'consensus', 'buy-in', 'c-suite', 'executive'], weight: 2 },
+    { name: 'Team Scale', keywords: ['team of', 'engineers', 'members', 'people', 'direct reports'], weight: 2 },
+  ],
+  'problem-solving': [
+    { name: 'Problem Framing', keywords: ['problem', 'challenge', 'issue', 'bottleneck', 'gap', 'blocker'], weight: 3 },
+    { name: 'Diagnosis Method', keywords: ['root cause', 'diagnosed', 'identified', 'analyzed', '5 whys', 'investigation'], weight: 3 },
+    { name: 'Solution Evaluation', keywords: ['evaluated', 'alternative', 'option', 'approach', 'solution', 'resolved'], weight: 2 },
+    { name: 'Outcome Proof', keywords: ['resolved', 'fixed', 'eliminated', 'reduced', 'solved', 'improved'], weight: 2 },
+  ],
+  'iterative-development': [
+    { name: 'MVP / Scoping', keywords: ['mvp', 'prototype', 'pilot', 'beta', 'scope', 'minimal'], weight: 3 },
+    { name: 'Iteration Cycles', keywords: ['iterated', 'iteration', 'version', 'v2', 'refined', 'improved'], weight: 2 },
+    { name: 'Speed Signal', keywords: ['sprint', 'agile', 'shipped', 'launched', 'week', 'rapid'], weight: 3 },
+    { name: 'Learning Loop', keywords: ['learned', 'feedback', 'tested', 'experiment', 'validated', 'adapted'], weight: 2 },
+  ],
+  'communication-storytelling': [
+    { name: 'Presentation Skill', keywords: ['presented', 'communicated', 'pitch', 'demo', 'all-hands', 'board'], weight: 3 },
+    { name: 'Audience Tailoring', keywords: ['executive', 'stakeholder', 'team', 'engineering', 'non-technical', 'customer'], weight: 2 },
+    { name: 'Narrative Structure', keywords: ['narrative', 'story', 'vision', 'case study', 'report', 'prd'], weight: 3 },
+    { name: 'Action Driven', keywords: ['buy-in', 'approved', 'secured', 'convinced', 'influenced', 'aligned'], weight: 2 },
+  ],
+  'technical-aptitude': [
+    { name: 'System Knowledge', keywords: ['platform', 'api', 'infrastructure', 'system', 'architecture', 'database'], weight: 3 },
+    { name: 'Technical Decisions', keywords: ['technical', 'trade-off', 'scalab', 'performance', 'reliability', 'latency'], weight: 3 },
+    { name: 'Tooling Reference', keywords: ['integration', 'pipeline', 'deployment', 'automation', 'monitoring', 'ci/cd'], weight: 2 },
+    { name: 'Eng Collaboration', keywords: ['engineering', 'engineer', 'developer', 'architect', 'feasibility'], weight: 2 },
+  ],
+  'business-acumen': [
+    { name: 'Revenue Impact', keywords: ['revenue', 'profit', 'arr', 'mrr', '$', 'monetization', 'pricing'], weight: 3 },
+    { name: 'Growth Metrics', keywords: ['growth', 'acquisition', 'conversion', 'churn', 'ltv', 'retention'], weight: 3 },
+    { name: 'ROI / Efficiency', keywords: ['roi', 'cost', 'savings', 'efficiency', 'budget', 'margin'], weight: 2 },
+    { name: 'Market Dynamics', keywords: ['market', 'competitive', 'positioning', 'segment', 'opportunity'], weight: 2 },
+  ],
+}
+
+// Action items per principle per score range
+const PRINCIPLE_ACTION_ITEMS: Record<string, { high: string; mid: string; low: string }> = {
+  'outcome-over-output': {
+    high: 'Add a "before vs after" contrast to your strongest bullet to make the transformation even more vivid.',
+    mid: 'Rewrite your top bullet using the formula: "[Action verb] [what you did], resulting in [specific metric]."',
+    low: 'Pick your biggest achievement and answer: "What changed because of my work?" — that answer IS your bullet.',
+  },
+  'data-driven-decisions': {
+    high: 'Mention the specific tool or method you used to gather data (e.g., "using Mixpanel analytics" or "through A/B testing").',
+    mid: 'Add at least one concrete number to each bullet — even "5 stakeholders" or "3 iterations" counts.',
+    low: 'Start one bullet with: "Analyzed [data source] to discover [insight], leading to [action] that improved [metric] by [X%]."',
+  },
+  'user-centricity': {
+    high: 'Name the specific user segment (e.g., "enterprise customers" or "first-time mobile users") instead of generic "users".',
+    mid: 'Add how you gathered user insights — even "based on 50+ customer support tickets" shows user awareness.',
+    low: 'Answer this in your strongest bullet: "Who specifically benefited from my work, and what was their pain point?"',
+  },
+  'strategic-thinking': {
+    high: 'Reference a specific framework or trade-off decision to show your strategic process, not just the outcome.',
+    mid: 'Connect one bullet to a larger business objective: "...aligned with the company\'s goal to expand into [market]."',
+    low: 'Add "prioritized X over Y because [strategic reason]" to show you think beyond the immediate task.',
+  },
+  'cross-functional-leadership': {
+    high: 'Add the team scale (e.g., "team of 12 across 4 departments") to quantify the collaboration scope.',
+    mid: 'Replace "worked with" with "led" or "aligned" to signal leadership, even if your title wasn\'t "lead".',
+    low: 'Add one bullet that mentions at least two different teams you worked with and the outcome you achieved together.',
+  },
+  'problem-solving': {
+    high: 'Mention one alternative you considered and why you chose your approach — this shows analytical depth.',
+    mid: 'Frame one bullet as "Identified [problem] through [method], then [solution] resulting in [outcome]."',
+    low: 'Start a bullet with the challenge first: "Faced [X problem] and solved it by [approach], reducing [metric] by [Y%]."',
+  },
+  'iterative-development': {
+    high: 'Add a "shipped in X weeks" timeline to showcase speed alongside quality.',
+    mid: 'Mention a learning you took from v1 to v2: "Based on beta feedback, iterated to improve [metric] by [X%]."',
+    low: 'Add one reference to shipping fast: "Launched MVP in [timeframe]" or "Ran [N] iteration cycles."',
+  },
+  'communication-storytelling': {
+    high: 'Mention the audience size or seniority: "Presented to 200+ at all-hands" or "Secured C-suite approval."',
+    mid: 'Use the Action → Method → Outcome structure consistently: it makes every bullet tell a complete story.',
+    low: 'Add one bullet about presenting, writing, or communicating that led to a concrete decision or approval.',
+  },
+  'technical-aptitude': {
+    high: 'Show a technical trade-off you navigated: "Chose X over Y for [performance/scalability reason]."',
+    mid: 'Name the specific platform, tool, or technology you used — even "using our REST API" adds credibility.',
+    low: 'Mention one technical context: the system you worked with, the tool you evaluated, or the constraint you managed.',
+  },
+  'business-acumen': {
+    high: 'Add a revenue timeline: "$X ARR generated in first [N] months" makes the business impact concrete.',
+    mid: 'Connect one achievement to a business metric: revenue, cost savings, conversion rate, or customer LTV.',
+    low: 'End your strongest bullet with a business result: "...saving $X per quarter" or "...growing revenue by Y%."',
+  },
+}
+
+/**
+ * Analyze a principle in detail: produces sub-indicator scores,
+ * evidence highlights from specific bullets, and a targeted action item.
+ *
+ * This powers the accordion detail view in the CV Analysis Dashboard.
+ */
+export function analyzeIndicatorDetail(
+  principleId: string,
+  bullets: string[],
+  overallScore: number
+): IndicatorDetail {
+  const subDefs = PRINCIPLE_SUB_INDICATORS[principleId] || []
+  const lower = bullets.map(b => b.toLowerCase())
+  const combined = lower.join(' ')
+
+  // Score each sub-indicator
+  const subIndicators: SubIndicator[] = subDefs.map(sub => {
+    const hits = sub.keywords.filter(kw => combined.includes(kw)).length
+    const maxHits = Math.max(sub.keywords.length * 0.4, 1)
+    const raw = Math.min(Math.round((hits / maxHits) * 10), 10)
+    return { name: sub.name, score: raw, maxScore: 10 }
+  })
+
+  // Extract evidence highlights — find bullets that match this principle's keywords
+  const allKeywords = subDefs.flatMap(s => s.keywords)
+  const evidence: EvidenceHighlight[] = []
+
+  for (const bullet of bullets) {
+    if (evidence.length >= 3) break
+    if (bullet.trim().length < 10) continue
+
+    const bl = bullet.toLowerCase()
+    const matchCount = allKeywords.filter(kw => bl.includes(kw)).length
+
+    if (matchCount >= 2) {
+      evidence.push({ text: bullet.trim(), sentiment: 'positive' })
+    } else if (matchCount === 0 && evidence.length < 2) {
+      // This bullet has no signal for this principle — it needs work
+      evidence.push({ text: bullet.trim(), sentiment: 'needs-work' })
+    }
+  }
+
+  // If we found no positive evidence, grab the best available bullet as needs-work
+  if (evidence.length === 0 && bullets.length > 0) {
+    const best = bullets.find(b => b.trim().length >= 10) || bullets[0]
+    if (best) evidence.push({ text: best.trim(), sentiment: 'needs-work' })
+  }
+
+  // Select action item based on score
+  const actions = PRINCIPLE_ACTION_ITEMS[principleId] || {
+    high: 'Continue refining this area — small details compound.',
+    mid: 'Focus on adding one concrete example or metric.',
+    low: 'Start by answering "What changed because of my work?" for this dimension.',
+  }
+
+  let actionItem: string
+  if (overallScore >= 7) actionItem = actions.high
+  else if (overallScore >= 4) actionItem = actions.mid
+  else actionItem = actions.low
+
+  return { principleId, subIndicators, evidence, actionItem }
+}
+
+// ---------------------------------------------------------------------------
 // Gap Identification — surfaces competency gaps as mentoring questions
 // ---------------------------------------------------------------------------
 

@@ -79,6 +79,7 @@ export {
   getWeightsForRole,
   identifyGaps,
   draftGapAnswer,
+  analyzeIndicatorDetail,
   STAGE_WEIGHTS,
   PM_SPECIALIST_WEIGHTS,
   GENERAL_PROFESSIONAL_WEIGHTS,
@@ -90,4 +91,7 @@ export {
   type ArbiterResult,
   type GapQuestion,
   type GapAnalysisResult,
+  type SubIndicator,
+  type EvidenceHighlight,
+  type IndicatorDetail,
 } from './siggy-integration-guide'

@@ -26,6 +26,7 @@ import {
   scoreArbiter,
   PM_CORE_PRINCIPLES,
   analyzeWithPMPrinciples,
+  analyzeIndicatorDetail,
   isProductRole,
   getWeightsForRole,
   type FourStageAnalysis,
@@ -163,7 +164,8 @@ function mapAnalysisToIndicators(
   originalAnalysis: FourStageAnalysis,
   optimizedAnalysis: FourStageAnalysis,
   originalText: string,
-  optimizedText: string
+  optimizedText: string,
+  optimizedBullets: string[]
 ): AnalysisMapped {
   const principleScores = PM_CORE_PRINCIPLES.map((principle) => {
     const baseScore = scorePrincipleInText(originalText, principle.id)
@@ -178,14 +180,20 @@ function mapAnalysisToIndicators(
     fullMark: 10,
   }))
 
-  const indicators: IndicatorItem[] = principleScores.map(p => ({
-    id: p.id,
-    name: p.name,
-    score: p.tailored,
-    baseScore: p.base,
-    maxScore: 10,
-    insight: generateSiggyInsight(p.id, p.tailored),
-  }))
+  const indicators: IndicatorItem[] = principleScores.map(p => {
+    const detail = analyzeIndicatorDetail(p.id, optimizedBullets, p.tailored)
+    return {
+      id: p.id,
+      name: p.name,
+      score: p.tailored,
+      baseScore: p.base,
+      maxScore: 10,
+      insight: generateSiggyInsight(p.id, p.tailored),
+      subIndicators: detail.subIndicators,
+      evidence: detail.evidence,
+      actionItem: detail.actionItem,
+    }
+  })
 
   const overallOriginal = originalAnalysis.totalScore
   const overallOptimized = optimizedAnalysis.totalScore
@@ -418,7 +426,8 @@ export default function CVAnalysisDashboard() {
       originalAnalysis,
       optimizedAnalysis,
       originalCombined,
-      optimizedCombined
+      optimizedCombined,
+      arbiterResult.optimisedBullets
     )
 
     return {
