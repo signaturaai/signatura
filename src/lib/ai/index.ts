@@ -85,6 +85,7 @@ export {
   detectGapClosures,
   analyzeTailoringPair,
   generateApplicationStrategy,
+  analyzeNarrativeGap,
   STAGE_WEIGHTS,
   PM_SPECIALIST_WEIGHTS,
   GENERAL_PROFESSIONAL_WEIGHTS,
@@ -105,4 +106,9 @@ export {
   type StrategicPillar,
   type TalkingPoint,
   type ApplicationStrategy,
+  type SeniorityLevel,
+  type CoreStrength,
+  type NarrativeProfile,
+  type NarrativeEvidence,
+  type NarrativeAnalysisResult,
 } from './siggy-integration-guide'
