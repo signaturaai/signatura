@@ -26,6 +26,8 @@ import {
   TrendingDown,
   Minus,
   Sparkles,
+  Zap,
+  Star,
 } from 'lucide-react'
 import type { KeywordMatch, GapClosure } from '@/lib/ai/siggy-integration-guide'
 
@@ -47,6 +49,16 @@ export interface TailoringCardProps {
   onEditSuggestion: (index: number, newText: string) => void
   onResync: (index: number) => void
   isResyncing?: boolean
+  /** Narrative boost delta (0-100), present when narrative profile is active */
+  narrativeBoost?: number
+  /** Human-readable narrative boost label (e.g., "Boosts Strategic Signal") */
+  narrativeBoostLabel?: string
+  /** Whether this bullet is a narrative "Top Pick" */
+  isNarrativeTopPick?: boolean
+  /** Narrative match % for the suggested bullet */
+  narrativeMatchPercent?: number
+  /** Narrative match % for the original bullet */
+  originalNarrativePercent?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -141,6 +153,11 @@ export function TailoringCard({
   onEditSuggestion,
   onResync,
   isResyncing = false,
+  narrativeBoost,
+  narrativeBoostLabel,
+  isNarrativeTopPick,
+  narrativeMatchPercent,
+  originalNarrativePercent,
 }: TailoringCardProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editText, setEditText] = useState(suggestedBullet)
@@ -200,6 +217,22 @@ export function TailoringCard({
             </div>
           )}
 
+          {/* Narrative Boost badge */}
+          {narrativeBoostLabel && narrativeBoost !== undefined && narrativeBoost > 0 && (
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 flex items-center gap-1">
+              <Zap className="w-2.5 h-2.5" />
+              {narrativeBoostLabel}
+            </span>
+          )}
+
+          {/* Top Pick indicator */}
+          {isNarrativeTopPick && (
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+              <Star className="w-2.5 h-2.5" />
+              Top Pick
+            </span>
+          )}
+
           {matchedKeywords.length > 0 && (
             <span className="text-[10px] font-medium text-indigo-500">
               {matchedKeywords.length} keyword{matchedKeywords.length !== 1 ? 's' : ''} matched
@@ -252,9 +285,16 @@ export function TailoringCard({
             <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
               Original
             </span>
-            <span className="text-[10px] font-bold text-gray-400 tabular-nums">
-              {originalScore}/100
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold text-gray-400 tabular-nums">
+                {originalScore}/100
+              </span>
+              {originalNarrativePercent !== undefined && (
+                <span className="text-[10px] font-medium text-gray-300 tabular-nums" title="Narrative alignment">
+                  N:{originalNarrativePercent}%
+                </span>
+              )}
+            </div>
           </div>
           <p className="text-sm text-gray-600 leading-relaxed">
             {originalBullet}
@@ -272,6 +312,15 @@ export function TailoringCard({
               <span className="text-[10px] font-bold text-indigo-500 tabular-nums">
                 {suggestedScore}/100
               </span>
+              {narrativeMatchPercent !== undefined && (
+                <span className={cn(
+                  'text-[10px] font-medium tabular-nums',
+                  narrativeBoost !== undefined && narrativeBoost > 0 ? 'text-amber-600' : 'text-indigo-300'
+                )} title="Narrative alignment">
+                  N:{narrativeMatchPercent}%
+                  {narrativeBoost !== undefined && narrativeBoost > 0 && ` (+${narrativeBoost})`}
+                </span>
+              )}
               {!isEditing && (
                 <button
                   onClick={handleStartEdit}
