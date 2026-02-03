@@ -84,6 +84,7 @@ export {
   findKeywordMatches,
   detectGapClosures,
   analyzeTailoringPair,
+  generateApplicationStrategy,
   STAGE_WEIGHTS,
   PM_SPECIALIST_WEIGHTS,
   GENERAL_PROFESSIONAL_WEIGHTS,
@@ -101,4 +102,7 @@ export {
   type KeywordMatch,
   type GapClosure,
   type TailoringAnalysis,
+  type StrategicPillar,
+  type TalkingPoint,
+  type ApplicationStrategy,
 } from './siggy-integration-guide'
