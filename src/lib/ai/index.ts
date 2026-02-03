@@ -80,6 +80,10 @@ export {
   identifyGaps,
   draftGapAnswer,
   analyzeIndicatorDetail,
+  extractJobKeywords,
+  findKeywordMatches,
+  detectGapClosures,
+  analyzeTailoringPair,
   STAGE_WEIGHTS,
   PM_SPECIALIST_WEIGHTS,
   GENERAL_PROFESSIONAL_WEIGHTS,
@@ -94,4 +98,7 @@ export {
   type SubIndicator,
   type EvidenceHighlight,
   type IndicatorDetail,
+  type KeywordMatch,
+  type GapClosure,
+  type TailoringAnalysis,
 } from './siggy-integration-guide'

@@ -746,6 +746,191 @@ What part would you like to flesh out first?`
 }
 
 // ---------------------------------------------------------------------------
+// Tailoring Editor — keyword extraction, gap detection for bullet cards
+// ---------------------------------------------------------------------------
+
+export interface KeywordMatch {
+  /** The keyword text */
+  keyword: string
+  /** Start index in the bullet text */
+  startIndex: number
+  /** End index in the bullet text */
+  endIndex: number
+}
+
+export interface GapClosure {
+  /** Gap principle name that this bullet closes */
+  gapName: string
+  /** Principle ID */
+  principleId: string
+}
+
+export interface TailoringAnalysis {
+  /** Keywords from the job description found in the suggested bullet */
+  matchedKeywords: KeywordMatch[]
+  /** Gaps that this suggested bullet helps close */
+  gapsClosing: GapClosure[]
+  /** Score delta between original and suggested */
+  scoreDelta: number
+  /** Original bullet score (0-100) */
+  originalScore: number
+  /** Suggested bullet score (0-100) */
+  suggestedScore: number
+}
+
+/**
+ * Extract meaningful keywords from a job description.
+ * Returns unique multi-word and single-word phrases that are
+ * likely to be ATS-relevant.
+ */
+export function extractJobKeywords(jobDescription: string): string[] {
+  if (!jobDescription || jobDescription.trim().length === 0) return []
+
+  const lower = jobDescription.toLowerCase()
+  const keywords: Set<string> = new Set()
+
+  // Multi-word phrases (2-3 words that appear meaningful)
+  const multiWordPatterns = [
+    /\b(computer vision|machine learning|deep learning|natural language|data science)\b/gi,
+    /\b(project management|product management|business intelligence|user experience)\b/gi,
+    /\b(a\/b testing|root cause|cross.functional|full.stack|end.to.end)\b/gi,
+    /\b(kpi tracking|data.driven|customer.facing|revenue growth|cost reduction)\b/gi,
+    /\b(agile methodology|scrum master|design thinking|lean startup)\b/gi,
+    /\b(stakeholder management|budget management|team leadership|strategic planning)\b/gi,
+  ]
+
+  for (const pattern of multiWordPatterns) {
+    const matches = jobDescription.match(pattern) || []
+    matches.forEach(m => keywords.add(m.toLowerCase().trim()))
+  }
+
+  // Single-word technical and business keywords
+  const singleKeywordList = [
+    'python', 'javascript', 'typescript', 'react', 'node', 'sql', 'aws', 'gcp',
+    'azure', 'docker', 'kubernetes', 'api', 'rest', 'graphql', 'saas', 'b2b', 'b2c',
+    'analytics', 'metrics', 'roadmap', 'strategy', 'prioritization', 'okr', 'kpi',
+    'revenue', 'growth', 'retention', 'conversion', 'engagement', 'acquisition',
+    'scrum', 'agile', 'sprint', 'backlog', 'jira', 'confluence', 'figma',
+    'tableau', 'looker', 'amplitude', 'mixpanel', 'segment',
+    'leadership', 'collaboration', 'innovation', 'optimization', 'scalability',
+    'compliance', 'governance', 'automation', 'integration', 'pipeline',
+    'budget', 'forecast', 'audit', 'regulatory', 'certification',
+  ]
+
+  for (const kw of singleKeywordList) {
+    if (lower.includes(kw)) keywords.add(kw)
+  }
+
+  // Extract capitalized terms from the JD that look like proper nouns / tools
+  const capitalizedTerms = jobDescription.match(/\b[A-Z][a-zA-Z]{2,}(?:\s+[A-Z][a-zA-Z]+)?\b/g) || []
+  for (const term of capitalizedTerms) {
+    const tl = term.toLowerCase()
+    // Skip common words
+    if (['the', 'and', 'for', 'with', 'our', 'you', 'will', 'are', 'this', 'that', 'from', 'have', 'been'].includes(tl)) continue
+    if (term.length >= 3) keywords.add(tl)
+  }
+
+  return Array.from(keywords).sort((a, b) => b.length - a.length) // longest first for matching
+}
+
+/**
+ * Find keyword matches in a bullet text.
+ * Returns matches with their positions for highlighting.
+ */
+export function findKeywordMatches(text: string, keywords: string[]): KeywordMatch[] {
+  const matches: KeywordMatch[] = []
+  const lower = text.toLowerCase()
+
+  for (const keyword of keywords) {
+    let searchFrom = 0
+    const kl = keyword.toLowerCase()
+    while (searchFrom < lower.length) {
+      const idx = lower.indexOf(kl, searchFrom)
+      if (idx === -1) break
+
+      // Check word boundary (avoid matching inside words)
+      const charBefore = idx > 0 ? lower[idx - 1] : ' '
+      const charAfter = idx + kl.length < lower.length ? lower[idx + kl.length] : ' '
+      const isWordBoundary = /[\s,.;:!?()[\]{}\/\-]/.test(charBefore) || idx === 0
+      const isEndBoundary = /[\s,.;:!?()[\]{}\/\-]/.test(charAfter) || idx + kl.length === lower.length
+
+      if (isWordBoundary && isEndBoundary) {
+        // Check no overlap with existing matches
+        const overlaps = matches.some(
+          m => (idx >= m.startIndex && idx < m.endIndex) || (idx + kl.length > m.startIndex && idx + kl.length <= m.endIndex)
+        )
+        if (!overlaps) {
+          matches.push({
+            keyword: text.substring(idx, idx + kl.length), // preserve original casing
+            startIndex: idx,
+            endIndex: idx + kl.length,
+          })
+        }
+      }
+      searchFrom = idx + 1
+    }
+  }
+
+  return matches.sort((a, b) => a.startIndex - b.startIndex)
+}
+
+/**
+ * Detect which competency gaps a suggested bullet helps close.
+ * Compares the suggested bullet's principle coverage against the original.
+ */
+export function detectGapClosures(
+  originalBullet: string,
+  suggestedBullet: string
+): GapClosure[] {
+  const closures: GapClosure[] = []
+
+  const gapPrincipleKeywords: Record<string, { name: string; keywords: string[] }> = {
+    'outcome-over-output': { name: 'Outcomes', keywords: ['increased', 'improved', 'reduced', 'resulted', 'achieved', 'generated'] },
+    'data-driven-decisions': { name: 'Data-Driven', keywords: ['%', '$', 'data', 'metrics', 'analytics', 'measured'] },
+    'user-centricity': { name: 'User Focus', keywords: ['user', 'customer', 'client', 'people', 'experience'] },
+    'strategic-thinking': { name: 'Strategy', keywords: ['strategy', 'roadmap', 'prioriti', 'initiative'] },
+    'cross-functional-leadership': { name: 'Leadership', keywords: ['cross-functional', 'led', 'team', 'stakeholder', 'aligned'] },
+  }
+
+  const origLower = originalBullet.toLowerCase()
+  const sugLower = suggestedBullet.toLowerCase()
+
+  for (const [principleId, config] of Object.entries(gapPrincipleKeywords)) {
+    const origHits = config.keywords.filter(kw => origLower.includes(kw)).length
+    const sugHits = config.keywords.filter(kw => sugLower.includes(kw)).length
+
+    // Gap is "closed" if original had 0 hits and suggested has 2+
+    if (origHits === 0 && sugHits >= 2) {
+      closures.push({ gapName: config.name, principleId })
+    }
+  }
+
+  return closures
+}
+
+/**
+ * Analyze a single bullet pair for the tailoring editor.
+ * Returns keyword matches, gap closures, and score comparison.
+ */
+export function analyzeTailoringPair(
+  originalBullet: string,
+  suggestedBullet: string,
+  jobKeywords: string[],
+  jobTitle?: string
+): TailoringAnalysis {
+  const originalAnalysis = analyzeCVContent(originalBullet, jobTitle)
+  const suggestedAnalysis = analyzeCVContent(suggestedBullet, jobTitle)
+
+  return {
+    matchedKeywords: findKeywordMatches(suggestedBullet, jobKeywords),
+    gapsClosing: detectGapClosures(originalBullet, suggestedBullet),
+    scoreDelta: suggestedAnalysis.totalScore - originalAnalysis.totalScore,
+    originalScore: originalAnalysis.totalScore,
+    suggestedScore: suggestedAnalysis.totalScore,
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Indicator Detail Analysis — sub-indicators, evidence, and action items
 // ---------------------------------------------------------------------------
 
