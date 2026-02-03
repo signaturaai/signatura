@@ -266,3 +266,74 @@ export const FOCUS_AREAS: FocusAreaOption[] = [
     description: 'Presenting ideas, stakeholder management',
   },
 ]
+
+// ==========================================
+// Strategic Interview Wizard Types
+// ==========================================
+
+export type DifficultyLevel = 'entry' | 'standard' | 'senior' | 'executive'
+export type InterviewMode = 'conversational' | 'traditional'
+export type AnswerFormat = 'text' | 'voice'
+
+/** Interviewer personality sliders (0-100 scale) */
+export interface InterviewerPersonality {
+  warmth: number
+  directness: number
+  intensity: number
+  technicalDepth: number
+  paceSpeed: number
+}
+
+/** Values extracted from a LinkedIn profile or user-provided bio */
+export interface InterviewerValues {
+  inferredPriorities: string[]
+  communicationStyle: string
+  likelyQuestionThemes: string[]
+  culturalSignals: string[]
+  rawText: string
+}
+
+/** Full strategic wizard configuration */
+export interface StrategicWizardConfig {
+  // Step 1: Basics
+  interviewType: InterviewType
+  difficultyLevel: DifficultyLevel
+
+  // Step 2: Personality
+  personality: InterviewerPersonality
+
+  // Step 3: Mode
+  interviewMode: InterviewMode
+  answerFormat: AnswerFormat
+
+  // Step 4: External Intelligence
+  userEmphases: string
+  interviewerLinkedIn: string
+  extractedValues: InterviewerValues | null
+}
+
+/** Prepared session returned by the thinking engine */
+export interface PreparedInterviewSession {
+  config: StrategicWizardConfig
+  narrativeAnchors: string[]
+  prioritizedQuestionThemes: string[]
+  gapHuntingTargets: string[]
+  scoringMode: 'content_only' | 'content_and_delivery'
+  sessionBrief: string
+}
+
+export const DIFFICULTY_LEVELS: { value: DifficultyLevel; label: string; description: string }[] = [
+  { value: 'entry', label: 'Entry Level', description: 'Foundational questions, supportive tone' },
+  { value: 'standard', label: 'Standard', description: 'Balanced depth and breadth' },
+  { value: 'senior', label: 'Senior', description: 'Deep probes, expectation of leadership evidence' },
+  { value: 'executive', label: 'Executive', description: 'C-suite style, vision and impact focused' },
+]
+
+export const DEFAULT_PERSONALITY: InterviewerPersonality = {
+  warmth: 60,
+  directness: 50,
+  intensity: 40,
+  technicalDepth: 50,
+  paceSpeed: 50,
+}
+

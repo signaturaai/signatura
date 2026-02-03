@@ -2493,6 +2493,239 @@ export function formatBulletsForPDFExport(
   return lines.join('\n')
 }
 
+// =========================================================================
+// Strategic Interview Wizard — "Thinking Engine"
+// =========================================================================
+
+import type {
+  StrategicWizardConfig,
+  InterviewerValues,
+  PreparedInterviewSession,
+  InterviewerPersonality,
+} from '@/types/interview'
+
+// Keyword dictionaries for LinkedIn values extraction
+const VALUES_KEYWORDS: Record<string, string[]> = {
+  'data-driven': ['data', 'metrics', 'analytics', 'kpi', 'a/b', 'experiment', 'measure', 'quantitative', 'evidence'],
+  'people-first': ['people', 'team', 'culture', 'empathy', 'mentoring', 'coaching', 'development', 'inclusion', 'diversity'],
+  'execution': ['ship', 'deliver', 'execute', 'agile', 'sprint', 'velocity', 'deadline', 'ops', 'operational'],
+  'innovation': ['innovation', 'disrupt', 'creative', 'experiment', 'prototype', 'mvp', 'iterate', 'pivot', 'new'],
+  'growth': ['growth', 'revenue', 'acquisition', 'retention', 'conversion', 'funnel', 'scale', 'expand', 'market'],
+  'technical': ['engineer', 'architecture', 'system', 'infrastructure', 'platform', 'api', 'code', 'technical', 'stack'],
+  'strategic': ['strategy', 'vision', 'roadmap', 'initiative', 'alignment', 'stakeholder', 'board', 'executive', 'long-term'],
+  'customer': ['customer', 'user', 'feedback', 'research', 'interview', 'persona', 'journey', 'experience', 'satisfaction'],
+}
+
+const COMMUNICATION_STYLES: { pattern: RegExp; style: string }[] = [
+  { pattern: /\b(passionate|love|excited|thrill)\b/i, style: 'Enthusiastic and high-energy' },
+  { pattern: /\b(rigorous|systematic|structured|method)\b/i, style: 'Structured and methodical' },
+  { pattern: /\b(collaborative|together|partnership|team)\b/i, style: 'Collaborative and inclusive' },
+  { pattern: /\b(challenge|push|ambitious|bold|disrupt)\b/i, style: 'Direct and challenging' },
+  { pattern: /\b(mentor|guide|coach|develop|grow)\b/i, style: 'Supportive and developmental' },
+]
+
+/**
+ * Extract values and priorities from an interviewer's LinkedIn bio or profile text.
+ *
+ * This is the "unfair advantage" — understanding the interviewer's likely
+ * priorities, communication style, and question themes BEFORE the interview.
+ *
+ * Uses keyword frequency analysis across 8 value dimensions.
+ */
+export function extractInterviewerValues(linkedInText: string): InterviewerValues {
+  if (!linkedInText || linkedInText.trim().length === 0) {
+    return {
+      inferredPriorities: [],
+      communicationStyle: 'Unknown',
+      likelyQuestionThemes: [],
+      culturalSignals: [],
+      rawText: '',
+    }
+  }
+
+  const lower = linkedInText.toLowerCase()
+
+  // 1. Score each value dimension by keyword hits
+  const scored = Object.entries(VALUES_KEYWORDS).map(([dimension, keywords]) => {
+    const hits = keywords.filter(kw => lower.includes(kw)).length
+    return { dimension, hits, keywords: keywords.filter(kw => lower.includes(kw)) }
+  })
+  scored.sort((a, b) => b.hits - a.hits)
+
+  // 2. Top priorities (dimensions with hits > 0, max 4)
+  const inferredPriorities = scored
+    .filter(s => s.hits > 0)
+    .slice(0, 4)
+    .map(s => s.dimension.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()))
+
+  // 3. Detect communication style
+  let communicationStyle = 'Balanced and professional'
+  for (const { pattern, style } of COMMUNICATION_STYLES) {
+    if (pattern.test(linkedInText)) {
+      communicationStyle = style
+      break
+    }
+  }
+
+  // 4. Derive likely question themes from top 3 dimensions
+  const questionThemeMap: Record<string, string[]> = {
+    'data-driven': ['How do you measure success?', 'What metrics drive your decisions?', 'Describe an A/B test you ran'],
+    'people-first': ['How do you develop team members?', 'Describe a culture challenge', 'How do you handle conflict?'],
+    'execution': ['Walk me through a complex delivery', 'How do you handle missed deadlines?', 'Describe your sprint process'],
+    'innovation': ['Tell me about something you built from scratch', 'How do you validate new ideas?', 'Describe a pivot you drove'],
+    'growth': ['What growth levers have you pulled?', 'How do you think about acquisition vs retention?', 'Describe a revenue win'],
+    'technical': ['Walk me through a system you designed', 'How do you make technical trade-offs?', 'Describe a scaling challenge'],
+    'strategic': ['How do you set product vision?', 'Describe a strategic bet you made', 'How do you align stakeholders?'],
+    'customer': ['How do you incorporate user feedback?', 'Describe your research process', 'Tell me about a user insight'],
+  }
+
+  const likelyQuestionThemes = scored
+    .filter(s => s.hits > 0)
+    .slice(0, 3)
+    .flatMap(s => (questionThemeMap[s.dimension] || []).slice(0, 2))
+
+  // 5. Cultural signals (what they value in their teams)
+  const culturalSignals: string[] = []
+  if (/divers|inclusi/.test(lower)) culturalSignals.push('Values diversity & inclusion')
+  if (lower.includes('remote') || lower.includes('flexible')) culturalSignals.push('Flexible work advocate')
+  if (lower.includes('fast-paced') || lower.includes('startup')) culturalSignals.push('Thrives in fast-paced environments')
+  if (lower.includes('enterprise') || lower.includes('scale')) culturalSignals.push('Enterprise/scale experience')
+  if (lower.includes('open source') || lower.includes('community')) culturalSignals.push('Community-minded')
+  if (culturalSignals.length === 0) culturalSignals.push('Professional and balanced')
+
+  return {
+    inferredPriorities,
+    communicationStyle,
+    likelyQuestionThemes,
+    culturalSignals,
+    rawText: linkedInText.trim(),
+  }
+}
+
+/**
+ * Prepare the full interview session from the wizard config.
+ *
+ * This is the "Thinking Engine" — it takes the wizard inputs and produces
+ * a prepared session with narrative anchors, prioritized question themes,
+ * gap-hunting targets, and scoring mode.
+ *
+ * When LinkedIn/Emphases are provided, the AI must prioritize these in
+ * its question generation and final feedback.
+ */
+export function prepareInterviewSession(
+  config: StrategicWizardConfig,
+  narrativeProfile: NarrativeProfile | null,
+  cvBullets: string[],
+  jobDescription: string
+): PreparedInterviewSession {
+  // 1. Derive narrative anchors from profile (the North Star)
+  const narrativeAnchors: string[] = []
+  if (narrativeProfile) {
+    narrativeAnchors.push(`Target: ${narrativeProfile.targetRole} (${narrativeProfile.seniorityLevel})`)
+    narrativeAnchors.push(`Strength: ${narrativeProfile.coreStrength.replace(/-/g, ' ')}`)
+    if (narrativeProfile.desiredBrand) {
+      narrativeAnchors.push(`Brand: ${narrativeProfile.desiredBrand}`)
+    }
+    if (narrativeProfile.painPoint) {
+      narrativeAnchors.push(`Gap to close: ${narrativeProfile.painPoint}`)
+    }
+  }
+
+  // 2. Build prioritized question themes
+  const prioritizedQuestionThemes: string[] = []
+
+  // User emphases take top priority
+  if (config.userEmphases.trim().length > 0) {
+    const emphParts = config.userEmphases.split(/[,;.\n]+/).map(e => e.trim()).filter(Boolean)
+    prioritizedQuestionThemes.push(...emphParts.slice(0, 5))
+  }
+
+  // Extracted interviewer values come next
+  if (config.extractedValues && config.extractedValues.likelyQuestionThemes.length > 0) {
+    prioritizedQuestionThemes.push(...config.extractedValues.likelyQuestionThemes.slice(0, 4))
+  }
+
+  // Fill with type-appropriate themes
+  const typeThemes: Record<string, string[]> = {
+    'hr_screening': ['Culture fit', 'Motivation', 'Salary expectations'],
+    'hiring_manager': ['Day-to-day execution', 'Team dynamics', 'Decision-making style'],
+    'technical': ['System design', 'Problem-solving approach', 'Technical trade-offs'],
+    'executive': ['Strategic vision', 'Business impact', 'Leadership philosophy'],
+    'peer': ['Collaboration style', 'Conflict resolution', 'Knowledge sharing'],
+  }
+  const fallbackThemes = typeThemes[config.interviewType] || []
+  for (const ft of fallbackThemes) {
+    if (!prioritizedQuestionThemes.includes(ft)) {
+      prioritizedQuestionThemes.push(ft)
+    }
+  }
+
+  // 3. Identify gap-hunting targets (where the narrative is weakest)
+  const gapHuntingTargets: string[] = []
+  if (narrativeProfile && cvBullets.length > 0) {
+    const gapAnalysis = analyzeNarrativeGap(cvBullets, narrativeProfile)
+    // Missing keywords are gaps the interviewer will probe
+    gapHuntingTargets.push(...gapAnalysis.missingKeywords.slice(0, 5))
+
+    // Low-scoring dimensions are also gap targets
+    gapAnalysis.evidence
+      .filter(ev => ev.maxContribution > 0 && (ev.contribution / ev.maxContribution) < 0.3)
+      .forEach(ev => gapHuntingTargets.push(`Weak: ${ev.dimension}`))
+  }
+
+  // 4. Determine scoring mode
+  const scoringMode = config.answerFormat === 'voice' ? 'content_and_delivery' as const : 'content_only' as const
+
+  // 5. Build session brief
+  const briefParts: string[] = []
+  briefParts.push(`${config.difficultyLevel.charAt(0).toUpperCase() + config.difficultyLevel.slice(1)}-level ${config.interviewType.replace(/_/g, ' ')} interview`)
+
+  if (config.interviewMode === 'conversational') {
+    briefParts.push('in conversational mode with avatar')
+  } else {
+    briefParts.push(`in traditional mode (${config.answerFormat} responses)`)
+  }
+
+  if (config.extractedValues && config.extractedValues.inferredPriorities.length > 0) {
+    briefParts.push(`Interviewer values: ${config.extractedValues.inferredPriorities.join(', ')}`)
+  }
+
+  if (narrativeProfile) {
+    briefParts.push(`Narrative anchor: ${narrativeProfile.coreStrength.replace(/-/g, ' ')}`)
+  }
+
+  // Personality influence on brief
+  const p = config.personality
+  if (p.intensity > 70) briefParts.push('High-pressure interview style')
+  else if (p.warmth > 70) briefParts.push('Supportive and encouraging tone')
+  if (p.technicalDepth > 70) briefParts.push('Expect deep technical probes')
+
+  return {
+    config,
+    narrativeAnchors,
+    prioritizedQuestionThemes,
+    gapHuntingTargets,
+    scoringMode,
+    sessionBrief: briefParts.join('. ') + '.',
+  }
+}
+
+/**
+ * Calculate a personality-adjusted difficulty multiplier.
+ *
+ * Higher intensity + directness + pace → harder effective difficulty.
+ * Higher warmth → slightly easier effective difficulty.
+ *
+ * Returns a multiplier from 0.7 (gentle) to 1.5 (intense).
+ */
+export function calculatePersonalityDifficulty(personality: InterviewerPersonality): number {
+  const aggression = (personality.intensity + personality.directness + personality.paceSpeed) / 3
+  const softening = personality.warmth / 2
+  const raw = (aggression - softening) / 100
+  // Map to 0.7-1.5 range
+  return Math.max(0.7, Math.min(1.5, 1.0 + raw * 0.8))
+}
+
 export {
   generateSiggyPMContext,
   analyzeWithPMPrinciples,
