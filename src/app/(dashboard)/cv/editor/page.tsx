@@ -1,16 +1,18 @@
 'use client'
 
 /**
- * Interactive Tailoring Editor
+ * Interactive Tailoring Editor — with Narrative-Driven Scoring
  *
  * Side-by-side comparison of original vs AI-suggested CV bullets.
  * Users can accept, reject, and edit individual suggestions.
  * Score updates in real-time with pulse animation on changes.
  *
- * Positioned as the core editing experience in the tailoring flow.
+ * When a NarrativeProfile is provided, bullets are scored against both
+ * JD alignment AND narrative alignment, with "Narrative Boost" badges
+ * and "Top Pick" indicators for identity-transforming suggestions.
  */
 
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Card,
@@ -30,15 +32,22 @@ import {
   Target,
   Loader2,
   RotateCcw,
+  Compass,
+  Zap,
+  ChevronDown,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TailoringCard } from '@/components/cv/TailoringCard'
 import {
-  scoreArbiter,
   extractJobKeywords,
   analyzeTailoringPair,
-  analyzeCVContent,
+  analyzeTailoringPairWithNarrative,
+  analyzeNarrativeGap,
+  tailorBulletForNarrative,
   type TailoringAnalysis,
+  type NarrativeProfile,
+  type CoreStrength,
+  type SeniorityLevel,
 } from '@/lib/ai/siggy-integration-guide'
 
 // ---------------------------------------------------------------------------
@@ -80,6 +89,141 @@ const SAMPLE_JOB_DESCRIPTION = `We are looking for a Senior Product Manager with
 - Agile methodology and sprint planning
 - Revenue growth and user engagement metrics`
 
+const STRENGTH_OPTIONS: { value: CoreStrength; label: string }[] = [
+  { value: 'strategic-leadership', label: 'Strategic Leadership' },
+  { value: 'technical-mastery', label: 'Technical Mastery' },
+  { value: 'operational-excellence', label: 'Operational Excellence' },
+  { value: 'business-innovation', label: 'Business Innovation' },
+]
+
+const SENIORITY_OPTIONS: { value: SeniorityLevel; label: string }[] = [
+  { value: 'junior', label: 'Junior' },
+  { value: 'mid', label: 'Mid-Level' },
+  { value: 'senior', label: 'Senior' },
+  { value: 'executive', label: 'Executive' },
+]
+
+// ---------------------------------------------------------------------------
+// Inline Narrative Profile Panel
+// ---------------------------------------------------------------------------
+
+function NarrativeProfilePanel({
+  profile,
+  onChange,
+  onClear,
+}: {
+  profile: NarrativeProfile | null
+  onChange: (p: NarrativeProfile) => void
+  onClear: () => void
+}) {
+  const [expanded, setExpanded] = useState(!profile)
+  const [targetRole, setTargetRole] = useState(profile?.targetRole || '')
+  const [seniority, setSeniority] = useState<SeniorityLevel>(profile?.seniorityLevel || 'senior')
+  const [strength, setStrength] = useState<CoreStrength>(profile?.coreStrength || 'strategic-leadership')
+  const [brand, setBrand] = useState(profile?.desiredBrand || '')
+
+  const canActivate = targetRole.trim().length >= 3 && brand.trim().length >= 10
+
+  const handleActivate = () => {
+    onChange({
+      targetRole: targetRole.trim(),
+      seniorityLevel: seniority,
+      coreStrength: strength,
+      painPoint: '',
+      desiredBrand: brand.trim(),
+    })
+    setExpanded(false)
+  }
+
+  return (
+    <div className="rounded-lg border border-amber-200/60 bg-amber-50/30 overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between px-4 py-3 text-left"
+      >
+        <div className="flex items-center gap-2">
+          <Compass className="h-4 w-4 text-amber-600" />
+          <span className="text-sm font-semibold text-amber-800">Narrative Alignment</span>
+          {profile && (
+            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-200/60 text-amber-700">
+              Active
+            </span>
+          )}
+        </div>
+        <ChevronDown className={cn('h-4 w-4 text-amber-400 transition-transform', expanded && 'rotate-180')} />
+      </button>
+
+      {expanded && (
+        <div className="px-4 pb-4 space-y-3 border-t border-amber-200/40 pt-3">
+          <p className="text-xs text-amber-600">
+            Enable narrative scoring to ensure suggestions move you toward your desired professional identity.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <Label className="text-xs text-amber-700">Target Role</Label>
+              <Input
+                value={targetRole}
+                onChange={e => setTargetRole(e.target.value)}
+                placeholder="e.g., VP of Product"
+                className="mt-1 text-sm bg-white"
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-amber-700">Seniority</Label>
+              <select
+                value={seniority}
+                onChange={e => setSeniority(e.target.value as SeniorityLevel)}
+                className="mt-1 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm"
+              >
+                {SENIORITY_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label className="text-xs text-amber-700">Superpower</Label>
+              <select
+                value={strength}
+                onChange={e => setStrength(e.target.value as CoreStrength)}
+                className="mt-1 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm"
+              >
+                {STRENGTH_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label className="text-xs text-amber-700">Desired Brand (1 sentence)</Label>
+              <Input
+                value={brand}
+                onChange={e => setBrand(e.target.value)}
+                placeholder="e.g., A strategic leader who..."
+                className="mt-1 text-sm bg-white"
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              onClick={handleActivate}
+              disabled={!canActivate}
+              className="bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50"
+            >
+              <Zap className="w-3.5 h-3.5 mr-1" />
+              {profile ? 'Update Profile' : 'Activate Narrative Scoring'}
+            </Button>
+            {profile && (
+              <Button variant="ghost" size="sm" onClick={onClear} className="text-amber-600">
+                Disable
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Page Component
 // ---------------------------------------------------------------------------
@@ -96,7 +240,14 @@ export default function TailoringEditorPage() {
   const [showInput, setShowInput] = useState(true)
   const [copied, setCopied] = useState(false)
 
+  // Narrative profile (optional)
+  const [narrativeProfile, setNarrativeProfile] = useState<NarrativeProfile | null>(null)
+  // Narrative aggregate scores
+  const [narrativeOriginalPercent, setNarrativeOriginalPercent] = useState(0)
+  const [narrativeCurrentPercent, setNarrativeCurrentPercent] = useState(0)
+
   const hasResults = bulletStates.length > 0
+  const hasNarrative = narrativeProfile !== null
 
   // Extract job keywords once
   const jobKeywords = useMemo(
@@ -114,11 +265,16 @@ export default function TailoringEditorPage() {
   // Run analysis
   const handleAnalyze = useCallback(() => {
     const origArr = originalBullets.split('\n').map(b => b.trim()).filter(b => b.length > 0)
-    const sugArr = suggestedBullets.split('\n').map(b => b.trim()).filter(b => b.length > 0)
+    let sugArr = suggestedBullets.split('\n').map(b => b.trim()).filter(b => b.length > 0)
 
     if (origArr.length === 0 || sugArr.length === 0) return
 
     setIsAnalyzing(true)
+
+    // If narrative profile active, also apply narrative tailoring to suggestions
+    if (narrativeProfile) {
+      sugArr = sugArr.map(b => tailorBulletForNarrative(b, narrativeProfile))
+    }
 
     // Brief delay for premium feel
     setTimeout(() => {
@@ -129,38 +285,51 @@ export default function TailoringEditorPage() {
         const original = origArr[i] || ''
         const suggested = sugArr[i] || original
 
-        const analysis = analyzeTailoringPair(
-          original,
-          suggested,
-          jobKeywords,
-          jobTitle || undefined
-        )
+        const analysis = narrativeProfile
+          ? analyzeTailoringPairWithNarrative(original, suggested, jobKeywords, narrativeProfile, jobTitle || undefined)
+          : analyzeTailoringPair(original, suggested, jobKeywords, jobTitle || undefined)
 
         states.push({
           original,
           suggested,
-          isAccepted: analysis.scoreDelta > 0, // auto-accept improvements
+          isAccepted: analysis.scoreDelta > 0,
           analysis,
         })
+      }
+
+      // Compute aggregate narrative scores
+      if (narrativeProfile) {
+        const origNarr = analyzeNarrativeGap(origArr, narrativeProfile)
+        const currentBullets = states.map(s => s.isAccepted ? s.suggested : s.original)
+        const curNarr = analyzeNarrativeGap(currentBullets, narrativeProfile)
+        setNarrativeOriginalPercent(origNarr.narrativeMatchPercent)
+        setNarrativeCurrentPercent(curNarr.narrativeMatchPercent)
       }
 
       setBulletStates(states)
       setIsAnalyzing(false)
       setShowInput(false)
     }, 500)
-  }, [originalBullets, suggestedBullets, jobKeywords, jobTitle])
+  }, [originalBullets, suggestedBullets, jobKeywords, jobTitle, narrativeProfile])
 
   // Toggle accept
   const handleToggleAccept = useCallback((index: number) => {
     setBulletStates(prev => {
       const next = [...prev]
       next[index] = { ...next[index], isAccepted: !next[index].isAccepted }
+
+      // Recompute narrative aggregate if profile active
+      if (narrativeProfile) {
+        const currentBullets = next.map(s => s.isAccepted ? s.suggested : s.original)
+        const narr = analyzeNarrativeGap(currentBullets, narrativeProfile)
+        setNarrativeCurrentPercent(narr.narrativeMatchPercent)
+      }
+
       return next
     })
-    // Trigger score pulse
     setScorePulse(true)
     setTimeout(() => setScorePulse(false), 600)
-  }, [])
+  }, [narrativeProfile])
 
   // Edit suggestion
   const handleEditSuggestion = useCallback((index: number, newText: string) => {
@@ -178,20 +347,25 @@ export default function TailoringEditorPage() {
       setBulletStates(prev => {
         const next = [...prev]
         const state = next[index]
-        const analysis = analyzeTailoringPair(
-          state.original,
-          state.suggested,
-          jobKeywords,
-          jobTitle || undefined
-        )
+        const analysis = narrativeProfile
+          ? analyzeTailoringPairWithNarrative(state.original, state.suggested, jobKeywords, narrativeProfile, jobTitle || undefined)
+          : analyzeTailoringPair(state.original, state.suggested, jobKeywords, jobTitle || undefined)
         next[index] = { ...state, analysis }
+
+        // Recompute narrative aggregate
+        if (narrativeProfile) {
+          const currentBullets = next.map(s => s.isAccepted ? s.suggested : s.original)
+          const narr = analyzeNarrativeGap(currentBullets, narrativeProfile)
+          setNarrativeCurrentPercent(narr.narrativeMatchPercent)
+        }
+
         return next
       })
       setResyncingIndex(null)
       setScorePulse(true)
       setTimeout(() => setScorePulse(false), 600)
     }, 400)
-  }, [jobKeywords, jobTitle])
+  }, [jobKeywords, jobTitle, narrativeProfile])
 
   // Copy final bullets
   const handleCopyFinal = useCallback(() => {
@@ -207,6 +381,8 @@ export default function TailoringEditorPage() {
   const handleReset = useCallback(() => {
     setBulletStates([])
     setShowInput(true)
+    setNarrativeOriginalPercent(0)
+    setNarrativeCurrentPercent(0)
   }, [])
 
   // Computed stats
@@ -226,6 +402,7 @@ export default function TailoringEditorPage() {
     const totalGaps = new Set(
       bulletStates.flatMap(s => s.isAccepted ? s.analysis.gapsClosing.map(g => g.principleId) : [])
     ).size
+    const topPicks = bulletStates.filter(s => s.analysis.isNarrativeTopPick).length
 
     return {
       acceptedCount: accepted.length,
@@ -235,8 +412,11 @@ export default function TailoringEditorPage() {
       improvement: avgCurrent - avgOriginal,
       totalKeywords,
       totalGaps,
+      topPicks,
     }
   }, [bulletStates])
+
+  const narrativeDelta = narrativeCurrentPercent - narrativeOriginalPercent
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
@@ -318,6 +498,14 @@ export default function TailoringEditorPage() {
                 />
               </div>
             </div>
+
+            {/* Narrative Profile Panel */}
+            <NarrativeProfilePanel
+              profile={narrativeProfile}
+              onChange={setNarrativeProfile}
+              onClear={() => setNarrativeProfile(null)}
+            />
+
             <div className="flex items-center gap-3">
               <Button
                 onClick={handleAnalyze}
@@ -357,7 +545,7 @@ export default function TailoringEditorPage() {
           <Card className="bg-gradient-to-br from-white via-indigo-50/30 to-violet-50/30 border-indigo-100/50 shadow-lg overflow-hidden">
             <CardContent className="p-6">
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                {/* Score display */}
+                {/* JD Score display */}
                 <div className="flex items-center gap-6">
                   <div className="text-center">
                     <p className="text-xs text-gray-400 font-medium uppercase">Original</p>
@@ -372,7 +560,7 @@ export default function TailoringEditorPage() {
                         animate={{ scale: 1, opacity: 1 }}
                         transition={{ type: 'spring', stiffness: 300, damping: 20 }}
                       >
-                        <p className="text-xs text-indigo-500 font-medium uppercase">Current</p>
+                        <p className="text-xs text-indigo-500 font-medium uppercase">JD Match</p>
                         <p className="text-3xl font-bold text-indigo-600 tabular-nums">{stats.avgCurrent}</p>
                       </motion.div>
                     </AnimatePresence>
@@ -396,6 +584,45 @@ export default function TailoringEditorPage() {
                       {stats.improvement > 0 ? '+' : ''}{stats.improvement} pts
                     </span>
                   </div>
+
+                  {/* Narrative Match (when active) */}
+                  {hasNarrative && narrativeCurrentPercent > 0 && (
+                    <>
+                      <div className="w-px h-10 bg-gray-200 mx-1" />
+                      <div className="text-center">
+                        <AnimatePresence mode="wait">
+                          <motion.div
+                            key={narrativeCurrentPercent}
+                            initial={{ scale: 0.8, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                          >
+                            <p className="text-xs text-amber-500 font-medium uppercase">Narrative</p>
+                            <p className="text-3xl font-bold text-amber-600 tabular-nums">{narrativeCurrentPercent}%</p>
+                          </motion.div>
+                        </AnimatePresence>
+                      </div>
+                      <div className={cn(
+                        'px-3 py-1.5 rounded-full border',
+                        narrativeDelta > 0
+                          ? 'bg-amber-50 border-amber-200'
+                          : narrativeDelta < 0
+                            ? 'bg-red-50 border-red-200'
+                            : 'bg-gray-50 border-gray-200'
+                      )}>
+                        <span className={cn(
+                          'text-sm font-bold',
+                          narrativeDelta > 0
+                            ? 'text-amber-600'
+                            : narrativeDelta < 0
+                              ? 'text-red-600'
+                              : 'text-gray-500'
+                        )}>
+                          {narrativeDelta > 0 ? '+' : ''}{narrativeDelta}%
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Stats badges */}
@@ -414,6 +641,12 @@ export default function TailoringEditorPage() {
                     <div className="flex items-center gap-1.5 text-xs text-gray-500">
                       <Sparkles className="w-3.5 h-3.5 text-violet-500" />
                       <span className="font-semibold text-violet-600">{stats.totalGaps}</span> gaps closed
+                    </div>
+                  )}
+                  {stats.topPicks > 0 && (
+                    <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                      <Zap className="w-3.5 h-3.5 text-amber-500" />
+                      <span className="font-semibold text-amber-600">{stats.topPicks}</span> top pick{stats.topPicks !== 1 ? 's' : ''}
                     </div>
                   )}
                 </div>
@@ -440,7 +673,13 @@ export default function TailoringEditorPage() {
                   setBulletStates(prev => {
                     setScorePulse(true)
                     setTimeout(() => setScorePulse(false), 600)
-                    return prev.map(s => ({ ...s, isAccepted: true }))
+                    const next = prev.map(s => ({ ...s, isAccepted: true }))
+                    if (narrativeProfile) {
+                      const currentBullets = next.map(s => s.suggested)
+                      const narr = analyzeNarrativeGap(currentBullets, narrativeProfile)
+                      setNarrativeCurrentPercent(narr.narrativeMatchPercent)
+                    }
+                    return next
                   })
                 }
               >
@@ -453,7 +692,13 @@ export default function TailoringEditorPage() {
                   setBulletStates(prev => {
                     setScorePulse(true)
                     setTimeout(() => setScorePulse(false), 600)
-                    return prev.map(s => ({ ...s, isAccepted: false }))
+                    const next = prev.map(s => ({ ...s, isAccepted: false }))
+                    if (narrativeProfile) {
+                      const currentBullets = next.map(s => s.original)
+                      const narr = analyzeNarrativeGap(currentBullets, narrativeProfile)
+                      setNarrativeCurrentPercent(narr.narrativeMatchPercent)
+                    }
+                    return next
                   })
                 }
               >
@@ -478,6 +723,11 @@ export default function TailoringEditorPage() {
               onEditSuggestion={handleEditSuggestion}
               onResync={handleResync}
               isResyncing={resyncingIndex === idx}
+              narrativeBoost={state.analysis.narrativeBoost}
+              narrativeBoostLabel={state.analysis.narrativeBoostLabel}
+              isNarrativeTopPick={state.analysis.isNarrativeTopPick}
+              narrativeMatchPercent={state.analysis.narrativeMatchPercent}
+              originalNarrativePercent={state.analysis.originalNarrativePercent}
             />
           ))}
         </div>

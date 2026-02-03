@@ -776,6 +776,16 @@ export interface TailoringAnalysis {
   originalScore: number
   /** Suggested bullet score (0-100) */
   suggestedScore: number
+  /** Narrative alignment boost (0-100 delta), present when narrative profile provided */
+  narrativeBoost?: number
+  /** Narrative match % of the suggested bullet against target archetype */
+  narrativeMatchPercent?: number
+  /** Original bullet's narrative match % */
+  originalNarrativePercent?: number
+  /** Whether this bullet is a "Top Pick" for narrative alignment */
+  isNarrativeTopPick?: boolean
+  /** Human-readable narrative boost label (e.g., "Boosts Strategic Signal") */
+  narrativeBoostLabel?: string
 }
 
 /**
@@ -1925,6 +1935,321 @@ export function analyzeNarrativeGap(
     alignedKeywords: alignedKeywords.slice(0, 15),
     missingKeywords: missingKeywords.slice(0, 10),
     cvScore: cvAnalysis.totalScore,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Narrative-Driven Bullet Tailoring — "Identity Transformation"
+// ---------------------------------------------------------------------------
+
+// Maps CoreStrength to the archetype the user wants to embody
+const STRENGTH_TO_ARCHETYPE: Record<CoreStrength, string> = {
+  'strategic-leadership': 'strategic-leader',
+  'technical-mastery': 'technical-architect',
+  'operational-excellence': 'execution-specialist',
+  'business-innovation': 'growth-driver',
+}
+
+// Verb upgrade tables: maps weak/generic verbs to narrative-aligned power verbs
+const NARRATIVE_VERB_UPGRADES: Record<CoreStrength, Record<string, string>> = {
+  'strategic-leadership': {
+    'managed': 'directed',
+    'worked on': 'spearheaded',
+    'helped': 'championed',
+    'did': 'orchestrated',
+    'participated in': 'led',
+    'was responsible for': 'drove',
+    'made': 'influenced',
+    'handled': 'aligned',
+    'created': 'established',
+    'ran': 'directed',
+    'built': 'architected the strategy for',
+    'supported': 'championed',
+    'maintained': 'governed',
+    'used': 'leveraged',
+    'improved': 'transformed',
+  },
+  'technical-mastery': {
+    'managed': 'engineered',
+    'worked on': 'architected',
+    'helped': 'designed',
+    'did': 'implemented',
+    'participated in': 'built',
+    'was responsible for': 'engineered',
+    'made': 'designed',
+    'handled': 'optimized',
+    'created': 'engineered',
+    'ran': 'operated',
+    'supported': 'integrated',
+    'maintained': 'scaled',
+    'used': 'leveraged',
+    'improved': 'optimized',
+  },
+  'operational-excellence': {
+    'managed': 'streamlined',
+    'worked on': 'delivered',
+    'helped': 'automated',
+    'did': 'shipped',
+    'participated in': 'executed',
+    'was responsible for': 'delivered',
+    'made': 'launched',
+    'handled': 'streamlined',
+    'created': 'deployed',
+    'ran': 'operated',
+    'supported': 'maintained',
+    'maintained': 'standardized',
+    'used': 'implemented',
+    'improved': 'streamlined',
+  },
+  'business-innovation': {
+    'managed': 'grew',
+    'worked on': 'monetized',
+    'helped': 'accelerated',
+    'did': 'generated',
+    'participated in': 'drove',
+    'was responsible for': 'captured',
+    'made': 'innovated',
+    'handled': 'expanded',
+    'created': 'launched',
+    'ran': 'scaled',
+    'supported': 'enabled',
+    'maintained': 'sustained',
+    'used': 'leveraged',
+    'improved': 'increased',
+  },
+}
+
+// Narrative enrichment phrases per strength
+const NARRATIVE_ENRICHMENTS: Record<CoreStrength, string[]> = {
+  'strategic-leadership': [
+    'aligning cross-functional stakeholders',
+    'defining the strategic roadmap',
+    'securing executive buy-in',
+    'setting long-term vision',
+    'influencing organizational direction',
+  ],
+  'technical-mastery': [
+    'evaluating architectural trade-offs',
+    'designing for scalability',
+    'ensuring system reliability',
+    'reducing technical debt',
+    'driving engineering excellence',
+  ],
+  'operational-excellence': [
+    'achieving on-time delivery',
+    'reducing cycle time',
+    'automating manual processes',
+    'establishing quality frameworks',
+    'ensuring operational continuity',
+  ],
+  'business-innovation': [
+    'driving revenue growth',
+    'capturing new market segments',
+    'improving conversion funnels',
+    'maximizing customer lifetime value',
+    'accelerating go-to-market velocity',
+  ],
+}
+
+/**
+ * Score a single bullet's narrative alignment against a NarrativeProfile.
+ * Returns 0-100 representing how well this bullet matches the desired archetype.
+ *
+ * This uses the same dimensional scoring as analyzeNarrativeGap but on a
+ * single bullet — enabling per-bullet narrative scoring during tailoring.
+ */
+export function scoreNarrativeAlignment(
+  bullet: string,
+  profile: NarrativeProfile
+): number {
+  if (!bullet || bullet.trim().length === 0) return 0
+
+  const lower = bullet.toLowerCase()
+  let earned = 0
+  let possible = 0
+
+  for (const dim of NARRATIVE_DIMENSIONS) {
+    const strengthWords = dim.strengthMap[profile.coreStrength] || []
+    const seniorityWords = dim.seniorityMap[profile.seniorityLevel] || []
+    const desiredWords = [...new Set([...strengthWords, ...seniorityWords])]
+    if (desiredWords.length === 0) continue
+
+    const maxContribution = 25
+    const foundWords = desiredWords.filter(w => lower.includes(w))
+    earned += Math.round((foundWords.length / desiredWords.length) * maxContribution)
+    possible += maxContribution
+  }
+
+  return possible > 0 ? Math.min(100, Math.round((earned / possible) * 100)) : 0
+}
+
+/**
+ * Rewrite a bullet to close the narrative gap.
+ *
+ * Uses verb upgrades, outcome-framing, and narrative enrichment phrases
+ * to transform the bullet so it sounds like the candidate is already in
+ * their target role.
+ *
+ * The rewriting is deterministic (no LLM call) — it applies rule-based
+ * transformations that are verifiable and transparent.
+ */
+export function tailorBulletForNarrative(
+  bullet: string,
+  profile: NarrativeProfile
+): string {
+  if (!bullet || bullet.trim().length === 0) return bullet
+
+  let result = bullet
+  const verbUpgrades = NARRATIVE_VERB_UPGRADES[profile.coreStrength] || {}
+
+  // Step 1: Verb upgrade — replace weak verbs with archetype-aligned power verbs
+  // Sort by length (longest first) to avoid partial replacements
+  const verbEntries = Object.entries(verbUpgrades).sort((a, b) => b[0].length - a[0].length)
+  for (const [weak, strong] of verbEntries) {
+    // Match at start of bullet (case-insensitive) or after common separators
+    const regex = new RegExp(`(^|(?:,\\s|;\\s|\\band\\s))${weak.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi')
+    result = result.replace(regex, (match, prefix) => {
+      // Preserve original capitalization pattern
+      const isCapitalized = match.charAt(prefix.length) === match.charAt(prefix.length).toUpperCase()
+      const replacement = isCapitalized ? strong.charAt(0).toUpperCase() + strong.slice(1) : strong
+      return prefix + replacement
+    })
+  }
+
+  // Step 2: Add outcome framing if bullet lacks results language
+  const hasOutcome = /\b(resulting in|leading to|achieving|which led|thereby|delivering|driving|improving)\b/i.test(result)
+  const hasMetric = /\d+%|\$\d+|\d+x|\d+ (users|customers|people|team|engineers|stakeholders)/.test(result)
+
+  if (!hasOutcome && !hasMetric) {
+    // Add a narrative-appropriate enrichment
+    const enrichments = NARRATIVE_ENRICHMENTS[profile.coreStrength] || []
+    if (enrichments.length > 0) {
+      // Pick enrichment based on bullet content hash for consistency
+      const hash = bullet.split('').reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0)
+      const enrichment = enrichments[Math.abs(hash) % enrichments.length]
+      // Only append if the bullet doesn't already end with similar language
+      if (!result.toLowerCase().includes(enrichment.split(' ')[0])) {
+        result = result.replace(/\.?\s*$/, `, ${enrichment}`)
+      }
+    }
+  }
+
+  // Step 3: Seniority-appropriate framing
+  if (profile.seniorityLevel === 'executive' || profile.seniorityLevel === 'senior') {
+    // Upgrade team references to show scale
+    result = result.replace(/\bthe team\b/gi, 'a cross-functional team')
+    result = result.replace(/\bmy team\b/gi, 'a cross-functional team')
+  }
+
+  return result
+}
+
+/**
+ * Analyze a tailoring pair with narrative context.
+ *
+ * Extends analyzeTailoringPair with:
+ * - Narrative alignment scoring (before/after)
+ * - Narrative boost calculation
+ * - Top Pick classification (suggestion increases narrative alignment)
+ * - Human-readable boost label
+ *
+ * The narrative profile and gap analysis are injected as context, ensuring
+ * the tailoring engine considers identity transformation, not just keywords.
+ */
+export function analyzeTailoringPairWithNarrative(
+  originalBullet: string,
+  suggestedBullet: string,
+  jobKeywords: string[],
+  profile: NarrativeProfile,
+  jobTitle?: string
+): TailoringAnalysis {
+  // Get base JD-focused analysis
+  const base = analyzeTailoringPair(originalBullet, suggestedBullet, jobKeywords, jobTitle)
+
+  // Score narrative alignment for both
+  const originalNarrative = scoreNarrativeAlignment(originalBullet, profile)
+  const suggestedNarrative = scoreNarrativeAlignment(suggestedBullet, profile)
+  const narrativeBoost = suggestedNarrative - originalNarrative
+
+  // Determine archetype name for the boost label
+  const targetArchetypeId = STRENGTH_TO_ARCHETYPE[profile.coreStrength]
+  const targetArchetype = ARCHETYPE_PROFILES.find(a => a.id === targetArchetypeId)
+  const archetypeName = targetArchetype?.name || profile.coreStrength.replace(/-/g, ' ')
+
+  // Build narrative boost label based on what improved
+  let narrativeBoostLabel = ''
+  if (narrativeBoost > 15) {
+    narrativeBoostLabel = `Strong ${archetypeName} Signal`
+  } else if (narrativeBoost > 5) {
+    narrativeBoostLabel = `Boosts ${archetypeName.split(' ')[0]} Signal`
+  } else if (narrativeBoost > 0) {
+    narrativeBoostLabel = `Slight Narrative Lift`
+  }
+
+  // Top Pick = increases narrative alignment AND doesn't degrade JD score
+  const isNarrativeTopPick = narrativeBoost > 5 && base.scoreDelta >= 0
+
+  return {
+    ...base,
+    narrativeBoost,
+    narrativeMatchPercent: suggestedNarrative,
+    originalNarrativePercent: originalNarrative,
+    isNarrativeTopPick,
+    narrativeBoostLabel,
+  }
+}
+
+/**
+ * Full narrative-driven tailoring pipeline for a set of bullets.
+ *
+ * For each original bullet:
+ * 1. Rewrites it using tailorBulletForNarrative (verb upgrades + enrichment)
+ * 2. Scores against both JD alignment and Narrative alignment
+ * 3. Verifies narrative needle movement via analyzeNarrativeGap on the full set
+ * 4. Classifies as Top Pick if it increases narrative alignment
+ *
+ * Returns the same BulletState-compatible structure with narrative fields.
+ */
+export function tailorBulletsWithNarrative(
+  originalBullets: string[],
+  suggestedBullets: string[],
+  jobKeywords: string[],
+  profile: NarrativeProfile,
+  jobTitle?: string
+): {
+  analyses: TailoringAnalysis[]
+  originalNarrativePercent: number
+  suggestedNarrativePercent: number
+  narrativeDelta: number
+} {
+  const maxLen = Math.max(originalBullets.length, suggestedBullets.length)
+  const analyses: TailoringAnalysis[] = []
+
+  // First pass: analyze each pair with narrative context
+  for (let i = 0; i < maxLen; i++) {
+    const original = originalBullets[i] || ''
+    const suggested = suggestedBullets[i] || original
+
+    const analysis = analyzeTailoringPairWithNarrative(
+      original,
+      suggested,
+      jobKeywords,
+      profile,
+      jobTitle
+    )
+
+    analyses.push(analysis)
+  }
+
+  // Second pass: verify full-set narrative movement using analyzeNarrativeGap
+  const originalNarrative = analyzeNarrativeGap(originalBullets, profile)
+  const suggestedNarrative = analyzeNarrativeGap(suggestedBullets, profile)
+
+  return {
+    analyses,
+    originalNarrativePercent: originalNarrative.narrativeMatchPercent,
+    suggestedNarrativePercent: suggestedNarrative.narrativeMatchPercent,
+    narrativeDelta: suggestedNarrative.narrativeMatchPercent - originalNarrative.narrativeMatchPercent,
   }
 }
 
