@@ -746,6 +746,191 @@ What part would you like to flesh out first?`
 }
 
 // ---------------------------------------------------------------------------
+// Tailoring Editor — keyword extraction, gap detection for bullet cards
+// ---------------------------------------------------------------------------
+
+export interface KeywordMatch {
+  /** The keyword text */
+  keyword: string
+  /** Start index in the bullet text */
+  startIndex: number
+  /** End index in the bullet text */
+  endIndex: number
+}
+
+export interface GapClosure {
+  /** Gap principle name that this bullet closes */
+  gapName: string
+  /** Principle ID */
+  principleId: string
+}
+
+export interface TailoringAnalysis {
+  /** Keywords from the job description found in the suggested bullet */
+  matchedKeywords: KeywordMatch[]
+  /** Gaps that this suggested bullet helps close */
+  gapsClosing: GapClosure[]
+  /** Score delta between original and suggested */
+  scoreDelta: number
+  /** Original bullet score (0-100) */
+  originalScore: number
+  /** Suggested bullet score (0-100) */
+  suggestedScore: number
+}
+
+/**
+ * Extract meaningful keywords from a job description.
+ * Returns unique multi-word and single-word phrases that are
+ * likely to be ATS-relevant.
+ */
+export function extractJobKeywords(jobDescription: string): string[] {
+  if (!jobDescription || jobDescription.trim().length === 0) return []
+
+  const lower = jobDescription.toLowerCase()
+  const keywords: Set<string> = new Set()
+
+  // Multi-word phrases (2-3 words that appear meaningful)
+  const multiWordPatterns = [
+    /\b(computer vision|machine learning|deep learning|natural language|data science)\b/gi,
+    /\b(project management|product management|business intelligence|user experience)\b/gi,
+    /\b(a\/b testing|root cause|cross.functional|full.stack|end.to.end)\b/gi,
+    /\b(kpi tracking|data.driven|customer.facing|revenue growth|cost reduction)\b/gi,
+    /\b(agile methodology|scrum master|design thinking|lean startup)\b/gi,
+    /\b(stakeholder management|budget management|team leadership|strategic planning)\b/gi,
+  ]
+
+  for (const pattern of multiWordPatterns) {
+    const matches = jobDescription.match(pattern) || []
+    matches.forEach(m => keywords.add(m.toLowerCase().trim()))
+  }
+
+  // Single-word technical and business keywords
+  const singleKeywordList = [
+    'python', 'javascript', 'typescript', 'react', 'node', 'sql', 'aws', 'gcp',
+    'azure', 'docker', 'kubernetes', 'api', 'rest', 'graphql', 'saas', 'b2b', 'b2c',
+    'analytics', 'metrics', 'roadmap', 'strategy', 'prioritization', 'okr', 'kpi',
+    'revenue', 'growth', 'retention', 'conversion', 'engagement', 'acquisition',
+    'scrum', 'agile', 'sprint', 'backlog', 'jira', 'confluence', 'figma',
+    'tableau', 'looker', 'amplitude', 'mixpanel', 'segment',
+    'leadership', 'collaboration', 'innovation', 'optimization', 'scalability',
+    'compliance', 'governance', 'automation', 'integration', 'pipeline',
+    'budget', 'forecast', 'audit', 'regulatory', 'certification',
+  ]
+
+  for (const kw of singleKeywordList) {
+    if (lower.includes(kw)) keywords.add(kw)
+  }
+
+  // Extract capitalized terms from the JD that look like proper nouns / tools
+  const capitalizedTerms = jobDescription.match(/\b[A-Z][a-zA-Z]{2,}(?:\s+[A-Z][a-zA-Z]+)?\b/g) || []
+  for (const term of capitalizedTerms) {
+    const tl = term.toLowerCase()
+    // Skip common words
+    if (['the', 'and', 'for', 'with', 'our', 'you', 'will', 'are', 'this', 'that', 'from', 'have', 'been'].includes(tl)) continue
+    if (term.length >= 3) keywords.add(tl)
+  }
+
+  return Array.from(keywords).sort((a, b) => b.length - a.length) // longest first for matching
+}
+
+/**
+ * Find keyword matches in a bullet text.
+ * Returns matches with their positions for highlighting.
+ */
+export function findKeywordMatches(text: string, keywords: string[]): KeywordMatch[] {
+  const matches: KeywordMatch[] = []
+  const lower = text.toLowerCase()
+
+  for (const keyword of keywords) {
+    let searchFrom = 0
+    const kl = keyword.toLowerCase()
+    while (searchFrom < lower.length) {
+      const idx = lower.indexOf(kl, searchFrom)
+      if (idx === -1) break
+
+      // Check word boundary (avoid matching inside words)
+      const charBefore = idx > 0 ? lower[idx - 1] : ' '
+      const charAfter = idx + kl.length < lower.length ? lower[idx + kl.length] : ' '
+      const isWordBoundary = /[\s,.;:!?()[\]{}\/\-]/.test(charBefore) || idx === 0
+      const isEndBoundary = /[\s,.;:!?()[\]{}\/\-]/.test(charAfter) || idx + kl.length === lower.length
+
+      if (isWordBoundary && isEndBoundary) {
+        // Check no overlap with existing matches
+        const overlaps = matches.some(
+          m => (idx >= m.startIndex && idx < m.endIndex) || (idx + kl.length > m.startIndex && idx + kl.length <= m.endIndex)
+        )
+        if (!overlaps) {
+          matches.push({
+            keyword: text.substring(idx, idx + kl.length), // preserve original casing
+            startIndex: idx,
+            endIndex: idx + kl.length,
+          })
+        }
+      }
+      searchFrom = idx + 1
+    }
+  }
+
+  return matches.sort((a, b) => a.startIndex - b.startIndex)
+}
+
+/**
+ * Detect which competency gaps a suggested bullet helps close.
+ * Compares the suggested bullet's principle coverage against the original.
+ */
+export function detectGapClosures(
+  originalBullet: string,
+  suggestedBullet: string
+): GapClosure[] {
+  const closures: GapClosure[] = []
+
+  const gapPrincipleKeywords: Record<string, { name: string; keywords: string[] }> = {
+    'outcome-over-output': { name: 'Outcomes', keywords: ['increased', 'improved', 'reduced', 'resulted', 'achieved', 'generated'] },
+    'data-driven-decisions': { name: 'Data-Driven', keywords: ['%', '$', 'data', 'metrics', 'analytics', 'measured'] },
+    'user-centricity': { name: 'User Focus', keywords: ['user', 'customer', 'client', 'people', 'experience'] },
+    'strategic-thinking': { name: 'Strategy', keywords: ['strategy', 'roadmap', 'prioriti', 'initiative'] },
+    'cross-functional-leadership': { name: 'Leadership', keywords: ['cross-functional', 'led', 'team', 'stakeholder', 'aligned'] },
+  }
+
+  const origLower = originalBullet.toLowerCase()
+  const sugLower = suggestedBullet.toLowerCase()
+
+  for (const [principleId, config] of Object.entries(gapPrincipleKeywords)) {
+    const origHits = config.keywords.filter(kw => origLower.includes(kw)).length
+    const sugHits = config.keywords.filter(kw => sugLower.includes(kw)).length
+
+    // Gap is "closed" if original had 0 hits and suggested has 2+
+    if (origHits === 0 && sugHits >= 2) {
+      closures.push({ gapName: config.name, principleId })
+    }
+  }
+
+  return closures
+}
+
+/**
+ * Analyze a single bullet pair for the tailoring editor.
+ * Returns keyword matches, gap closures, and score comparison.
+ */
+export function analyzeTailoringPair(
+  originalBullet: string,
+  suggestedBullet: string,
+  jobKeywords: string[],
+  jobTitle?: string
+): TailoringAnalysis {
+  const originalAnalysis = analyzeCVContent(originalBullet, jobTitle)
+  const suggestedAnalysis = analyzeCVContent(suggestedBullet, jobTitle)
+
+  return {
+    matchedKeywords: findKeywordMatches(suggestedBullet, jobKeywords),
+    gapsClosing: detectGapClosures(originalBullet, suggestedBullet),
+    scoreDelta: suggestedAnalysis.totalScore - originalAnalysis.totalScore,
+    originalScore: originalAnalysis.totalScore,
+    suggestedScore: suggestedAnalysis.totalScore,
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Indicator Detail Analysis — sub-indicators, evidence, and action items
 // ---------------------------------------------------------------------------
 
@@ -1171,6 +1356,243 @@ export function draftGapAnswer(
       return hasTools
         ? `In my role, I [relevant action using ${gap.principleName.toLowerCase()} skills], leveraging [tools/methods] to achieve [specific result]. This experience demonstrates [key competency].`
         : `I [relevant action], focusing on [key aspect of ${gap.principleName.toLowerCase()}]. For example, [specific situation] where I [action] resulting in [outcome].`
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Application Strategy — "Your Winning Strategy" card data
+// ---------------------------------------------------------------------------
+
+export interface StrategicPillar {
+  /** Short title (e.g., "Regulatory Expertise") */
+  title: string
+  /** One-sentence explanation */
+  description: string
+  /** Principle ID this pillar derives from */
+  principleId: string
+}
+
+export interface TalkingPoint {
+  /** The hook sentence */
+  point: string
+  /** Which bullet it was derived from */
+  sourceBullet: string
+}
+
+export interface ApplicationStrategy {
+  /** Core value proposition — 1 sentence (e.g., "The bridge between X and Y") */
+  valueProposition: string
+  /** Top 3 strategic pillars identified from the CV */
+  strategicPillars: StrategicPillar[]
+  /** AI-generated 3-4 sentence executive summary for cover letter / LinkedIn */
+  executiveSummary: string
+  /** 2-3 key talking points for interviews */
+  talkingPoints: TalkingPoint[]
+  /** Success probability 0-100 based on final tailored score */
+  successProbability: number
+  /** Human-readable confidence label */
+  confidenceLabel: string
+  /** Final tailored score used for computation */
+  tailoredScore: number
+}
+
+// Pillar templates keyed by principle ID
+const PILLAR_TEMPLATES: Record<string, { title: string; descriptionTemplate: string }> = {
+  'outcome-over-output': {
+    title: 'Results-Driven Impact',
+    descriptionTemplate: 'Your CV demonstrates a track record of delivering measurable business outcomes, not just shipping features.',
+  },
+  'data-driven-decisions': {
+    title: 'Data-Driven Decision Making',
+    descriptionTemplate: 'Strong evidence of using metrics, analytics, and quantified results to inform decisions and validate impact.',
+  },
+  'user-centricity': {
+    title: 'User-First Mindset',
+    descriptionTemplate: 'Clear focus on understanding and serving end users, with evidence of research-informed product decisions.',
+  },
+  'strategic-thinking': {
+    title: 'Strategic Vision',
+    descriptionTemplate: 'Demonstrated ability to align tactical work with long-term business strategy and prioritize effectively.',
+  },
+  'cross-functional-leadership': {
+    title: 'Cross-Functional Leadership',
+    descriptionTemplate: 'Proven ability to lead through influence across engineering, design, and business stakeholders.',
+  },
+  'problem-solving': {
+    title: 'Analytical Problem Solving',
+    descriptionTemplate: 'Evidence of structured root-cause analysis and creative solutions to complex challenges.',
+  },
+  'iterative-development': {
+    title: 'Agile Execution',
+    descriptionTemplate: 'Track record of shipping fast, iterating on feedback, and building with an MVP mindset.',
+  },
+  'communication-storytelling': {
+    title: 'Executive Communication',
+    descriptionTemplate: 'Ability to craft compelling narratives and secure buy-in from senior leadership.',
+  },
+  'technical-aptitude': {
+    title: 'Technical Credibility',
+    descriptionTemplate: 'Deep technical understanding that enables productive partnerships with engineering teams.',
+  },
+  'business-acumen': {
+    title: 'Commercial Acumen',
+    descriptionTemplate: 'Strong understanding of revenue, growth metrics, and how product decisions drive business results.',
+  },
+}
+
+/**
+ * Generate a comprehensive application strategy from tailored CV bullets.
+ *
+ * Analyzes the candidate's strongest principles, crafts a value proposition,
+ * identifies strategic pillars, generates an executive summary, and selects
+ * key talking points — all designed to give the user confidence and clarity.
+ */
+export function generateApplicationStrategy(
+  tailoredBullets: string[],
+  jobTitle?: string,
+  jobDescription?: string
+): ApplicationStrategy {
+  if (tailoredBullets.length === 0) {
+    return {
+      valueProposition: 'Complete your CV tailoring to generate your winning strategy.',
+      strategicPillars: [],
+      executiveSummary: '',
+      talkingPoints: [],
+      successProbability: 0,
+      confidenceLabel: 'Insufficient Data',
+      tailoredScore: 0,
+    }
+  }
+
+  const combined = tailoredBullets.join(' ')
+  const analysis = analyzeCVContent(combined, jobTitle)
+  const pmAnalysis = analyzeWithPMPrinciples(combined)
+  const isProductRoleFlag = jobTitle ? isProductRole(jobTitle) : false
+  const roleLabel = jobTitle || 'this role'
+
+  // ----- Score each principle to find top 3 -----
+  const principleScores: { id: string; name: string; score: number }[] = []
+  const allPrincipleIds = Object.keys(PRINCIPLE_SUB_INDICATORS)
+
+  for (const pid of allPrincipleIds) {
+    const subDefs = PRINCIPLE_SUB_INDICATORS[pid]
+    const lower = combined.toLowerCase()
+    const hits = subDefs.reduce((sum, sub) => {
+      return sum + sub.keywords.filter(kw => lower.includes(kw)).length * sub.weight
+    }, 0)
+    const maxPossible = subDefs.reduce((sum, sub) => sub.keywords.length * sub.weight + sum, 0)
+    const score = maxPossible > 0 ? Math.round((hits / maxPossible) * 100) : 0
+    const template = PILLAR_TEMPLATES[pid]
+    principleScores.push({ id: pid, name: template?.title || pid, score })
+  }
+
+  principleScores.sort((a, b) => b.score - a.score)
+  const top3 = principleScores.slice(0, 3)
+
+  // ----- Strategic Pillars -----
+  const strategicPillars: StrategicPillar[] = top3.map(p => {
+    const template = PILLAR_TEMPLATES[p.id]
+    return {
+      title: template?.title || p.name,
+      description: template?.descriptionTemplate || 'A key strength demonstrated in your CV.',
+      principleId: p.id,
+    }
+  })
+
+  // ----- Value Proposition -----
+  const pillarNames = top3.map(p => {
+    const t = PILLAR_TEMPLATES[p.id]
+    return t?.title || p.name
+  })
+
+  let valueProposition: string
+  if (isProductRoleFlag && top3.length >= 2) {
+    valueProposition = `A product leader who combines ${pillarNames[0]} with ${pillarNames[1]} — the profile ${roleLabel} teams compete for.`
+  } else if (top3.length >= 2) {
+    valueProposition = `A professional who bridges ${pillarNames[0]} and ${pillarNames[1]} to deliver consistent, measurable results.`
+  } else {
+    valueProposition = `A strong candidate whose ${pillarNames[0] || 'expertise'} aligns directly with what ${roleLabel} demands.`
+  }
+
+  // ----- Talking Points (pick strongest bullets) -----
+  const talkingPoints: TalkingPoint[] = []
+  const scoredBullets = tailoredBullets
+    .filter(b => b.trim().length >= 20)
+    .map(bullet => {
+      const bulletAnalysis = analyzeCVContent(bullet, jobTitle)
+      return { bullet, score: bulletAnalysis.totalScore }
+    })
+    .sort((a, b) => b.score - a.score)
+
+  for (const { bullet } of scoredBullets.slice(0, 3)) {
+    // Extract the most specific achievement from the bullet
+    const numberMatch = bullet.match(/(\d+%|\$[\d,.]+[MKBmkb]?|\d+x|\d+\+?\s*(?:users|customers|team|people|engineers|countries|markets|clients))/i)
+    const actionMatch = bullet.match(/^([A-Z][^,.]+(?:,\s[^,.]+)?)/)?.[1]
+
+    if (numberMatch && actionMatch) {
+      talkingPoints.push({
+        point: `Be ready to discuss how you ${actionMatch.toLowerCase().replace(/^(led|drove|built|launched|achieved|increased|reduced|improved|designed|created|managed|delivered|spearheaded)/, '$1').trim()} — interviewers will want the story behind "${numberMatch[1]}".`,
+        sourceBullet: bullet,
+      })
+    } else if (actionMatch) {
+      talkingPoints.push({
+        point: `Prepare to elaborate on how you ${actionMatch.toLowerCase().trim()} — this directly maps to what they need.`,
+        sourceBullet: bullet,
+      })
+    }
+  }
+
+  // Ensure at least 2 talking points
+  if (talkingPoints.length < 2 && scoredBullets.length > 0) {
+    const fallback = scoredBullets[talkingPoints.length]
+    if (fallback) {
+      talkingPoints.push({
+        point: `Prepare a concise version of this experience for behavioral questions.`,
+        sourceBullet: fallback.bullet,
+      })
+    }
+  }
+
+  // ----- Executive Summary -----
+  const strengthList = top3.map(p => PILLAR_TEMPLATES[p.id]?.title.toLowerCase() || p.name.toLowerCase())
+  const missingCount = pmAnalysis.missingPrinciples.length
+
+  let executiveSummary: string
+  if (isProductRoleFlag) {
+    executiveSummary = `As a product professional, I bring a proven combination of ${strengthList[0]} and ${strengthList[1] || 'strategic execution'}. `
+    executiveSummary += `My track record demonstrates consistent delivery of business outcomes — from ${scoredBullets[0]?.bullet.substring(0, 60).trim() || 'driving measurable impact'}... `
+    executiveSummary += `I am particularly well-suited for ${roleLabel} because my approach integrates ${strengthList[2] || 'cross-functional collaboration'} with a relentless focus on user value. `
+    if (missingCount <= 2) {
+      executiveSummary += 'I look forward to bringing this same impact-driven mindset to your team.'
+    } else {
+      executiveSummary += 'I am eager to grow further and apply my strengths to your product challenges.'
+    }
+  } else {
+    executiveSummary = `I am a ${roleLabel} professional whose core strengths in ${strengthList[0]} and ${strengthList[1] || 'execution'} drive measurable results. `
+    executiveSummary += `My experience spans ${scoredBullets[0]?.bullet.substring(0, 60).trim() || 'delivering impactful work'}... `
+    executiveSummary += `With a focus on ${strengthList[2] || 'continuous improvement'}, I bring both the technical depth and the strategic perspective this role requires. `
+    executiveSummary += 'I am excited to contribute to your team and deliver meaningful outcomes.'
+  }
+
+  // ----- Success Probability -----
+  const tailoredScore = analysis.totalScore
+  // Map 0-100 internal score to a success probability range (30-95%)
+  const successProbability = Math.min(95, Math.max(30, Math.round(tailoredScore * 0.65 + 30)))
+
+  let confidenceLabel: string
+  if (successProbability >= 80) confidenceLabel = 'Excellent Match'
+  else if (successProbability >= 65) confidenceLabel = 'Strong Match'
+  else if (successProbability >= 50) confidenceLabel = 'Good Match'
+  else confidenceLabel = 'Developing'
+
+  return {
+    valueProposition,
+    strategicPillars,
+    executiveSummary,
+    talkingPoints: talkingPoints.slice(0, 3),
+    successProbability,
+    confidenceLabel,
+    tailoredScore,
   }
 }
 
