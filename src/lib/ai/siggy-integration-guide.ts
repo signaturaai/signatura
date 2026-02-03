@@ -2253,6 +2253,246 @@ export function tailorBulletsWithNarrative(
   }
 }
 
+// =========================================================================
+// Narrative Transformation Summary
+// =========================================================================
+
+/**
+ * Result of the narrative transformation analysis — the "victory lap" data.
+ *
+ * Shows the user exactly how their professional identity shifted from
+ * original to tailored CV.
+ */
+export interface NarrativeTransformationSummary {
+  beforeArchetype: { id: string; name: string; percent: number }
+  afterArchetype: { id: string; name: string; percent: number }
+  narrativeShift: string
+  leadershipSignalDelta: number
+  jdAlignmentMaintained: boolean
+  jdScore: number
+  successSummary: string
+  dimensionShifts: {
+    dimension: string
+    before: number
+    after: number
+    delta: number
+  }[]
+  topTransformations: {
+    original: string
+    transformed: string
+    boostLabel: string
+  }[]
+}
+
+/**
+ * Tone nudge options the user can pick when they say "this doesn't feel authentic."
+ */
+export type ToneNudge = 'more-technical' | 'more-visionary' | 'more-collaborative' | 'more-results-driven'
+
+const TONE_NUDGE_STRENGTH_MAP: Record<ToneNudge, CoreStrength> = {
+  'more-technical': 'technical-mastery',
+  'more-visionary': 'strategic-leadership',
+  'more-collaborative': 'operational-excellence',
+  'more-results-driven': 'business-innovation',
+}
+
+/**
+ * Generate the full narrative transformation summary.
+ *
+ * This is the "victory lap" — comparing original vs tailored bullets
+ * to show how the candidate's professional identity has shifted.
+ *
+ * Uses real archetype detection + narrative gap analysis (NO faking).
+ */
+export function generateNarrativeTransformationSummary(
+  originalBullets: string[],
+  tailoredBullets: string[],
+  profile: NarrativeProfile,
+  jdScore: number,
+  originalJdScore: number
+): NarrativeTransformationSummary {
+  // 1. Detect archetypes before and after
+  const originalText = originalBullets.join(' ')
+  const tailoredText = tailoredBullets.join(' ')
+
+  const beforeDetection = detectArchetype(originalText)
+  const afterDetection = detectArchetype(tailoredText)
+
+  // 2. Full narrative gap analysis before and after
+  const beforeNarrative = analyzeNarrativeGap(originalBullets, profile)
+  const afterNarrative = analyzeNarrativeGap(tailoredBullets, profile)
+
+  // 3. Calculate per-dimension shifts
+  const dimensionShifts = beforeNarrative.evidence.map((ev, idx) => {
+    const afterEv = afterNarrative.evidence[idx]
+    const beforePct = ev.maxContribution > 0 ? Math.round((ev.contribution / ev.maxContribution) * 100) : 0
+    const afterPct = afterEv && afterEv.maxContribution > 0
+      ? Math.round((afterEv.contribution / afterEv.maxContribution) * 100) : 0
+    return {
+      dimension: ev.dimension,
+      before: beforePct,
+      after: afterPct,
+      delta: afterPct - beforePct,
+    }
+  })
+
+  // 4. Find top transformations (bullets with biggest narrative boost)
+  const topTransformations: NarrativeTransformationSummary['topTransformations'] = []
+  const maxLen = Math.min(originalBullets.length, tailoredBullets.length)
+  const boosts: { idx: number; boost: number }[] = []
+
+  for (let i = 0; i < maxLen; i++) {
+    const origScore = scoreNarrativeAlignment(originalBullets[i], profile)
+    const tailScore = scoreNarrativeAlignment(tailoredBullets[i], profile)
+    boosts.push({ idx: i, boost: tailScore - origScore })
+  }
+
+  boosts.sort((a, b) => b.boost - a.boost)
+  const topCount = Math.min(3, boosts.length)
+  for (let i = 0; i < topCount; i++) {
+    const { idx, boost } = boosts[i]
+    if (boost <= 0) break
+    const targetArchetypeId = STRENGTH_TO_ARCHETYPE[profile.coreStrength]
+    const targetArchetype = ARCHETYPE_PROFILES.find(a => a.id === targetArchetypeId)
+    const archetypeName = targetArchetype?.name || profile.coreStrength.replace(/-/g, ' ')
+    topTransformations.push({
+      original: originalBullets[idx],
+      transformed: tailoredBullets[idx],
+      boostLabel: boost > 15 ? `Strong ${archetypeName} Signal` : `+${boost}% Narrative Lift`,
+    })
+  }
+
+  // 5. Build narrative shift description
+  const narrativeDelta = afterNarrative.narrativeMatchPercent - beforeNarrative.narrativeMatchPercent
+  const jdMaintained = jdScore >= originalJdScore
+
+  const targetArchetypeId = STRENGTH_TO_ARCHETYPE[profile.coreStrength]
+  const targetArchetype = ARCHETYPE_PROFILES.find(a => a.id === targetArchetypeId)
+  const targetName = targetArchetype?.name || 'Target Archetype'
+
+  const narrativeShift = narrativeDelta > 0
+    ? `We increased your ${targetName.toLowerCase()} signal by ${narrativeDelta}%${jdMaintained ? ' while maintaining 100% JD alignment' : ''}.`
+    : 'Your narrative alignment is consistent with the original.'
+
+  // 6. Build success summary (the CPO's "feel ready to lead" moment)
+  const successParts: string[] = []
+
+  if (afterNarrative.narrativeMatchPercent >= 70) {
+    successParts.push(`Your CV now projects a clear ${targetName} identity at ${afterNarrative.narrativeMatchPercent}% alignment`)
+  } else if (afterNarrative.narrativeMatchPercent >= 45) {
+    successParts.push(`Your ${targetName.toLowerCase()} signal has grown to ${afterNarrative.narrativeMatchPercent}%`)
+  } else {
+    successParts.push(`Your narrative alignment is at ${afterNarrative.narrativeMatchPercent}%`)
+  }
+
+  if (narrativeDelta > 20) {
+    successParts.push(`a ${narrativeDelta}-point transformation from your original CV`)
+  } else if (narrativeDelta > 0) {
+    successParts.push(`up ${narrativeDelta} points from where you started`)
+  }
+
+  if (jdMaintained) {
+    successParts.push('with full job description alignment preserved')
+  }
+
+  const leadershipDim = dimensionShifts.find(d => d.dimension === 'Action Verb Strength')
+  const leadershipDelta = leadershipDim?.delta || 0
+
+  return {
+    beforeArchetype: {
+      id: beforeDetection.primary.id,
+      name: beforeDetection.primary.name,
+      percent: beforeNarrative.narrativeMatchPercent,
+    },
+    afterArchetype: {
+      id: afterDetection.primary.id,
+      name: afterDetection.primary.name,
+      percent: afterNarrative.narrativeMatchPercent,
+    },
+    narrativeShift,
+    leadershipSignalDelta: leadershipDelta,
+    jdAlignmentMaintained: jdMaintained,
+    jdScore,
+    successSummary: successParts.join(' — ') + '.',
+    dimensionShifts,
+    topTransformations,
+  }
+}
+
+/**
+ * Re-tailor bullets with a tone nudge.
+ *
+ * When the user says "this doesn't feel authentic," they pick a tone
+ * direction. We create a modified profile with the nudged strength
+ * and re-run tailoring.
+ */
+export function retailorWithToneNudge(
+  bullets: string[],
+  originalProfile: NarrativeProfile,
+  nudge: ToneNudge
+): string[] {
+  const nudgedStrength = TONE_NUDGE_STRENGTH_MAP[nudge]
+  const nudgedProfile: NarrativeProfile = {
+    ...originalProfile,
+    coreStrength: nudgedStrength,
+  }
+
+  return bullets.map(bullet => tailorBulletForNarrative(bullet, nudgedProfile))
+}
+
+/**
+ * Format bullets for PDF export with seniority framing applied.
+ *
+ * Applies the same seniority rules from Phase 2 to ensure the final
+ * exported document uses consistent tone:
+ * - Executive/Senior: "a cross-functional team" framing
+ * - Verb upgrades for target strength
+ * - Enrichment phrases for bullets lacking outcomes
+ *
+ * Returns formatted text with section headers and bullet markers.
+ */
+export function formatBulletsForPDFExport(
+  bullets: string[],
+  profile: NarrativeProfile,
+  jobTitle: string,
+  candidateName?: string
+): string {
+  // Apply narrative tailoring to ensure seniority framing
+  const framedBullets = bullets.map(b => tailorBulletForNarrative(b, profile))
+
+  const lines: string[] = []
+
+  // Header
+  if (candidateName) {
+    lines.push(candidateName.toUpperCase())
+    lines.push('')
+  }
+  lines.push(`${profile.targetRole || jobTitle}`)
+  lines.push(`${profile.seniorityLevel.charAt(0).toUpperCase() + profile.seniorityLevel.slice(1)}-Level Professional`)
+  lines.push('')
+
+  // Narrative positioning statement
+  if (profile.desiredBrand) {
+    lines.push('PROFESSIONAL SUMMARY')
+    lines.push(profile.desiredBrand)
+    lines.push('')
+  }
+
+  // Experience bullets
+  lines.push('KEY ACHIEVEMENTS')
+  framedBullets.forEach(b => {
+    lines.push(`• ${b}`)
+  })
+  lines.push('')
+
+  // Footer with metadata
+  const targetArchetypeId = STRENGTH_TO_ARCHETYPE[profile.coreStrength]
+  const targetArchetype = ARCHETYPE_PROFILES.find(a => a.id === targetArchetypeId)
+  lines.push(`Profile: ${targetArchetype?.name || profile.coreStrength} | Seniority: ${profile.seniorityLevel}`)
+
+  return lines.join('\n')
+}
+
 export {
   generateSiggyPMContext,
   analyzeWithPMPrinciples,

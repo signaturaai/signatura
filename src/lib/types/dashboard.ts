@@ -208,6 +208,8 @@ export interface DashboardMetrics {
   cvVersions: number
   offersReceived: number
   acceptanceRate: number
+  contentMatchPercent: number
+  narrativeMatchPercent: number
 }
 
 /**

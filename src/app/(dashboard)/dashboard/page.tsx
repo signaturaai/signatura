@@ -26,6 +26,8 @@ import {
   ArrowRight,
   TrendingUp,
   Sparkles,
+  Shield,
+  Compass,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -102,8 +104,8 @@ export default function DashboardPage() {
         </Button>
       </div>
 
-      {/* Header Cards - 4 Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Header Cards - 6 Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* Total Applications */}
         <Card className="bg-gradient-to-br from-sky-light to-sky/30 border-sky/30 shadow-soft">
           <CardContent className="p-6">
@@ -173,6 +175,44 @@ export default function DashboardPage() {
             </div>
             <div className="flex items-center gap-1 mt-3 text-xs text-success-dark">
               <span>Tailored</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Content Match */}
+        <Card className="bg-gradient-to-br from-sky-light/50 to-indigo-100/40 border-indigo-200/40 shadow-soft">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-indigo-700">Content Match</p>
+                <p className="text-3xl font-bold text-text-primary mt-1">{metrics.contentMatchPercent}%</p>
+              </div>
+              <div className="h-12 w-12 rounded-xl bg-white/60 flex items-center justify-center">
+                <Shield className="h-6 w-6 text-indigo-600" />
+              </div>
+            </div>
+            <div className="flex items-center gap-1 mt-3 text-xs text-indigo-600">
+              <CheckCircle className="h-3 w-3" />
+              <span>JD aligned</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Narrative Match */}
+        <Card className="bg-gradient-to-br from-amber-50 to-amber-100/40 border-amber-200/40 shadow-soft">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-amber-700">Narrative Match</p>
+                <p className="text-3xl font-bold text-text-primary mt-1">{metrics.narrativeMatchPercent}%</p>
+              </div>
+              <div className="h-12 w-12 rounded-xl bg-white/60 flex items-center justify-center">
+                <Compass className="h-6 w-6 text-amber-600" />
+              </div>
+            </div>
+            <div className="flex items-center gap-1 mt-3 text-xs text-amber-600">
+              <CheckCircle className="h-3 w-3" />
+              <span>Identity aligned</span>
             </div>
           </CardContent>
         </Card>

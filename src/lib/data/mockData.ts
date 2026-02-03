@@ -589,6 +589,8 @@ export const mockDashboardMetrics: DashboardMetrics = {
     (app) => app.application_status === 'offer_received'
   ).length,
   acceptanceRate: 10, // Placeholder
+  contentMatchPercent: 100,
+  narrativeMatchPercent: 100,
 }
 
 /**

@@ -90,6 +90,9 @@ export {
   tailorBulletForNarrative,
   analyzeTailoringPairWithNarrative,
   tailorBulletsWithNarrative,
+  generateNarrativeTransformationSummary,
+  retailorWithToneNudge,
+  formatBulletsForPDFExport,
   STAGE_WEIGHTS,
   PM_SPECIALIST_WEIGHTS,
   GENERAL_PROFESSIONAL_WEIGHTS,
@@ -115,4 +118,6 @@ export {
   type NarrativeProfile,
   type NarrativeEvidence,
   type NarrativeAnalysisResult,
+  type NarrativeTransformationSummary,
+  type ToneNudge,
 } from './siggy-integration-guide'
