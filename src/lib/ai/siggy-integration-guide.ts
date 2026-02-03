@@ -1596,6 +1596,338 @@ export function generateApplicationStrategy(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Strategic Narrative Alignment — Compass profile + Semantic Gap Analysis
+// ---------------------------------------------------------------------------
+
+export type SeniorityLevel = 'junior' | 'mid' | 'senior' | 'executive'
+export type CoreStrength = 'strategic-leadership' | 'technical-mastery' | 'operational-excellence' | 'business-innovation'
+
+export interface NarrativeProfile {
+  /** "What is your next career target?" */
+  targetRole: string
+  /** Current seniority level */
+  seniorityLevel: SeniorityLevel
+  /** Professional superpower */
+  coreStrength: CoreStrength
+  /** Biggest career hurdle */
+  painPoint: string
+  /** One-sentence desired recruiter perception */
+  desiredBrand: string
+}
+
+/** A single piece of evidence explaining the match score */
+export interface NarrativeEvidence {
+  /** What was measured */
+  dimension: string
+  /** What the desired brand requires */
+  desired: string
+  /** What the CV actually signals */
+  actual: string
+  /** Contribution to match score (positive or 0) */
+  contribution: number
+  /** Maximum possible contribution for this dimension */
+  maxContribution: number
+}
+
+export interface NarrativeAnalysisResult {
+  /** Detected archetype from the CV text (e.g., "Execution-Oriented Specialist") */
+  detectedArchetype: string
+  /** Short description of the detected archetype */
+  archetypeDescription: string
+  /** Narrative Match % (0-100) — derived from semantic overlap, NOT hardcoded */
+  narrativeMatchPercent: number
+  /** Evidence items explaining why this score */
+  evidence: NarrativeEvidence[]
+  /** Top keywords found in CV that align with desired brand */
+  alignedKeywords: string[]
+  /** Keywords expected from desired brand/role but missing in CV */
+  missingKeywords: string[]
+  /** Overall 4-stage score of the CV */
+  cvScore: number
+}
+
+// ---------------------------------------------------------------------------
+// Archetype detection — maps verb/keyword patterns to archetypes
+// ---------------------------------------------------------------------------
+
+const ARCHETYPE_PROFILES: {
+  id: string
+  name: string
+  description: string
+  keywords: string[]
+  verbs: string[]
+}[] = [
+  {
+    id: 'strategic-leader',
+    name: 'Strategic Leader',
+    description: 'Your CV signals someone who sets direction, influences stakeholders, and aligns teams around a vision.',
+    keywords: ['strategy', 'strategic', 'vision', 'roadmap', 'stakeholder', 'executive', 'c-suite', 'board', 'alignment', 'initiative'],
+    verbs: ['led', 'directed', 'influenced', 'aligned', 'championed', 'spearheaded', 'orchestrated'],
+  },
+  {
+    id: 'execution-specialist',
+    name: 'Execution-Oriented Specialist',
+    description: 'Your CV signals a high-output doer who ships fast, manages processes, and delivers reliably.',
+    keywords: ['delivered', 'shipped', 'launched', 'sprint', 'agile', 'deployment', 'pipeline', 'automation', 'ci/cd', 'release'],
+    verbs: ['built', 'implemented', 'deployed', 'shipped', 'launched', 'automated', 'managed', 'maintained'],
+  },
+  {
+    id: 'data-analyst',
+    name: 'Data-Driven Analyst',
+    description: 'Your CV signals someone who lets numbers tell the story — metrics, A/B tests, and analytical rigor.',
+    keywords: ['data', 'analytics', 'metrics', 'kpi', 'a/b', 'experiment', 'analysis', 'measured', 'dashboards', 'insights'],
+    verbs: ['analyzed', 'measured', 'tracked', 'optimized', 'tested', 'validated', 'quantified'],
+  },
+  {
+    id: 'user-champion',
+    name: 'User-Centric Champion',
+    description: 'Your CV signals deep empathy — user research, feedback loops, and experience-driven decisions.',
+    keywords: ['user', 'customer', 'research', 'interview', 'feedback', 'usability', 'experience', 'satisfaction', 'nps', 'persona'],
+    verbs: ['researched', 'interviewed', 'discovered', 'advocated', 'designed', 'improved'],
+  },
+  {
+    id: 'technical-architect',
+    name: 'Technical Architect',
+    description: 'Your CV signals systems-level thinking — architecture decisions, scalability, and engineering depth.',
+    keywords: ['architecture', 'system', 'platform', 'api', 'infrastructure', 'scalability', 'performance', 'database', 'microservices', 'technical'],
+    verbs: ['architected', 'designed', 'engineered', 'integrated', 'migrated', 'optimized', 'scaled'],
+  },
+  {
+    id: 'growth-driver',
+    name: 'Growth & Business Driver',
+    description: 'Your CV signals commercial instinct — revenue impact, market expansion, and growth metrics.',
+    keywords: ['revenue', 'growth', 'conversion', 'acquisition', 'retention', 'market', 'pricing', 'monetization', 'roi', 'profit'],
+    verbs: ['grew', 'increased', 'expanded', 'monetized', 'accelerated', 'generated', 'captured'],
+  },
+  {
+    id: 'cross-functional-collaborator',
+    name: 'Cross-Functional Collaborator',
+    description: 'Your CV signals strong collaboration — bridging teams, facilitating alignment, and driving consensus.',
+    keywords: ['cross-functional', 'collaboration', 'team', 'partners', 'engineering', 'design', 'marketing', 'sales', 'operations'],
+    verbs: ['collaborated', 'partnered', 'facilitated', 'coordinated', 'bridged', 'unified'],
+  },
+]
+
+// Semantic dimensions: what we measure in the match calculation
+const NARRATIVE_DIMENSIONS: {
+  id: string
+  dimension: string
+  strengthMap: Record<CoreStrength, string[]>
+  seniorityMap: Record<SeniorityLevel, string[]>
+}[] = [
+  {
+    id: 'verb-strength',
+    dimension: 'Action Verb Strength',
+    strengthMap: {
+      'strategic-leadership': ['led', 'directed', 'influenced', 'aligned', 'championed', 'spearheaded', 'orchestrated', 'defined', 'envisioned'],
+      'technical-mastery': ['architected', 'engineered', 'designed', 'built', 'implemented', 'optimized', 'scaled', 'integrated', 'debugged'],
+      'operational-excellence': ['streamlined', 'automated', 'shipped', 'delivered', 'managed', 'maintained', 'deployed', 'launched', 'executed'],
+      'business-innovation': ['grew', 'increased', 'monetized', 'innovated', 'disrupted', 'expanded', 'generated', 'captured', 'transformed'],
+    },
+    seniorityMap: {
+      junior: ['assisted', 'supported', 'contributed', 'helped', 'participated'],
+      mid: ['managed', 'built', 'implemented', 'developed', 'created'],
+      senior: ['led', 'drove', 'designed', 'owned', 'delivered', 'spearheaded'],
+      executive: ['directed', 'transformed', 'defined', 'established', 'championed', 'orchestrated'],
+    },
+  },
+  {
+    id: 'achievement-keywords',
+    dimension: 'Achievement & Impact Keywords',
+    strengthMap: {
+      'strategic-leadership': ['strategy', 'vision', 'roadmap', 'stakeholder', 'alignment', 'initiative', 'prioritization', 'executive', 'board'],
+      'technical-mastery': ['architecture', 'system', 'api', 'platform', 'performance', 'scalability', 'infrastructure', 'technical', 'latency'],
+      'operational-excellence': ['process', 'efficiency', 'delivery', 'sprint', 'agile', 'pipeline', 'automation', 'deployment', 'quality'],
+      'business-innovation': ['revenue', 'growth', 'market', 'conversion', 'acquisition', 'roi', 'profit', 'pricing', 'innovation'],
+    },
+    seniorityMap: {
+      junior: ['team', 'project', 'task', 'feature'],
+      mid: ['product', 'initiative', 'program', 'platform'],
+      senior: ['portfolio', 'organization', 'department', 'business unit'],
+      executive: ['company', 'enterprise', 'division', 'board', 'p&l'],
+    },
+  },
+  {
+    id: 'quantification',
+    dimension: 'Quantified Results',
+    strengthMap: {
+      'strategic-leadership': ['%', '$', 'team of', 'stakeholders', 'departments'],
+      'technical-mastery': ['ms', 'latency', 'uptime', '99.', 'requests', 'throughput'],
+      'operational-excellence': ['time', 'hours', 'days', 'sprint', 'cycle', 'delivery'],
+      'business-innovation': ['$', '%', 'revenue', 'arr', 'mrr', 'users', 'customers', 'conversion'],
+    },
+    seniorityMap: {
+      junior: [],
+      mid: ['%', 'users', 'team'],
+      senior: ['$', '%', 'million', 'thousand', 'team of'],
+      executive: ['$', 'million', 'billion', 'revenue', 'p&l', 'headcount'],
+    },
+  },
+  {
+    id: 'brand-language',
+    dimension: 'Brand-Aligned Language',
+    strengthMap: {
+      'strategic-leadership': ['influence', 'vision', 'direction', 'north star', 'charter', 'mandate'],
+      'technical-mastery': ['deep dive', 'root cause', 'trade-off', 'feasibility', 'poc', 'prototype'],
+      'operational-excellence': ['sla', 'playbook', 'runbook', 'standard', 'framework', 'best practice'],
+      'business-innovation': ['disruption', 'blue ocean', 'first mover', 'moat', 'flywheel', 'network effect'],
+    },
+    seniorityMap: {
+      junior: [],
+      mid: [],
+      senior: ['owned', 'accountability', 'impact'],
+      executive: ['transformation', 'turnaround', 'cultural', 'organizational'],
+    },
+  },
+]
+
+/**
+ * Detect the strongest archetype from CV text.
+ * Uses weighted keyword + verb matching across all archetype profiles.
+ * Returns the top archetype and runner-up.
+ */
+function detectArchetype(cvText: string): { primary: typeof ARCHETYPE_PROFILES[0]; score: number } {
+  const lower = cvText.toLowerCase()
+
+  const scored = ARCHETYPE_PROFILES.map(profile => {
+    const keywordHits = profile.keywords.filter(kw => lower.includes(kw)).length
+    const verbHits = profile.verbs.filter(v => lower.includes(v)).length
+    // Verbs weighted 1.5x because they signal active contribution
+    const score = keywordHits + verbHits * 1.5
+    return { profile, score }
+  })
+
+  scored.sort((a, b) => b.score - a.score)
+  return { primary: scored[0].profile, score: scored[0].score }
+}
+
+/**
+ * Extract keywords from the desired brand statement + target role.
+ * These represent what the user WANTS to be seen as.
+ */
+function extractDesiredKeywords(profile: NarrativeProfile): string[] {
+  const text = `${profile.desiredBrand} ${profile.targetRole} ${profile.painPoint}`.toLowerCase()
+  const words = text.split(/[\s,.;:!?()[\]{}\/\-]+/).filter(w => w.length >= 3)
+
+  // Combine with strength-specific keywords
+  const strengthKeywords: Record<CoreStrength, string[]> = {
+    'strategic-leadership': ['strategy', 'leadership', 'vision', 'influence', 'stakeholder', 'direction', 'executive', 'alignment'],
+    'technical-mastery': ['technical', 'architecture', 'engineering', 'system', 'platform', 'scalable', 'performance', 'infrastructure'],
+    'operational-excellence': ['operations', 'process', 'efficiency', 'delivery', 'quality', 'automation', 'agile', 'continuous'],
+    'business-innovation': ['business', 'innovation', 'growth', 'revenue', 'market', 'disruption', 'product', 'commercial'],
+  }
+
+  const allDesired = new Set([
+    ...words.filter(w => !['the', 'and', 'for', 'who', 'that', 'with', 'can', 'has', 'was', 'are', 'not', 'but'].includes(w)),
+    ...strengthKeywords[profile.coreStrength],
+  ])
+
+  return Array.from(allDesired)
+}
+
+/**
+ * Analyze the semantic gap between a user's Desired Narrative Profile
+ * and what their CV actually signals.
+ *
+ * The match % is computed from real semantic overlap — NOT hardcoded.
+ * Each dimension contributes a measurable, evidence-backed score.
+ */
+export function analyzeNarrativeGap(
+  cvBullets: string[],
+  profile: NarrativeProfile
+): NarrativeAnalysisResult {
+  if (cvBullets.length === 0) {
+    return {
+      detectedArchetype: 'Unknown',
+      archetypeDescription: 'No CV content provided for analysis.',
+      narrativeMatchPercent: 0,
+      evidence: [],
+      alignedKeywords: [],
+      missingKeywords: [],
+      cvScore: 0,
+    }
+  }
+
+  const combined = cvBullets.join(' ')
+  const lower = combined.toLowerCase()
+  const cvAnalysis = analyzeCVContent(combined, profile.targetRole)
+
+  // ----- Step 1: Detect archetype -----
+  const { primary: archetype } = detectArchetype(combined)
+
+  // ----- Step 2: Compute dimensional match -----
+  const evidence: NarrativeEvidence[] = []
+  let totalEarned = 0
+  let totalPossible = 0
+
+  for (const dim of NARRATIVE_DIMENSIONS) {
+    const strengthWords = dim.strengthMap[profile.coreStrength] || []
+    const seniorityWords = dim.seniorityMap[profile.seniorityLevel] || []
+    const desiredWords = [...new Set([...strengthWords, ...seniorityWords])]
+
+    if (desiredWords.length === 0) continue
+
+    const maxContribution = 25 // Each of 4 dimensions can contribute up to 25 points
+    const foundWords = desiredWords.filter(w => lower.includes(w))
+    const ratio = foundWords.length / desiredWords.length
+    const contribution = Math.round(ratio * maxContribution)
+
+    totalEarned += contribution
+    totalPossible += maxContribution
+
+    // Build evidence description
+    const desiredLabel = strengthWords.slice(0, 3).join(', ')
+    const actualLabel = foundWords.length > 0
+      ? `Found ${foundWords.length}: ${foundWords.slice(0, 4).join(', ')}`
+      : 'No matching keywords found'
+
+    evidence.push({
+      dimension: dim.dimension,
+      desired: `Expects: ${desiredLabel}${strengthWords.length > 3 ? ` +${strengthWords.length - 3} more` : ''}`,
+      actual: actualLabel,
+      contribution,
+      maxContribution,
+    })
+  }
+
+  // ----- Step 3: Desired brand semantic overlap -----
+  const desiredKeywords = extractDesiredKeywords(profile)
+  const alignedKeywords = desiredKeywords.filter(kw => lower.includes(kw))
+  const missingKeywords = desiredKeywords.filter(kw => !lower.includes(kw) && kw.length >= 4)
+
+  // Brand overlap bonus (up to 10 extra points)
+  const brandOverlapRatio = desiredKeywords.length > 0
+    ? alignedKeywords.length / desiredKeywords.length
+    : 0
+  const brandBonus = Math.round(brandOverlapRatio * 10)
+
+  // ----- Step 4: Seniority alignment check -----
+  const seniorityVerbs = NARRATIVE_DIMENSIONS[0].seniorityMap[profile.seniorityLevel] || []
+  const seniorityFound = seniorityVerbs.filter(v => lower.includes(v)).length
+  const seniorityMax = Math.max(seniorityVerbs.length, 1)
+  const seniorityBonus = Math.round((seniorityFound / seniorityMax) * 5)
+
+  // ----- Final calculation -----
+  // totalPossible (100) + brandBonus (10) + seniorityBonus (5) = 115 max
+  // Normalize to 0-100
+  const rawMatch = totalEarned + brandBonus + seniorityBonus
+  const maxPossible = totalPossible + 10 + 5
+  const narrativeMatchPercent = maxPossible > 0
+    ? Math.min(100, Math.max(0, Math.round((rawMatch / maxPossible) * 100)))
+    : 0
+
+  return {
+    detectedArchetype: archetype.name,
+    archetypeDescription: archetype.description,
+    narrativeMatchPercent,
+    evidence,
+    alignedKeywords: alignedKeywords.slice(0, 15),
+    missingKeywords: missingKeywords.slice(0, 10),
+    cvScore: cvAnalysis.totalScore,
+  }
+}
+
 export {
   generateSiggyPMContext,
   analyzeWithPMPrinciples,
