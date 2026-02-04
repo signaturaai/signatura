@@ -103,6 +103,7 @@ export {
   generateHunterFollowUp,
   buildCharacterGuardrails,
   generateArenaQuestions,
+  verifyNarrativeAlignment,
   STAGE_WEIGHTS,
   PM_SPECIALIST_WEIGHTS,
   GENERAL_PROFESSIONAL_WEIGHTS,
@@ -131,4 +132,6 @@ export {
   type NarrativeTransformationSummary,
   type ToneNudge,
   type VoiceMetadata,
+  type NarrativeVerificationResult,
+  type NarrativeVerificationDimension,
 } from './siggy-integration-guide'
