@@ -2493,6 +2493,632 @@ export function formatBulletsForPDFExport(
   return lines.join('\n')
 }
 
+// =========================================================================
+// Strategic Interview Wizard — "Thinking Engine"
+// =========================================================================
+
+import type {
+  StrategicWizardConfig,
+  InterviewerValues,
+  PreparedInterviewSession,
+  InterviewerPersonality,
+} from '@/types/interview'
+
+// Keyword dictionaries for LinkedIn values extraction
+const VALUES_KEYWORDS: Record<string, string[]> = {
+  'data-driven': ['data', 'metrics', 'analytics', 'kpi', 'a/b', 'experiment', 'measure', 'quantitative', 'evidence'],
+  'people-first': ['people', 'team', 'culture', 'empathy', 'mentoring', 'coaching', 'development', 'inclusion', 'diversity'],
+  'execution': ['ship', 'deliver', 'execute', 'agile', 'sprint', 'velocity', 'deadline', 'ops', 'operational'],
+  'innovation': ['innovation', 'disrupt', 'creative', 'experiment', 'prototype', 'mvp', 'iterate', 'pivot', 'new'],
+  'growth': ['growth', 'revenue', 'acquisition', 'retention', 'conversion', 'funnel', 'scale', 'expand', 'market'],
+  'technical': ['engineer', 'architecture', 'system', 'infrastructure', 'platform', 'api', 'code', 'technical', 'stack'],
+  'strategic': ['strategy', 'vision', 'roadmap', 'initiative', 'alignment', 'stakeholder', 'board', 'executive', 'long-term'],
+  'customer': ['customer', 'user', 'feedback', 'research', 'interview', 'persona', 'journey', 'experience', 'satisfaction'],
+}
+
+const COMMUNICATION_STYLES: { pattern: RegExp; style: string }[] = [
+  { pattern: /\b(passionate|love|excited|thrill)\b/i, style: 'Enthusiastic and high-energy' },
+  { pattern: /\b(rigorous|systematic|structured|method)\b/i, style: 'Structured and methodical' },
+  { pattern: /\b(collaborative|together|partnership|team)\b/i, style: 'Collaborative and inclusive' },
+  { pattern: /\b(challenge|push|ambitious|bold|disrupt)\b/i, style: 'Direct and challenging' },
+  { pattern: /\b(mentor|guide|coach|develop|grow)\b/i, style: 'Supportive and developmental' },
+]
+
+/**
+ * Extract values and priorities from an interviewer's LinkedIn bio or profile text.
+ *
+ * This is the "unfair advantage" — understanding the interviewer's likely
+ * priorities, communication style, and question themes BEFORE the interview.
+ *
+ * Uses keyword frequency analysis across 8 value dimensions.
+ */
+export function extractInterviewerValues(linkedInText: string): InterviewerValues {
+  if (!linkedInText || linkedInText.trim().length === 0) {
+    return {
+      inferredPriorities: [],
+      communicationStyle: 'Unknown',
+      likelyQuestionThemes: [],
+      culturalSignals: [],
+      rawText: '',
+    }
+  }
+
+  const lower = linkedInText.toLowerCase()
+
+  // 1. Score each value dimension by keyword hits
+  const scored = Object.entries(VALUES_KEYWORDS).map(([dimension, keywords]) => {
+    const hits = keywords.filter(kw => lower.includes(kw)).length
+    return { dimension, hits, keywords: keywords.filter(kw => lower.includes(kw)) }
+  })
+  scored.sort((a, b) => b.hits - a.hits)
+
+  // 2. Top priorities (dimensions with hits > 0, max 4)
+  const inferredPriorities = scored
+    .filter(s => s.hits > 0)
+    .slice(0, 4)
+    .map(s => s.dimension.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()))
+
+  // 3. Detect communication style
+  let communicationStyle = 'Balanced and professional'
+  for (const { pattern, style } of COMMUNICATION_STYLES) {
+    if (pattern.test(linkedInText)) {
+      communicationStyle = style
+      break
+    }
+  }
+
+  // 4. Derive likely question themes from top 3 dimensions
+  const questionThemeMap: Record<string, string[]> = {
+    'data-driven': ['How do you measure success?', 'What metrics drive your decisions?', 'Describe an A/B test you ran'],
+    'people-first': ['How do you develop team members?', 'Describe a culture challenge', 'How do you handle conflict?'],
+    'execution': ['Walk me through a complex delivery', 'How do you handle missed deadlines?', 'Describe your sprint process'],
+    'innovation': ['Tell me about something you built from scratch', 'How do you validate new ideas?', 'Describe a pivot you drove'],
+    'growth': ['What growth levers have you pulled?', 'How do you think about acquisition vs retention?', 'Describe a revenue win'],
+    'technical': ['Walk me through a system you designed', 'How do you make technical trade-offs?', 'Describe a scaling challenge'],
+    'strategic': ['How do you set product vision?', 'Describe a strategic bet you made', 'How do you align stakeholders?'],
+    'customer': ['How do you incorporate user feedback?', 'Describe your research process', 'Tell me about a user insight'],
+  }
+
+  const likelyQuestionThemes = scored
+    .filter(s => s.hits > 0)
+    .slice(0, 3)
+    .flatMap(s => (questionThemeMap[s.dimension] || []).slice(0, 2))
+
+  // 5. Cultural signals (what they value in their teams)
+  const culturalSignals: string[] = []
+  if (/divers|inclusi/.test(lower)) culturalSignals.push('Values diversity & inclusion')
+  if (lower.includes('remote') || lower.includes('flexible')) culturalSignals.push('Flexible work advocate')
+  if (lower.includes('fast-paced') || lower.includes('startup')) culturalSignals.push('Thrives in fast-paced environments')
+  if (lower.includes('enterprise') || lower.includes('scale')) culturalSignals.push('Enterprise/scale experience')
+  if (lower.includes('open source') || lower.includes('community')) culturalSignals.push('Community-minded')
+  if (culturalSignals.length === 0) culturalSignals.push('Professional and balanced')
+
+  return {
+    inferredPriorities,
+    communicationStyle,
+    likelyQuestionThemes,
+    culturalSignals,
+    rawText: linkedInText.trim(),
+  }
+}
+
+/**
+ * Prepare the full interview session from the wizard config.
+ *
+ * This is the "Thinking Engine" — it takes the wizard inputs and produces
+ * a prepared session with narrative anchors, prioritized question themes,
+ * gap-hunting targets, and scoring mode.
+ *
+ * When LinkedIn/Emphases are provided, the AI must prioritize these in
+ * its question generation and final feedback.
+ */
+export function prepareInterviewSession(
+  config: StrategicWizardConfig,
+  narrativeProfile: NarrativeProfile | null,
+  cvBullets: string[],
+  jobDescription: string
+): PreparedInterviewSession {
+  // 1. Derive narrative anchors from profile (the North Star)
+  const narrativeAnchors: string[] = []
+  if (narrativeProfile) {
+    narrativeAnchors.push(`Target: ${narrativeProfile.targetRole} (${narrativeProfile.seniorityLevel})`)
+    narrativeAnchors.push(`Strength: ${narrativeProfile.coreStrength.replace(/-/g, ' ')}`)
+    if (narrativeProfile.desiredBrand) {
+      narrativeAnchors.push(`Brand: ${narrativeProfile.desiredBrand}`)
+    }
+    if (narrativeProfile.painPoint) {
+      narrativeAnchors.push(`Gap to close: ${narrativeProfile.painPoint}`)
+    }
+  }
+
+  // 2. Build prioritized question themes
+  const prioritizedQuestionThemes: string[] = []
+
+  // User emphases take top priority
+  if (config.userEmphases.trim().length > 0) {
+    const emphParts = config.userEmphases.split(/[,;.\n]+/).map(e => e.trim()).filter(Boolean)
+    prioritizedQuestionThemes.push(...emphParts.slice(0, 5))
+  }
+
+  // Extracted interviewer values come next
+  if (config.extractedValues && config.extractedValues.likelyQuestionThemes.length > 0) {
+    prioritizedQuestionThemes.push(...config.extractedValues.likelyQuestionThemes.slice(0, 4))
+  }
+
+  // Fill with type-appropriate themes
+  const typeThemes: Record<string, string[]> = {
+    'hr_screening': ['Culture fit', 'Motivation', 'Salary expectations'],
+    'hiring_manager': ['Day-to-day execution', 'Team dynamics', 'Decision-making style'],
+    'technical': ['System design', 'Problem-solving approach', 'Technical trade-offs'],
+    'executive': ['Strategic vision', 'Business impact', 'Leadership philosophy'],
+    'peer': ['Collaboration style', 'Conflict resolution', 'Knowledge sharing'],
+  }
+  const fallbackThemes = typeThemes[config.interviewType] || []
+  for (const ft of fallbackThemes) {
+    if (!prioritizedQuestionThemes.includes(ft)) {
+      prioritizedQuestionThemes.push(ft)
+    }
+  }
+
+  // 3. Identify gap-hunting targets (where the narrative is weakest)
+  const gapHuntingTargets: string[] = []
+  if (narrativeProfile && cvBullets.length > 0) {
+    const gapAnalysis = analyzeNarrativeGap(cvBullets, narrativeProfile)
+    // Missing keywords are gaps the interviewer will probe
+    gapHuntingTargets.push(...gapAnalysis.missingKeywords.slice(0, 5))
+
+    // Low-scoring dimensions are also gap targets
+    gapAnalysis.evidence
+      .filter(ev => ev.maxContribution > 0 && (ev.contribution / ev.maxContribution) < 0.3)
+      .forEach(ev => gapHuntingTargets.push(`Weak: ${ev.dimension}`))
+  }
+
+  // 4. Determine scoring mode
+  const scoringMode = config.answerFormat === 'voice' ? 'content_and_delivery' as const : 'content_only' as const
+
+  // 5. Build session brief
+  const briefParts: string[] = []
+  briefParts.push(`${config.difficultyLevel.charAt(0).toUpperCase() + config.difficultyLevel.slice(1)}-level ${config.interviewType.replace(/_/g, ' ')} interview`)
+
+  if (config.interviewMode === 'conversational') {
+    briefParts.push('in conversational mode with avatar')
+  } else {
+    briefParts.push(`in traditional mode (${config.answerFormat} responses)`)
+  }
+
+  if (config.extractedValues && config.extractedValues.inferredPriorities.length > 0) {
+    briefParts.push(`Interviewer values: ${config.extractedValues.inferredPriorities.join(', ')}`)
+  }
+
+  if (narrativeProfile) {
+    briefParts.push(`Narrative anchor: ${narrativeProfile.coreStrength.replace(/-/g, ' ')}`)
+  }
+
+  // Personality influence on brief
+  const p = config.personality
+  if (p.intensity > 70) briefParts.push('High-pressure interview style')
+  else if (p.warmth > 70) briefParts.push('Supportive and encouraging tone')
+  if (p.technicalDepth > 70) briefParts.push('Expect deep technical probes')
+
+  return {
+    config,
+    narrativeAnchors,
+    prioritizedQuestionThemes,
+    gapHuntingTargets,
+    scoringMode,
+    sessionBrief: briefParts.join('. ') + '.',
+  }
+}
+
+/**
+ * Calculate a personality-adjusted difficulty multiplier.
+ *
+ * Higher intensity + directness + pace → harder effective difficulty.
+ * Higher warmth → slightly easier effective difficulty.
+ *
+ * Returns a multiplier from 0.7 (gentle) to 1.5 (intense).
+ */
+export function calculatePersonalityDifficulty(personality: InterviewerPersonality): number {
+  const aggression = (personality.intensity + personality.directness + personality.paceSpeed) / 3
+  const softening = personality.warmth / 2
+  const raw = (aggression - softening) / 100
+  // Map to 0.7-1.5 range
+  return Math.max(0.7, Math.min(1.5, 1.0 + raw * 0.8))
+}
+
+// ==========================================
+// Interview Arena — Hunter Logic Engine
+// ==========================================
+
+import type {
+  HunterAnalysis,
+  HunterAction,
+  HunterFollowUp,
+  CharacterGuardrails,
+  DeliveryMetrics,
+  VoiceMetadata,
+  ArenaQuestion,
+} from '@/types/interview'
+
+import {
+  FILLER_WORDS,
+  HEDGING_PHRASES,
+  POWER_WORDS,
+  SENIORITY_SIGNALS,
+  PERSONA_GUARDRAILS,
+} from '@/types/interview'
+
+/**
+ * Extract voice metadata from raw text for delivery analysis.
+ * Detects filler words, hedging phrases, power words, and quantified results.
+ */
+export function extractVoiceMetadata(rawText: string): VoiceMetadata {
+  const lower = rawText.toLowerCase()
+  const words = rawText.split(/\s+/).filter(Boolean)
+  const sentences = rawText.split(/[.!?]+/).filter(s => s.trim().length > 0)
+
+  const foundFillers = FILLER_WORDS.filter(f => lower.includes(f))
+  const foundHedging = HEDGING_PHRASES.filter(h => lower.includes(h))
+  const foundPower = POWER_WORDS.filter(p => lower.includes(p))
+
+  // Detect quantified results (numbers with context)
+  const quantifiedMatches = rawText.match(/\d+[%xX]|\$[\d,.]+|\d+\s*(?:million|billion|thousand|percent|users|customers|teams?|people|projects?|years?|months?)/gi) || []
+
+  return {
+    rawText,
+    wordCount: words.length,
+    sentenceCount: sentences.length,
+    avgWordsPerSentence: sentences.length > 0 ? Math.round(words.length / sentences.length) : 0,
+    fillerWords: foundFillers,
+    hedgingPhrases: foundHedging,
+    powerWords: foundPower,
+    quantifiedResults: quantifiedMatches,
+  }
+}
+
+/**
+ * Compute delivery metrics from a text response.
+ * For text mode, estimates based on reading speed.
+ * For voice mode, uses actual duration if provided.
+ */
+export function computeDeliveryMetrics(
+  rawText: string,
+  durationSeconds?: number
+): DeliveryMetrics {
+  const metadata = extractVoiceMetadata(rawText)
+  const wordCount = metadata.wordCount
+
+  // Estimate duration if not provided (average typing speed ~40 WPM, speaking ~130 WPM)
+  const estimatedDuration = durationSeconds || Math.max(5, Math.round(wordCount / 2.2))
+  const wpm = estimatedDuration > 0 ? Math.round((wordCount / estimatedDuration) * 60) : 0
+
+  // Confidence scoring: start at 80, subtract for fillers/hedging, add for power words
+  let confidence = 80
+  confidence -= metadata.fillerWords.length * 5
+  confidence -= metadata.hedgingPhrases.length * 8
+  confidence += metadata.powerWords.length * 4
+  confidence += metadata.quantifiedResults.length * 3
+  confidence = Math.max(0, Math.min(100, confidence))
+
+  // Tone detection
+  let detectedTone: DeliveryMetrics['detectedTone'] = 'analytical'
+  if (metadata.powerWords.length >= 3 && metadata.hedgingPhrases.length === 0) {
+    detectedTone = 'assertive'
+  } else if (metadata.hedgingPhrases.length >= 2) {
+    detectedTone = 'tentative'
+  } else if (metadata.quantifiedResults.length >= 2) {
+    detectedTone = 'analytical'
+  } else if (wordCount > 100 && metadata.sentenceCount >= 4) {
+    detectedTone = 'storytelling'
+  }
+
+  return {
+    wordsPerMinute: wpm,
+    confidenceScore: confidence,
+    detectedTone,
+    durationSeconds: estimatedDuration,
+    fillerWordCount: metadata.fillerWords.length,
+  }
+}
+
+/**
+ * Detect the seniority level expressed in a response based on keyword signals.
+ */
+export function detectResponseSeniority(text: string): SeniorityLevel | 'unknown' {
+  const lower = text.toLowerCase()
+
+  const scores: Record<string, number> = {}
+  for (const [level, keywords] of Object.entries(SENIORITY_SIGNALS)) {
+    scores[level] = keywords.filter(k => lower.includes(k)).length
+  }
+
+  const maxLevel = Object.entries(scores).sort((a, b) => b[1] - a[1])[0]
+  if (!maxLevel || maxLevel[1] === 0) return 'unknown'
+
+  // Map to SeniorityLevel type
+  const levelMap: Record<string, SeniorityLevel> = {
+    'entry-level': 'entry-level',
+    'mid-level': 'mid-level',
+    'senior': 'senior',
+    'executive': 'executive',
+  }
+  return levelMap[maxLevel[0]] || 'unknown'
+}
+
+/**
+ * Hunter Logic: Analyze a candidate's response in real-time.
+ *
+ * Cross-references the response against:
+ * 1. Job description keywords (from gap-hunting targets)
+ * 2. Narrative anchors (core strengths the candidate should demonstrate)
+ * 3. Required seniority level
+ *
+ * Returns an analysis with matched/missing keywords, gap detection,
+ * and the recommended follow-up action.
+ */
+export function analyzeResponseWithHunterLogic(
+  responseText: string,
+  targetKeywords: string[],
+  narrativeAnchors: string[],
+  requiredSeniority: SeniorityLevel,
+  currentDrillDownCount: number,
+  maxDrillDowns: number
+): HunterAnalysis {
+  const lower = responseText.toLowerCase()
+
+  // 1. Keyword matching — check target keywords + narrative anchor words
+  const allExpected = [...new Set([...targetKeywords, ...narrativeAnchors.flatMap(a => a.toLowerCase().split(/\s+/))])]
+  const matchedKeywords = allExpected.filter(k => lower.includes(k.toLowerCase()))
+  const missingKeywords = allExpected.filter(k => !lower.includes(k.toLowerCase()))
+
+  // 2. Seniority detection
+  const detectedSeniority = detectResponseSeniority(responseText)
+
+  // 3. Gap detection
+  const keywordCoverage = allExpected.length > 0 ? matchedKeywords.length / allExpected.length : 1
+  const seniorityGap = detectSeniorityGap(detectedSeniority, requiredSeniority)
+
+  const gapDetected = keywordCoverage < 0.3 || seniorityGap
+  let gapDescription = ''
+  if (seniorityGap) {
+    gapDescription = `Response sounds like ${detectedSeniority || 'unknown'} level but role requires ${requiredSeniority}`
+  } else if (keywordCoverage < 0.3) {
+    gapDescription = `Only ${Math.round(keywordCoverage * 100)}% keyword coverage. Missing: ${missingKeywords.slice(0, 3).join(', ')}`
+  }
+
+  // 4. Determine action
+  let action: HunterAction = 'pivot'
+  let actionReason = ''
+
+  if (gapDetected && currentDrillDownCount < maxDrillDowns) {
+    if (seniorityGap) {
+      action = 'challenge'
+      actionReason = `Seniority mismatch: candidate expressing ${detectedSeniority} level, need ${requiredSeniority}`
+    } else {
+      action = 'drill_down'
+      actionReason = `Low keyword coverage (${Math.round(keywordCoverage * 100)}%). Drilling deeper for specifics.`
+    }
+  } else if (gapDetected && currentDrillDownCount >= maxDrillDowns) {
+    action = 'pivot'
+    actionReason = `Max drill-downs (${maxDrillDowns}) reached. Pivoting to next topic.`
+  } else {
+    action = 'acknowledge'
+    actionReason = `Good response. ${Math.round(keywordCoverage * 100)}% keyword coverage with appropriate seniority.`
+  }
+
+  // 5. Score the response
+  const keywordScore = Math.round(keywordCoverage * 40) // 40 points max for keywords
+  const seniorityScore = seniorityGap ? 0 : 30 // 30 points for matching seniority
+  const depthScore = Math.min(30, responseText.split(/[.!?]+/).filter(Boolean).length * 5) // 30 points max for depth
+  const responseScore = Math.min(100, keywordScore + seniorityScore + depthScore)
+
+  return {
+    matchedKeywords,
+    missingKeywords,
+    detectedSeniority,
+    requiredSeniority,
+    gapDetected,
+    gapDescription,
+    action,
+    actionReason,
+    responseScore,
+  }
+}
+
+/**
+ * Detect if there's a seniority gap between response and requirement.
+ */
+function detectSeniorityGap(detected: SeniorityLevel | 'unknown', required: SeniorityLevel): boolean {
+  if (detected === 'unknown') return false // Don't penalize if we can't detect
+  const levels: (SeniorityLevel | 'unknown')[] = ['entry-level', 'mid-level', 'senior', 'executive']
+  const detectedIdx = levels.indexOf(detected)
+  const requiredIdx = levels.indexOf(required)
+  // Gap if detected is 2+ levels below required
+  return requiredIdx - detectedIdx >= 2
+}
+
+/**
+ * Generate a follow-up question based on Hunter Logic analysis.
+ *
+ * Uses the analysis results to craft contextually appropriate follow-ups
+ * that stay in character with the interviewer persona.
+ */
+export function generateHunterFollowUp(
+  analysis: HunterAnalysis,
+  originalQuestion: string,
+  guardrails: CharacterGuardrails
+): HunterFollowUp {
+  const prefix = guardrails.questionPrefixes[
+    Math.floor(Math.random() * guardrails.questionPrefixes.length)
+  ] || ''
+
+  switch (analysis.action) {
+    case 'drill_down': {
+      const missingContext = analysis.missingKeywords.slice(0, 2).join(' and ')
+      return {
+        question: `${prefix} how specifically did you handle ${missingContext}? I'd like concrete examples.`,
+        action: 'drill_down',
+        reason: analysis.actionReason,
+        targetGap: missingContext,
+      }
+    }
+    case 'challenge': {
+      const requiredLevel = analysis.requiredSeniority.replace(/-/g, ' ')
+      return {
+        question: `${prefix} as a ${requiredLevel} professional, how did you drive strategic decisions rather than just execute them? What was your unique leadership contribution?`,
+        action: 'challenge',
+        reason: analysis.actionReason,
+        targetGap: `Seniority: ${analysis.detectedSeniority} vs ${analysis.requiredSeniority}`,
+      }
+    }
+    case 'acknowledge': {
+      const empathy = guardrails.showEmpathy ? 'That\'s a strong example. ' : ''
+      return {
+        question: `${empathy}Let's move on to the next area.`,
+        action: 'acknowledge',
+        reason: analysis.actionReason,
+        targetGap: '',
+      }
+    }
+    case 'pivot':
+    default: {
+      return {
+        question: `${prefix} let's shift gears. I'd like to explore a different area.`,
+        action: 'pivot',
+        reason: analysis.actionReason,
+        targetGap: 'Max follow-ups reached',
+      }
+    }
+  }
+}
+
+/**
+ * Build character guardrails from persona and personality configuration.
+ */
+export function buildCharacterGuardrails(
+  personality: InterviewerPersonality,
+  persona?: string
+): CharacterGuardrails {
+  // Start with persona-based defaults
+  const presetKey = persona || 'friendly'
+  const preset = PERSONA_GUARDRAILS[presetKey] || PERSONA_GUARDRAILS.friendly
+
+  // Adjust challenge intensity based on personality
+  const challengeIntensity = Math.round(
+    (personality.intensity * 0.4 + personality.directness * 0.4 + (100 - personality.warmth) * 0.2)
+  )
+
+  // Adjust max drill-downs based on intensity
+  const intensityAdjustment = personality.intensity > 70 ? 1 : personality.intensity < 30 ? -1 : 0
+  const maxDrillDowns = Math.max(1, preset.maxDrillDowns + intensityAdjustment)
+
+  return {
+    ...preset,
+    maxDrillDowns,
+    challengeIntensity: Math.max(0, Math.min(100, challengeIntensity)),
+  }
+}
+
+/**
+ * Generate the initial set of arena questions from a prepared session.
+ * Maps session themes into structured questions with target keywords.
+ */
+export function generateArenaQuestions(
+  session: PreparedInterviewSession,
+  questionCount: number = 8
+): ArenaQuestion[] {
+  const questions: ArenaQuestion[] = []
+  const themes = session.prioritizedQuestionThemes
+  const gaps = session.gapHuntingTargets
+  const difficulty = session.config.difficultyLevel
+
+  // Map difficulty to required seniority
+  const seniorityMap: Record<string, SeniorityLevel> = {
+    entry: 'entry-level',
+    standard: 'mid-level',
+    senior: 'senior',
+    executive: 'executive',
+  }
+  const requiredSeniority = seniorityMap[difficulty] || 'mid-level'
+
+  // Category distribution: opening(1), technical, behavioral, situational, closing(1)
+  // Reserve first and last slots for opening/closing, fill middle to fit exactly
+  const middleSlots = Math.max(1, questionCount - 2)
+  const techCount = Math.max(1, Math.round(middleSlots * 0.4))
+  const behavioralCount = Math.max(1, Math.round(middleSlots * 0.35))
+  const situationalCount = Math.max(0, middleSlots - techCount - behavioralCount)
+  const categories: ArenaQuestion['category'][] = [
+    'opening',
+    ...Array(techCount).fill('technical') as ArenaQuestion['category'][],
+    ...Array(behavioralCount).fill('behavioral') as ArenaQuestion['category'][],
+    ...(situationalCount > 0 ? Array(situationalCount).fill('situational') as ArenaQuestion['category'][] : []),
+    'closing',
+  ]
+
+  const actualCount = Math.min(questionCount, categories.length)
+
+  for (let i = 0; i < actualCount; i++) {
+    const category = categories[i]
+    const theme = themes[i % themes.length] || 'general experience'
+    const gapTarget = gaps[i % Math.max(1, gaps.length)] || ''
+
+    // Combine theme keywords with gap keywords
+    const targetKeywords = [
+      ...theme.toLowerCase().split(/\s+/).filter(w => w.length > 3),
+      ...gapTarget.toLowerCase().split(/\s+/).filter(w => w.length > 3),
+    ].slice(0, 6)
+
+    const questionDifficulty: ArenaQuestion['difficulty'] =
+      category === 'opening' || category === 'closing' ? 'easy' :
+      difficulty === 'executive' || difficulty === 'senior' ? 'hard' : 'medium'
+
+    questions.push({
+      id: `arena-q-${i + 1}`,
+      question: generateQuestionText(category, theme, difficulty, gapTarget),
+      category,
+      targetKeywords,
+      expectedSeniority: requiredSeniority,
+      difficulty: questionDifficulty,
+      maxFollowUps: category === 'opening' || category === 'closing' ? 1 : 3,
+    })
+  }
+
+  return questions
+}
+
+/**
+ * Generate a contextual question text based on category and theme.
+ */
+function generateQuestionText(
+  category: ArenaQuestion['category'],
+  theme: string,
+  difficulty: string,
+  gapTarget: string
+): string {
+  const themeClean = theme.replace(/-/g, ' ')
+
+  switch (category) {
+    case 'opening':
+      return `Tell me about your background and what draws you to this role, particularly your experience with ${themeClean}.`
+    case 'technical':
+      if (difficulty === 'executive' || difficulty === 'senior') {
+        return `Describe a time you made a strategic technical decision around ${themeClean}. What were the trade-offs and how did you drive alignment?`
+      }
+      return `Walk me through your approach to ${themeClean}. Can you give a specific example from your recent work?`
+    case 'behavioral':
+      if (gapTarget) {
+        return `I noticed your background emphasizes certain areas. Tell me about a time you demonstrated ${themeClean}, especially regarding ${gapTarget.replace(/-/g, ' ')}.`
+      }
+      return `Give me a specific example of when you demonstrated ${themeClean}. What was the situation and what was the outcome?`
+    case 'situational':
+      return `Imagine you're facing a challenge with ${themeClean}. Walk me through how you'd approach it and what stakeholders you'd involve.`
+    case 'closing':
+      return `Based on our conversation, is there anything about your experience with ${themeClean} that you'd like to highlight that we haven't covered?`
+    default:
+      return `Tell me about your experience with ${themeClean}.`
+  }
+}
+
 export {
   generateSiggyPMContext,
   analyzeWithPMPrinciples,
