@@ -10,7 +10,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import CandidateOnboarding from './CandidateOnboarding'
+import { StrategicOnboarding } from './StrategicOnboarding'
 import { RecruiterOnboarding } from './RecruiterOnboarding'
 import { Loader2, Sparkles } from 'lucide-react'
 
@@ -68,7 +68,7 @@ export function OnboardingWizard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 to-amber-50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-lavender-light/20 via-white to-peach-light/20">
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin mx-auto text-orange-500" />
           <p className="mt-4 text-gray-600">Loading your profile...</p>
@@ -79,7 +79,7 @@ export function OnboardingWizard() {
 
   if (error && !userType) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 to-amber-50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-lavender-light/20 via-white to-peach-light/20">
         <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md text-center">
           <p className="text-red-600 mb-4">{error}</p>
           <button
@@ -94,12 +94,12 @@ export function OnboardingWizard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 to-amber-50">
+    <div className="min-h-screen bg-gradient-to-br from-lavender-light/20 via-white to-peach-light/20">
       {/* Header */}
       <div className="fixed top-0 left-0 right-0 bg-white/80 backdrop-blur-sm border-b z-10">
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-orange-500" />
+            <Sparkles className="w-5 h-5 text-rose" />
             <span className="font-semibold text-gray-900">Signatura</span>
           </div>
           <div className="text-sm text-gray-500">
@@ -119,7 +119,7 @@ export function OnboardingWizard() {
         )}
 
         {userType === 'candidate' && userId ? (
-          <CandidateOnboarding userId={userId} />
+          <StrategicOnboarding userId={userId} />
         ) : userType === 'recruiter' && userId ? (
           <RecruiterOnboarding userId={userId} />
         ) : null}

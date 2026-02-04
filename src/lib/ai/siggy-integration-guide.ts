@@ -3119,6 +3119,164 @@ function generateQuestionText(
   }
 }
 
+// ==========================================
+// Strategic Onboarding — Narrative Verification
+// ==========================================
+
+/** Result of comparing CV's current message against user's ambition */
+export interface NarrativeVerificationResult {
+  /** Current detected archetype from CV */
+  currentArchetype: string
+  /** Target archetype derived from ambition */
+  targetArchetype: string
+  /** Current narrative summary (what the CV says about you) */
+  currentMessage: string
+  /** Target narrative summary (what you want recruiters to see) */
+  targetMessage: string
+  /** Overall alignment score 0-100 */
+  alignmentScore: number
+  /** Per-dimension comparison */
+  dimensions: NarrativeVerificationDimension[]
+  /** Key gaps identified */
+  gaps: string[]
+  /** Strengths already aligned */
+  strengths: string[]
+  /** Personalized recommendation */
+  recommendation: string
+}
+
+export interface NarrativeVerificationDimension {
+  name: string
+  currentScore: number
+  targetScore: number
+  status: 'aligned' | 'partial' | 'gap'
+}
+
+/**
+ * Verify the narrative alignment between a user's CV and their stated ambition.
+ * This is the "Aha!" moment of onboarding — showing users the gap between
+ * their current professional message and where they want to be.
+ */
+export function verifyNarrativeAlignment(
+  cvBullets: string[],
+  ambition: { targetRole: string; experienceLevel: string; desiredBrand: string }
+): NarrativeVerificationResult {
+  // Map experience level to seniority
+  const seniorityMap: Record<string, SeniorityLevel> = {
+    entry_level: 'entry-level',
+    mid_level: 'mid-level',
+    senior: 'senior',
+    executive: 'executive',
+    career_change: 'mid-level',
+  }
+  const seniority = seniorityMap[ambition.experienceLevel] || 'mid-level'
+
+  // Build a narrative profile from the ambition
+  const profile: NarrativeProfile = {
+    targetRole: ambition.targetRole,
+    seniorityLevel: seniority,
+    coreStrength: inferCoreStrength(ambition.desiredBrand),
+    desiredBrand: ambition.desiredBrand,
+  }
+
+  // Run the narrative gap analysis
+  const analysis = analyzeNarrativeGap(cvBullets, profile)
+
+  // Determine target archetype from core strength (resolve display name)
+  const targetArchetypeId = STRENGTH_TO_ARCHETYPE[profile.coreStrength] || 'strategic-leader'
+  const targetArchetypeProfile = ARCHETYPE_PROFILES.find(a => a.id === targetArchetypeId)
+  const targetArchetype = targetArchetypeProfile?.name || profile.coreStrength.replace(/-/g, ' ')
+
+  // Build current message from detected archetype + evidence
+  const currentMessage = buildCurrentMessage(analysis.detectedArchetype, analysis.evidence, cvBullets)
+  const targetMessage = buildTargetMessage(targetArchetype, ambition.targetRole, ambition.desiredBrand, seniority)
+
+  // Map evidence to verification dimensions
+  const dimensions: NarrativeVerificationDimension[] = analysis.evidence.map(ev => {
+    const currentPct = ev.maxContribution > 0 ? Math.round((ev.contribution / ev.maxContribution) * 100) : 0
+    const targetPct = 80 // Target is always 80%+ alignment
+    return {
+      name: ev.dimension,
+      currentScore: currentPct,
+      targetScore: targetPct,
+      status: currentPct >= 70 ? 'aligned' as const : currentPct >= 40 ? 'partial' as const : 'gap' as const,
+    }
+  })
+
+  // Identify gaps and strengths
+  const gaps = analysis.missingKeywords.slice(0, 5).map(k =>
+    `Missing "${k}" — important for ${ambition.targetRole} positioning`
+  )
+  const strengths = analysis.alignedKeywords.slice(0, 5).map(k =>
+    `Strong "${k}" — aligned with your target brand`
+  )
+
+  // Build recommendation
+  const recommendation = generateVerificationRecommendation(
+    analysis.narrativeMatchPercent, analysis.detectedArchetype, targetArchetype, ambition.targetRole
+  )
+
+  return {
+    currentArchetype: analysis.detectedArchetype,
+    targetArchetype,
+    currentMessage,
+    targetMessage,
+    alignmentScore: analysis.narrativeMatchPercent,
+    dimensions,
+    gaps,
+    strengths,
+    recommendation,
+  }
+}
+
+/** Infer core strength from a desired brand statement */
+function inferCoreStrength(desiredBrand: string): CoreStrength {
+  const lower = desiredBrand.toLowerCase()
+  if (/strateg|leader|vision|transform|scale/.test(lower)) return 'strategic-leadership'
+  if (/techni|architect|engineer|system|build/.test(lower)) return 'technical-mastery'
+  if (/operat|process|efficien|deliver|execut/.test(lower)) return 'operational-excellence'
+  if (/innovat|growth|disrupt|market|business/.test(lower)) return 'business-innovation'
+  return 'strategic-leadership' // default
+}
+
+/** Build a human-readable summary of the current CV message */
+function buildCurrentMessage(archetype: string, evidence: NarrativeEvidence[], cvBullets: string[]): string {
+  if (cvBullets.length === 0) return 'No CV content detected. Upload your CV to see your current professional message.'
+
+  const strongDims = evidence.filter(e => e.contribution > e.maxContribution * 0.5)
+  const weakDims = evidence.filter(e => e.contribution < e.maxContribution * 0.3)
+
+  let msg = `Your CV currently projects a "${archetype}" profile.`
+  if (strongDims.length > 0) {
+    msg += ` Strong in ${strongDims.map(d => d.dimension).join(', ')}.`
+  }
+  if (weakDims.length > 0) {
+    msg += ` Needs improvement in ${weakDims.map(d => d.dimension).join(', ')}.`
+  }
+  return msg
+}
+
+/** Build a human-readable summary of the target message */
+function buildTargetMessage(archetype: string, targetRole: string, brand: string, seniority: SeniorityLevel): string {
+  return `For "${targetRole}" at ${seniority} level, you need a "${archetype}" profile that communicates: "${brand}".`
+}
+
+/** Generate a personalized recommendation based on alignment */
+function generateVerificationRecommendation(
+  matchPercent: number, currentArch: string, targetArch: string, targetRole: string
+): string {
+  if (matchPercent >= 80) {
+    return `Excellent alignment! Your CV already communicates the right message for ${targetRole}. Fine-tuning will make it perfect.`
+  }
+  if (matchPercent >= 50) {
+    return `Good foundation. Your "${currentArch}" profile is close to the "${targetArch}" brand needed for ${targetRole}. Our AI tailoring will bridge the remaining gaps.`
+  }
+  if (matchPercent >= 25) {
+    return `Significant opportunity. Your CV currently reads as "${currentArch}" but ${targetRole} requires "${targetArch}" positioning. Our narrative engine will transform your message.`
+  }
+  return `Major transformation needed. Your "${currentArch}" profile doesn't align with ${targetRole} expectations for a "${targetArch}". This is exactly what Signatura was built for — let's reshape your narrative.`
+}
+
 export {
   generateSiggyPMContext,
   analyzeWithPMPrinciples,
