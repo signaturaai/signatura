@@ -2,11 +2,56 @@
  * Supabase Middleware Client
  *
  * Used in Next.js middleware to refresh auth tokens and handle session.
+ * CRITICAL: Enforces onboarding completion before dashboard access.
  */
 
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import type { Database } from '@/types/database'
+
+/**
+ * Check if onboarding is completed by checking both profiles tables.
+ * Returns true only if onboarding_completed === true in either table.
+ */
+async function isOnboardingCompleted(
+  supabase: ReturnType<typeof createServerClient<Database>>,
+  userId: string
+): Promise<{ completed: boolean; userType: string | null }> {
+  // Check profiles table first (used by signup)
+  const { data: profileData } = await supabase
+    .from('profiles')
+    .select('onboarding_completed, user_type')
+    .eq('id', userId)
+    .single()
+
+  const profile = profileData as unknown as {
+    onboarding_completed: boolean | null
+    user_type: string | null
+  } | null
+
+  if (profile?.onboarding_completed === true) {
+    return { completed: true, userType: profile.user_type }
+  }
+
+  // Also check user_profiles table as fallback
+  const { data: userProfileData } = await supabase
+    .from('user_profiles')
+    .select('onboarding_completed, user_type')
+    .eq('id', userId)
+    .single()
+
+  const userProfile = userProfileData as unknown as {
+    onboarding_completed: boolean | null
+    user_type: string | null
+  } | null
+
+  if (userProfile?.onboarding_completed === true) {
+    return { completed: true, userType: userProfile.user_type || profile?.user_type }
+  }
+
+  // Not completed in either table
+  return { completed: false, userType: profile?.user_type || userProfile?.user_type || null }
+}
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -42,23 +87,30 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // Protected routes check
-  const isAuthPage = request.nextUrl.pathname.startsWith('/login') ||
-                     request.nextUrl.pathname.startsWith('/signup')
-  const isOnboardingPage = request.nextUrl.pathname.startsWith('/onboarding')
-  const isProtectedPage = request.nextUrl.pathname.startsWith('/companion') ||
-                          request.nextUrl.pathname.startsWith('/dashboard') ||
-                          request.nextUrl.pathname.startsWith('/applications') ||
-                          request.nextUrl.pathname.startsWith('/cv') ||
-                          request.nextUrl.pathname.startsWith('/interview') ||
-                          request.nextUrl.pathname.startsWith('/settings') ||
-                          request.nextUrl.pathname.startsWith('/jobs')
+  const pathname = request.nextUrl.pathname
 
-  // Redirect unauthenticated users to login
+  // Route classification
+  const isAuthPage = pathname.startsWith('/login') || pathname.startsWith('/signup')
+  const isOnboardingPage = pathname.startsWith('/onboarding')
+  const isApiRoute = pathname.startsWith('/api')
+  const isPublicPage = pathname === '/' || pathname.startsWith('/privacy') || pathname.startsWith('/terms')
+
+  // Protected routes - ALL dashboard routes require onboarding completion
+  const isProtectedPage = pathname.startsWith('/companion') ||
+                          pathname.startsWith('/dashboard') ||
+                          pathname.startsWith('/applications') ||
+                          pathname.startsWith('/cv') ||
+                          pathname.startsWith('/interview') ||
+                          pathname.startsWith('/compensation') ||
+                          pathname.startsWith('/contract') ||
+                          pathname.startsWith('/settings') ||
+                          pathname.startsWith('/jobs')
+
+  // Redirect unauthenticated users to login (except for public/api routes)
   if (!user && (isProtectedPage || isOnboardingPage)) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
-    url.searchParams.set('redirect', request.nextUrl.pathname)
+    url.searchParams.set('redirect', pathname)
     return NextResponse.redirect(url)
   }
 
@@ -71,19 +123,13 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // Check onboarding status for authenticated users on protected pages
+  // CRITICAL: Check onboarding status for authenticated users on protected pages
+  // This MUST redirect if profile doesn't exist OR onboarding is not completed
   if (user && isProtectedPage) {
-    const { data: profileData } = await supabase
-      .from('profiles')
-      .select('onboarding_completed')
-      .eq('id', user.id)
-      .single()
+    const { completed } = await isOnboardingCompleted(supabase, user.id)
 
-    // Type assertion for untyped table
-    const profile = profileData as unknown as { onboarding_completed: boolean } | null
-
-    // Redirect to onboarding if not completed
-    if (profile && !profile.onboarding_completed) {
+    // Redirect to onboarding if NOT completed (catches missing profiles too!)
+    if (!completed) {
       const url = request.nextUrl.clone()
       url.pathname = '/onboarding'
       return NextResponse.redirect(url)
@@ -92,21 +138,11 @@ export async function updateSession(request: NextRequest) {
 
   // Redirect already onboarded users away from onboarding page
   if (user && isOnboardingPage) {
-    const { data: profileData } = await supabase
-      .from('profiles')
-      .select('onboarding_completed, user_type')
-      .eq('id', user.id)
-      .single()
+    const { completed, userType } = await isOnboardingCompleted(supabase, user.id)
 
-    // Type assertion for untyped table
-    const profile = profileData as unknown as {
-      onboarding_completed: boolean
-      user_type: string
-    } | null
-
-    if (profile && profile.onboarding_completed) {
+    if (completed) {
       const url = request.nextUrl.clone()
-      url.pathname = profile.user_type === 'recruiter' ? '/jobs' : '/dashboard'
+      url.pathname = userType === 'recruiter' ? '/jobs' : '/dashboard'
       return NextResponse.redirect(url)
     }
   }
