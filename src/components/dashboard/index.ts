@@ -1,1 +1,5 @@
 export { DashboardNav } from './nav'
+export { NarrativeCompassChart, MiniNarrativeCompass, type NarrativeScores } from './NarrativeCompassChart'
+export { ApplicationsHub } from './ApplicationsHub'
+export { InterviewHistory, type InterviewSession } from './InterviewHistory'
+export { CandidateDashboard } from './CandidateDashboard'
