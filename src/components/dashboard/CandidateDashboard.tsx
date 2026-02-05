@@ -13,7 +13,7 @@
  */
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import {
@@ -86,22 +86,36 @@ function QuickActionCard({
   )
 }
 
-/** Metric card component */
+/** Metric card component - clickable for filtering */
 function MetricCard({
   icon: Icon,
   label,
   value,
   subValue,
   color,
+  onClick,
+  active,
 }: {
   icon: typeof Briefcase
   label: string
   value: string | number
   subValue?: string
   color: string
+  onClick?: () => void
+  active?: boolean
 }) {
   return (
-    <div className="bg-white/60 backdrop-blur-md rounded-xl border border-white/40 p-4">
+    <motion.button
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.98 }}
+      onClick={onClick}
+      disabled={!onClick}
+      className={`bg-white/60 backdrop-blur-md rounded-xl border p-4 text-left transition-all ${
+        active
+          ? 'border-lavender-dark shadow-md ring-2 ring-lavender-light/50'
+          : 'border-white/40 hover:border-lavender-light/50 hover:shadow-md'
+      } ${onClick ? 'cursor-pointer' : 'cursor-default'}`}
+    >
       <div className="flex items-center justify-between mb-2">
         <div className={`h-8 w-8 rounded-lg ${color} flex items-center justify-center`}>
           <Icon className="h-4 w-4 text-white" />
@@ -112,9 +126,12 @@ function MetricCard({
       </div>
       <p className="text-2xl font-bold text-gray-800">{value}</p>
       <p className="text-xs text-gray-500 mt-0.5">{label}</p>
-    </div>
+    </motion.button>
   )
 }
+
+// Filter types for stat card clicks
+type DashboardFilter = 'all' | 'active' | 'interviews' | 'offers'
 
 export function CandidateDashboard({
   userName,
@@ -127,15 +144,38 @@ export function CandidateDashboard({
 }: CandidateDashboardProps) {
   const router = useRouter()
   const firstName = userName.split(' ')[0] || 'there'
+  const applicationsRef = useRef<HTMLDivElement>(null)
+  const [activeFilter, setActiveFilter] = useState<DashboardFilter>('all')
 
   // Calculate greeting based on time
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
 
-  // Recent applications (last 5)
-  const recentApps = [...applications]
+  // Filter applications based on active filter
+  const filteredApps = applications.filter(app => {
+    switch (activeFilter) {
+      case 'active':
+        return !['rejected', 'withdrawn', 'accepted'].includes(app.application_status)
+      case 'interviews':
+        return app.application_status === 'interview_scheduled'
+      case 'offers':
+        return ['offer_received', 'negotiating'].includes(app.application_status)
+      default:
+        return true
+    }
+  })
+
+  // Recent applications (last 5, filtered)
+  const recentApps = [...filteredApps]
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 5)
+
+  // Handle metric card click - scroll and filter
+  const handleMetricClick = (filter: DashboardFilter) => {
+    setActiveFilter(filter)
+    // Smooth scroll to applications section
+    applicationsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   // Overall narrative alignment
   const overallAlignment = Math.round(
@@ -250,13 +290,15 @@ export function CandidateDashboard({
 
         {/* Center column: Applications Hub */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Metrics row */}
+          {/* Metrics row - clickable to filter */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <MetricCard
               icon={Briefcase}
               label="Total Applications"
               value={metrics.totalApplications}
               color="bg-gradient-to-br from-lavender to-lavender-dark"
+              onClick={() => handleMetricClick('all')}
+              active={activeFilter === 'all'}
             />
             <MetricCard
               icon={Zap}
@@ -264,12 +306,16 @@ export function CandidateDashboard({
               value={metrics.activeApplications}
               subValue={metrics.activeApplications > 0 ? 'In progress' : undefined}
               color="bg-gradient-to-br from-sky to-sky-dark"
+              onClick={() => handleMetricClick('active')}
+              active={activeFilter === 'active'}
             />
             <MetricCard
               icon={Calendar}
               label="Interviews"
               value={metrics.interviewsScheduled}
               color="bg-gradient-to-br from-rose to-rose-dark"
+              onClick={() => handleMetricClick('interviews')}
+              active={activeFilter === 'interviews'}
             />
             <MetricCard
               icon={Sparkles}
@@ -277,13 +323,30 @@ export function CandidateDashboard({
               value={metrics.offersReceived}
               subValue={metrics.offersReceived > 0 ? '🎉' : undefined}
               color="bg-gradient-to-br from-emerald-400 to-emerald-600"
+              onClick={() => handleMetricClick('offers')}
+              active={activeFilter === 'offers'}
             />
           </div>
 
-          {/* Applications preview */}
-          <div className="bg-white/70 backdrop-blur-md rounded-2xl border border-white/40 p-6">
+          {/* Applications preview - with scroll target ref */}
+          <div ref={applicationsRef} className="bg-white/70 backdrop-blur-md rounded-2xl border border-white/40 p-6 scroll-mt-4">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-gray-800">Recent Applications</h2>
+              <div className="flex items-center gap-3">
+                <h2 className="font-semibold text-gray-800">
+                  {activeFilter === 'all' ? 'Recent Applications' :
+                   activeFilter === 'active' ? 'Active Applications' :
+                   activeFilter === 'interviews' ? 'Upcoming Interviews' :
+                   'Offers & Negotiations'}
+                </h2>
+                {activeFilter !== 'all' && (
+                  <button
+                    onClick={() => setActiveFilter('all')}
+                    className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+                  >
+                    Clear filter
+                  </button>
+                )}
+              </div>
               <button
                 onClick={() => router.push('/applications')}
                 className="text-xs text-lavender-dark hover:underline flex items-center gap-1"
@@ -296,10 +359,12 @@ export function CandidateDashboard({
             {recentApps.length > 0 ? (
               <div className="space-y-2">
                 {recentApps.map((app) => (
-                  <button
+                  <motion.button
                     key={app.id}
-                    onClick={() => router.push(`/applications/${app.id}`)}
-                    className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-lavender-light/10 transition-colors text-left"
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    onClick={() => router.push(`/dashboard/application/${app.id}`)}
+                    className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-lavender-light/10 transition-colors text-left group"
                   >
                     <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-lavender-light/50 to-peach-light/50 flex items-center justify-center flex-shrink-0">
                       <span className="text-sm font-bold text-lavender-dark">
@@ -307,7 +372,7 @@ export function CandidateDashboard({
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-800 truncate text-sm">
+                      <p className="font-medium text-gray-800 truncate text-sm group-hover:text-lavender-dark transition-colors">
                         {app.position_title}
                       </p>
                       <p className="text-xs text-gray-500 truncate">
@@ -322,19 +387,31 @@ export function CandidateDashboard({
                     }`}>
                       {app.application_status.replace('_', ' ')}
                     </span>
-                  </button>
+                    <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-lavender-dark transition-colors" />
+                  </motion.button>
                 ))}
               </div>
             ) : (
               <div className="text-center py-8">
                 <Briefcase className="h-8 w-8 text-gray-300 mx-auto mb-2" />
-                <p className="text-sm text-gray-500">No applications yet</p>
-                <button
-                  onClick={() => router.push('/applications?new=true')}
-                  className="mt-3 text-xs text-lavender-dark hover:underline"
-                >
-                  Add your first application
-                </button>
+                <p className="text-sm text-gray-500">
+                  {activeFilter !== 'all' ? `No ${activeFilter === 'interviews' ? 'scheduled interviews' : activeFilter} applications` : 'No applications yet'}
+                </p>
+                {activeFilter !== 'all' ? (
+                  <button
+                    onClick={() => setActiveFilter('all')}
+                    className="mt-3 text-xs text-lavender-dark hover:underline"
+                  >
+                    View all applications
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => router.push('/applications?new=true')}
+                    className="mt-3 text-xs text-lavender-dark hover:underline"
+                  >
+                    Add your first application
+                  </button>
+                )}
               </div>
             )}
           </div>

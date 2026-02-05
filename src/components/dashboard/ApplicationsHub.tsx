@@ -300,7 +300,7 @@ export function ApplicationsHub({ applications, onNewApplication }: Applications
             <ApplicationRow
               key={app.id}
               application={app}
-              onClick={() => router.push(`/applications/${app.id}`)}
+              onClick={() => router.push(`/dashboard/application/${app.id}`)}
             />
           ))}
         </div>
