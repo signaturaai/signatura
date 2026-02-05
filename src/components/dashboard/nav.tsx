@@ -128,7 +128,8 @@ export function DashboardNav({ user }: DashboardNavProps) {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
-    router.push('/login')
+    // Redirect to public home page after logout
+    router.push('/')
     router.refresh()
   }
 
