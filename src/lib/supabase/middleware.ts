@@ -3,18 +3,24 @@
  *
  * Used in Next.js middleware to refresh auth tokens and handle session.
  * CRITICAL: Enforces onboarding completion before dashboard access.
+ *
+ * NOTE: This file MUST be self-contained with NO imports that could
+ * pull in `next/headers`. Middleware runs in Edge Runtime which does
+ * not support `next/headers`. All types are inlined to avoid import chains.
  */
 
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-import type { Database } from '@/types/database'
+
+// Inline types to avoid import chains that might pull in next/headers
+type SupabaseClient = ReturnType<typeof createServerClient>
 
 /**
  * Check if onboarding is completed by checking both profiles tables.
  * Returns true only if onboarding_completed === true in either table.
  */
 async function isOnboardingCompleted(
-  supabase: ReturnType<typeof createServerClient<Database>>,
+  supabase: SupabaseClient,
   userId: string
 ): Promise<{ completed: boolean; userType: string | null }> {
   // Check profiles table first (used by signup)
@@ -46,7 +52,7 @@ async function isOnboardingCompleted(
   } | null
 
   if (userProfile?.onboarding_completed === true) {
-    return { completed: true, userType: userProfile.user_type || profile?.user_type }
+    return { completed: true, userType: userProfile.user_type || profile?.user_type || null }
   }
 
   // Not completed in either table
@@ -58,7 +64,7 @@ export async function updateSession(request: NextRequest) {
     request,
   })
 
-  const supabase = createServerClient<Database>(
+  const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {

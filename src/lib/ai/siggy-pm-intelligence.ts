@@ -480,18 +480,20 @@ export function generateSiggyPMContext(context: 'cvTailor' | 'interviewCoach'): 
 
   if (context === 'cvTailor') {
     prompt += `\n### Watch For (gently flag, don't criticize):\n`
-    contextConfig.redFlags?.forEach((flag: string) => {
+    const cvContext = PM_COACHING_CONTEXTS.cvTailor
+    cvContext.redFlags.forEach((flag: string) => {
       prompt += `- ${flag}\n`
     })
   }
 
   if (context === 'interviewCoach') {
     prompt += `\n### STAR Method Template:\n`
-    const star = contextConfig.starTemplate
-    prompt += `- **Situation**: ${star?.situation}\n`
-    prompt += `- **Task**: ${star?.task}\n`
-    prompt += `- **Action**: ${star?.action}\n`
-    prompt += `- **Result**: ${star?.result}\n`
+    const interviewContext = PM_COACHING_CONTEXTS.interviewCoach
+    const star = interviewContext.starTemplate
+    prompt += `- **Situation**: ${star.situation}\n`
+    prompt += `- **Task**: ${star.task}\n`
+    prompt += `- **Action**: ${star.action}\n`
+    prompt += `- **Result**: ${star.result}\n`
   }
 
   prompt += `\n**REMEMBER**: You are a mentor, not a lecturer. Celebrate what's strong first. Then nudge ONE improvement at a time. `

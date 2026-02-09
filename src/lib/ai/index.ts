@@ -131,7 +131,6 @@ export {
   type NarrativeAnalysisResult,
   type NarrativeTransformationSummary,
   type ToneNudge,
-  type VoiceMetadata,
   type NarrativeVerificationResult,
   type NarrativeVerificationDimension,
 } from './siggy-integration-guide'

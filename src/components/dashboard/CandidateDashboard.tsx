@@ -31,8 +31,8 @@ import {
   Plus,
 } from 'lucide-react'
 import { NarrativeCompassChart, type NarrativeScores } from './NarrativeCompassChart'
-import { ApplicationsHub, type InterviewSession } from './ApplicationsHub'
-import { InterviewHistory } from './InterviewHistory'
+import { ApplicationsHub } from './ApplicationsHub'
+import { InterviewHistory, type InterviewSession } from './InterviewHistory'
 import type { JobApplication, DashboardMetrics } from '@/lib/types/dashboard'
 
 interface CandidateDashboardProps {

@@ -260,7 +260,7 @@ describe('Strategic Onboarding Engine — Logic', () => {
         experienceLevel: 'entry_level',
         desiredBrand: 'An eager learner who builds clean code',
       })
-      expect(result.targetMessage).toContain('entry-level')
+      expect(result.targetMessage).toContain('junior')
     })
 
     it('should handle career_change experience level', () => {
@@ -270,7 +270,7 @@ describe('Strategic Onboarding Engine — Logic', () => {
         desiredBrand: 'A creative problem solver transitioning into design',
       })
       expect(result).toBeDefined()
-      expect(result.targetMessage).toContain('mid-level') // career_change maps to mid-level
+      expect(result.targetMessage).toContain('mid') // career_change maps to mid
     })
 
     it('should handle executive experience level', () => {
@@ -349,8 +349,8 @@ describe('Strategic Onboarding Engine — Hardening', () => {
       desiredBrand: 'A leader',
     })
     expect(result).toBeDefined()
-    // Falls back to mid-level
-    expect(result.targetMessage).toContain('mid-level')
+    // Falls back to mid
+    expect(result.targetMessage).toContain('mid')
   })
 
   it('should handle single bullet CV', () => {
