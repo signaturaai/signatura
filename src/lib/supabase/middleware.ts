@@ -112,10 +112,11 @@ export async function updateSession(request: NextRequest) {
                           pathname.startsWith('/settings') ||
                           pathname.startsWith('/jobs')
 
-  // Redirect unauthenticated users to login (except for public/api routes)
-  if (!user && (isProtectedPage || isOnboardingPage)) {
+  // CRITICAL: Redirect unauthenticated users to signup
+  // This includes /onboarding - users MUST be logged in to onboard
+  if (!user && !isAuthPage && !isPublicPage && !isApiRoute) {
     const url = request.nextUrl.clone()
-    url.pathname = '/login'
+    url.pathname = '/signup'
     url.searchParams.set('redirect', pathname)
     return NextResponse.redirect(url)
   }

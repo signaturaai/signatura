@@ -3,7 +3,8 @@
 /**
  * Signup Form Component
  *
- * Welcoming signup experience with validation, user type selection, and GDPR consent.
+ * Welcoming signup experience with validation and GDPR consent.
+ * Role selection happens in the OnboardingWizard after signup.
  */
 
 import { useState } from 'react'
@@ -11,9 +12,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button, Input, Label, Card, CardContent, CardFooter } from '@/components/ui'
 import { PrivacyPolicyLink } from '@/components/legal'
-import { Loader2, User, Briefcase } from 'lucide-react'
-
-type UserType = 'candidate' | 'recruiter'
+import { Loader2 } from 'lucide-react'
 
 export function SignupForm() {
   const router = useRouter()
@@ -23,7 +22,6 @@ export function SignupForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [userType, setUserType] = useState<UserType>('candidate')
   const [acceptedPrivacy, setAcceptedPrivacy] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -59,9 +57,8 @@ export function SignupForm() {
       options: {
         data: {
           full_name: name,
-          user_type: userType,
         },
-        emailRedirectTo: `${window.location.origin}/api/auth/callback`,
+        emailRedirectTo: `${window.location.origin}/api/auth/callback?next=/onboarding`,
       },
     })
 
@@ -78,16 +75,17 @@ export function SignupForm() {
       return
     }
 
-    // If user created successfully, update profile with user_type and consent
+    // If user created successfully, create basic profile (without user_type)
+    // Role selection happens in OnboardingWizard
     if (data.user) {
-      const { error: profileError } = await supabase
-        .from('profiles')
+      const { error: profileError } = await (supabase
+        .from('profiles') as any)
         .upsert({
           id: data.user.id,
           email,
           full_name: name,
-          user_type: userType,
           is_admin: false,
+          onboarding_completed: false,
           privacy_policy_accepted_at: new Date().toISOString(),
           terms_accepted_at: new Date().toISOString(),
         })
@@ -113,9 +111,8 @@ export function SignupForm() {
       }
     }
 
-    // Redirect based on user type
-    const redirectPath = userType === 'recruiter' ? '/jobs' : '/companion'
-    router.push(redirectPath)
+    // Always redirect to onboarding - role selection happens there
+    router.push('/onboarding')
     router.refresh()
   }
 
@@ -205,46 +202,6 @@ export function SignupForm() {
             />
           </div>
 
-          {/* User Type Selection */}
-          <div className="space-y-3">
-            <Label>I am:</Label>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setUserType('candidate')}
-                disabled={loading}
-                className={`p-4 border-2 rounded-lg text-left transition-all ${
-                  userType === 'candidate'
-                    ? 'border-primary bg-primary/5'
-                    : 'border-muted hover:border-muted-foreground/30'
-                }`}
-              >
-                <User className={`w-5 h-5 mb-2 ${userType === 'candidate' ? 'text-primary' : 'text-muted-foreground'}`} />
-                <div className="font-medium text-sm">Looking for a job</div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  CV tools, interview prep
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setUserType('recruiter')}
-                disabled={loading}
-                className={`p-4 border-2 rounded-lg text-left transition-all ${
-                  userType === 'recruiter'
-                    ? 'border-primary bg-primary/5'
-                    : 'border-muted hover:border-muted-foreground/30'
-                }`}
-              >
-                <Briefcase className={`w-5 h-5 mb-2 ${userType === 'recruiter' ? 'text-primary' : 'text-muted-foreground'}`} />
-                <div className="font-medium text-sm">Hiring talent</div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  Job postings, candidates
-                </div>
-              </button>
-            </div>
-          </div>
-
           {/* Privacy Policy Acceptance */}
           <div className="flex items-start gap-3 pt-2">
             <input
@@ -273,7 +230,7 @@ export function SignupForm() {
                 Creating account...
               </>
             ) : (
-              `Create ${userType === 'recruiter' ? 'recruiter' : 'candidate'} account`
+              'Create account'
             )}
           </Button>
 
