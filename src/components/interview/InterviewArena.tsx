@@ -29,13 +29,14 @@ import {
   X,
 } from 'lucide-react'
 import { InterviewerAvatar } from './InterviewerAvatar'
+// Import directly from siggy-integration-guide to avoid pulling in server-only modules
 import {
   analyzeResponseWithHunterLogic,
   generateHunterFollowUp,
   buildCharacterGuardrails,
   generateArenaQuestions,
   computeDeliveryMetrics,
-} from '@/lib/ai'
+} from '@/lib/ai/siggy-integration-guide'
 import type {
   PreparedInterviewSession,
   ArenaMessage,

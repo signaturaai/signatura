@@ -218,7 +218,7 @@ export default function ImportApplicationModal({
               Import Past Application
             </h2>
             <p className="text-sm text-text-tertiary mt-0.5">
-              Add an application you've already submitted
+              Add an application you have already submitted
             </p>
           </div>
           <button

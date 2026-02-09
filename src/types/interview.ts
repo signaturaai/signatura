@@ -9,6 +9,9 @@
 // Interview Types
 // ==========================================
 
+/** Seniority level for interviews and hunter logic */
+export type SeniorityLevel = 'junior' | 'mid' | 'senior' | 'executive'
+
 export type InterviewType =
   | 'hr_screening'
   | 'hiring_manager'

@@ -227,7 +227,7 @@ export function analyzeATS(text: string): StageScore {
 
   // Starts with action verb (0-25)
   const firstWord = text.trim().split(/\s+/)[0]?.toLowerCase() || ''
-  const startsWithVerb = INDICATOR_CATEGORIES.actionVerbs.includes(firstWord)
+  const startsWithVerb = (INDICATOR_CATEGORIES.actionVerbs as readonly string[]).includes(firstWord)
   if (startsWithVerb) {
     raw += 25
     details.push(`Starts with action verb: "${firstWord}"`)
@@ -2837,12 +2837,12 @@ export function detectResponseSeniority(text: string): SeniorityLevel | 'unknown
 
   // Map to SeniorityLevel type
   const levelMap: Record<string, SeniorityLevel> = {
-    'entry-level': 'entry-level',
-    'mid-level': 'mid-level',
+    'entry-level': 'junior',
+    'mid-level': 'mid',
     'senior': 'senior',
     'executive': 'executive',
   }
-  return levelMap[maxLevel[0]] || 'unknown'
+  return levelMap[maxLevel[0]] || 'mid'
 }
 
 /**
@@ -2930,7 +2930,7 @@ export function analyzeResponseWithHunterLogic(
  */
 function detectSeniorityGap(detected: SeniorityLevel | 'unknown', required: SeniorityLevel): boolean {
   if (detected === 'unknown') return false // Don't penalize if we can't detect
-  const levels: (SeniorityLevel | 'unknown')[] = ['entry-level', 'mid-level', 'senior', 'executive']
+  const levels: (SeniorityLevel | 'unknown')[] = ['junior', 'mid', 'senior', 'executive']
   const detectedIdx = levels.indexOf(detected)
   const requiredIdx = levels.indexOf(required)
   // Gap if detected is 2+ levels below required
@@ -3034,12 +3034,12 @@ export function generateArenaQuestions(
 
   // Map difficulty to required seniority
   const seniorityMap: Record<string, SeniorityLevel> = {
-    entry: 'entry-level',
-    standard: 'mid-level',
+    entry: 'junior',
+    standard: 'mid',
     senior: 'senior',
     executive: 'executive',
   }
-  const requiredSeniority = seniorityMap[difficulty] || 'mid-level'
+  const requiredSeniority = seniorityMap[difficulty] || 'mid'
 
   // Category distribution: opening(1), technical, behavioral, situational, closing(1)
   // Reserve first and last slots for opening/closing, fill middle to fit exactly
@@ -3163,19 +3163,20 @@ export function verifyNarrativeAlignment(
 ): NarrativeVerificationResult {
   // Map experience level to seniority
   const seniorityMap: Record<string, SeniorityLevel> = {
-    entry_level: 'entry-level',
-    mid_level: 'mid-level',
+    entry_level: 'junior',
+    mid_level: 'mid',
     senior: 'senior',
     executive: 'executive',
-    career_change: 'mid-level',
+    career_change: 'mid',
   }
-  const seniority = seniorityMap[ambition.experienceLevel] || 'mid-level'
+  const seniority = seniorityMap[ambition.experienceLevel] || 'mid'
 
   // Build a narrative profile from the ambition
   const profile: NarrativeProfile = {
     targetRole: ambition.targetRole,
     seniorityLevel: seniority,
     coreStrength: inferCoreStrength(ambition.desiredBrand),
+    painPoint: `Transitioning to ${ambition.targetRole}`,
     desiredBrand: ambition.desiredBrand,
   }
 

@@ -38,8 +38,9 @@ import {
   ArrowRight,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { verifyNarrativeAlignment } from '@/lib/ai'
-import type { NarrativeVerificationResult } from '@/lib/ai'
+// Import directly from siggy-integration-guide to avoid pulling in server-only modules
+import { verifyNarrativeAlignment } from '@/lib/ai/siggy-integration-guide'
+import type { NarrativeVerificationResult } from '@/lib/ai/siggy-integration-guide'
 
 // ==========================================
 // Types & Constants

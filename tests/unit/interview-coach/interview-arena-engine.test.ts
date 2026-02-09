@@ -241,12 +241,12 @@ describe('Interview Arena Engine — Analysis', () => {
     it('should detect entry-level signals', () => {
       const text = 'I learned a lot and assisted my manager. I helped with the project and supported the team.'
       const seniority = detectResponseSeniority(text)
-      expect(seniority).toBe('entry-level')
+      expect(seniority).toBe('junior')
     })
 
     it('should detect mid-level signals', () => {
       const seniority = detectResponseSeniority(MEDIUM_RESPONSE)
-      expect(seniority).toBe('mid-level')
+      expect(seniority).toBe('mid')
     })
 
     it('should return unknown for ambiguous text', () => {
@@ -306,7 +306,7 @@ describe('Interview Arena Engine — Logic', () => {
 
     it('should drill down on low keyword coverage', () => {
       const analysis = analyzeResponseWithHunterLogic(
-        'I worked on things.', TARGET_KEYWORDS, NARRATIVE_ANCHORS, 'mid-level', 0, 3
+        'I worked on things.', TARGET_KEYWORDS, NARRATIVE_ANCHORS, 'mid', 0, 3
       )
       expect(['drill_down', 'challenge']).toContain(analysis.action)
     })
@@ -334,7 +334,7 @@ describe('Interview Arena Engine — Logic', () => {
       const analysis: HunterAnalysis = {
         matchedKeywords: ['led'],
         missingKeywords: ['strategy', 'data-driven'],
-        detectedSeniority: 'mid-level',
+        detectedSeniority: 'mid',
         requiredSeniority: 'senior',
         gapDetected: true,
         gapDescription: 'Low keyword coverage',
@@ -353,7 +353,7 @@ describe('Interview Arena Engine — Logic', () => {
       const analysis: HunterAnalysis = {
         matchedKeywords: [],
         missingKeywords: ['led', 'strategy'],
-        detectedSeniority: 'entry-level',
+        detectedSeniority: 'junior',
         requiredSeniority: 'executive',
         gapDetected: true,
         gapDescription: 'Seniority mismatch',

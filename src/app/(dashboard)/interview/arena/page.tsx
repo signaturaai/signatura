@@ -14,7 +14,6 @@ import {
   ArrowLeft,
   Trophy,
   Target,
-  TrendingUp,
   BarChart3,
   Brain,
   MessageSquare,
@@ -23,10 +22,8 @@ import {
   Clock,
 } from 'lucide-react'
 import { InterviewArena } from '@/components/interview'
-import {
-  prepareInterviewSession,
-  calculatePersonalityDifficulty,
-} from '@/lib/ai'
+// Import directly from siggy-integration-guide to avoid pulling in server-only memory.ts
+import { prepareInterviewSession } from '@/lib/ai/siggy-integration-guide'
 import type {
   PreparedInterviewSession,
   ArenaMessage,
@@ -39,7 +36,7 @@ type PagePhase = 'setup' | 'arena' | 'results'
 /** Mock session for demo — in production this comes from the wizard */
 function createDemoSession(): PreparedInterviewSession {
   const config: StrategicWizardConfig = {
-    interviewType: 'product_sense',
+    interviewType: 'hiring_manager',
     difficultyLevel: 'senior',
     personality: { ...DEFAULT_PERSONALITY, intensity: 60, directness: 65 },
     interviewMode: 'conversational',
@@ -55,8 +52,8 @@ function createDemoSession(): PreparedInterviewSession {
       targetRole: 'Senior Product Manager',
       seniorityLevel: 'senior',
       coreStrength: 'strategic-leadership',
+      painPoint: 'Demonstrating executive presence while staying hands-on technical',
       desiredBrand: 'Data-driven product leader who scales teams and ships outcomes',
-      industry: 'technology',
     },
     [
       'Led cross-functional team of 12 to deliver platform redesign',
@@ -312,7 +309,7 @@ export default function InterviewArenaPage() {
                 <Target className="h-5 w-5 text-rose-500 mb-2" />
                 <h3 className="text-sm font-semibold text-gray-700">Adaptive Follow-Ups</h3>
                 <p className="text-xs text-gray-500 mt-1">
-                  Drill-downs and challenge questions when your answers don't match the required level.
+                  Drill-downs and challenge questions when your answers do not match the required level.
                 </p>
               </div>
               <div className="bg-white/70 backdrop-blur-md rounded-xl border border-white/40 p-4">
