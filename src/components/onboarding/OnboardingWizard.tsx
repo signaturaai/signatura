@@ -170,6 +170,8 @@ export function OnboardingWizard() {
   const [loading, setLoading] = useState(true)
   const [savingRole, setSavingRole] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
+  const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [userName, setUserName] = useState<string | null>(null)
   const [userType, setUserType] = useState<UserRole | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -184,6 +186,8 @@ export function OnboardingWizard() {
         }
 
         setUserId(user.id)
+        setUserEmail(user.email || null)
+        setUserName(user.user_metadata?.full_name || user.user_metadata?.name || null)
 
         // Try to get existing profile
         const { data: profileData } = await supabase
@@ -222,19 +226,26 @@ export function OnboardingWizard() {
 
   // Handle role selection
   const handleRoleSelect = async (role: UserRole) => {
-    if (!userId) return
+    if (!userId || !userEmail) {
+      setError('Session expired. Please log in again.')
+      return
+    }
 
     setSavingRole(true)
     setError(null)
 
     try {
-      // Update or insert the profile with the selected role (use type assertion for untyped columns)
+      // Update or insert the profile with the selected role
+      // Include ALL required fields for upsert to work when row doesn't exist
       const { error: upsertError } = await (supabase
         .from('profiles') as any)
         .upsert({
           id: userId,
+          email: userEmail,
+          full_name: userName,
           user_type: role,
           onboarding_completed: false,
+          is_admin: false,
           updated_at: new Date().toISOString(),
         }, {
           onConflict: 'id',
@@ -242,11 +253,13 @@ export function OnboardingWizard() {
 
       if (upsertError) throw upsertError
 
-      // Also update user_profiles if it exists (use type assertion for untyped columns)
+      // Also update user_profiles if it exists
       await (supabase
         .from('user_profiles') as any)
         .upsert({
           id: userId,
+          email: userEmail,
+          full_name: userName,
           user_type: role,
           onboarding_completed: false,
           updated_at: new Date().toISOString(),

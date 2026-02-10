@@ -112,9 +112,17 @@ export async function updateSession(request: NextRequest) {
                           pathname.startsWith('/settings') ||
                           pathname.startsWith('/jobs')
 
-  // CRITICAL: Redirect unauthenticated users to signup
-  // This includes /onboarding - users MUST be logged in to onboard
-  if (!user && !isAuthPage && !isPublicPage && !isApiRoute) {
+  // CRITICAL: /onboarding requires authentication
+  // Redirect unauthenticated users trying to access /onboarding
+  if (!user && isOnboardingPage) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/signup'
+    url.searchParams.set('redirect', '/onboarding')
+    return NextResponse.redirect(url)
+  }
+
+  // CRITICAL: Redirect unauthenticated users on protected pages to signup
+  if (!user && isProtectedPage) {
     const url = request.nextUrl.clone()
     url.pathname = '/signup'
     url.searchParams.set('redirect', pathname)
