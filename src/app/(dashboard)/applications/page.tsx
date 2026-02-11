@@ -4,13 +4,14 @@
  * My Applications Page
  *
  * Comprehensive job applications management interface with:
+ * - Real-time data from Supabase
  * - Cards and Table view toggle
  * - Advanced filtering and search
  * - Column customization for table view
  * - Dynamic action buttons based on application status
  */
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Card, CardContent } from '@/components/ui'
 import { Button, Input } from '@/components/ui'
 import {
@@ -23,7 +24,6 @@ import {
 } from '@/components/applications'
 import type { ColumnConfig, FilterState } from '@/components/applications'
 import { ToastProvider, useToast } from '@/components/ui'
-import { mockJobApplications } from '@/lib/data/mockData'
 import type { JobApplication, ApplicationStatus } from '@/lib/types/dashboard'
 import {
   Plus,
@@ -35,8 +35,10 @@ import {
   ChevronDown,
   ArrowUpDown,
   Briefcase,
+  Loader2,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 
 // View mode type
 type ViewMode = 'cards' | 'table'
@@ -72,6 +74,12 @@ const STATUS_OPTIONS: { value: ApplicationStatus | 'all'; label: string }[] = [
 function ApplicationsPageContent() {
   const router = useRouter()
   const { showToast } = useToast()
+  const supabase = createClient()
+
+  // Data state - fetched from Supabase
+  const [applications, setApplications] = useState<JobApplication[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   // View state
   const [viewMode, setViewMode] = useState<ViewMode>('cards')
@@ -101,9 +109,82 @@ function ApplicationsPageContent() {
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false)
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false)
 
+  // Fetch applications from Supabase
+  useEffect(() => {
+    async function fetchApplications() {
+      setIsLoading(true)
+      setError(null)
+
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+
+        if (!user) {
+          router.push('/login')
+          return
+        }
+
+        const { data, error: fetchError } = await (supabase
+          .from('job_applications') as any)
+          .select(`
+            id,
+            company_name,
+            position_title,
+            application_status,
+            application_date,
+            job_description,
+            salary_range,
+            location,
+            industry,
+            priority,
+            notes,
+            next_step,
+            next_step_date,
+            created_at,
+            updated_at
+          `)
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+
+        if (fetchError) {
+          console.error('Error fetching applications:', fetchError)
+          setError('Failed to load applications')
+          return
+        }
+
+        // Map Supabase data to JobApplication type
+        const mappedApplications: JobApplication[] = (data || []).map((app: any) => ({
+          id: app.id,
+          company_name: app.company_name,
+          position_title: app.position_title,
+          application_status: app.application_status as ApplicationStatus,
+          application_date: app.application_date || app.created_at,
+          job_description: app.job_description,
+          salary_range: app.salary_range,
+          location: app.location,
+          industry: app.industry,
+          priority: app.priority || 'medium',
+          notes: app.notes,
+          next_step: app.next_step,
+          next_step_date: app.next_step_date,
+          created_at: app.created_at,
+          updated_at: app.updated_at,
+        }))
+
+        setApplications(mappedApplications)
+      } catch (err) {
+        console.error('Error:', err)
+        setError('An unexpected error occurred')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchApplications()
+  }, [supabase, router])
+
   // Filter and sort applications
   const filteredApplications = useMemo(() => {
-    let result = [...mockJobApplications]
+    let result = [...applications]
 
     // Apply search filter
     const searchTerm = advancedFilters.searchQuery || searchQuery
@@ -160,14 +241,14 @@ function ApplicationsPageContent() {
     })
 
     return result
-  }, [searchQuery, quickStatusFilter, dateFrom, dateTo, sortOption, advancedFilters])
+  }, [applications, searchQuery, quickStatusFilter, dateFrom, dateTo, sortOption, advancedFilters])
 
   // Handle application action
   const handleApplicationAction = useCallback(
     (application: JobApplication, action: string) => {
       switch (action) {
         case 'tailor_cv':
-          router.push(`/cv/tailor?application=${application.id}`)
+          router.push(`/cv/tailor?application_id=${application.id}`)
           break
         case 'follow_up':
           router.push(`/applications/${application.id}?action=follow_up`)
@@ -209,6 +290,56 @@ function ApplicationsPageContent() {
     company_asc: 'Company A-Z',
     company_desc: 'Company Z-A',
     status: 'By Status',
+  }
+
+  // Refresh applications after creating a new one
+  const handleWizardClose = useCallback(async (created?: boolean) => {
+    setShowWizard(false)
+    if (created) {
+      // Refresh the applications list
+      setIsLoading(true)
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data } = await (supabase
+          .from('job_applications') as any)
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+
+        if (data) {
+          setApplications(data.map((app: any) => ({
+            ...app,
+            application_status: app.application_status as ApplicationStatus,
+          })))
+        }
+      }
+      setIsLoading(false)
+      showToast('Application created successfully!', 'success')
+    }
+  }, [supabase, showToast])
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto text-lavender-dark" />
+          <p className="text-gray-500 mt-2">Loading your applications...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <p className="text-red-600 mb-4">{error}</p>
+          <Button onClick={() => window.location.reload()}>Try Again</Button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -418,21 +549,21 @@ function ApplicationsPageContent() {
       </Card>
 
       {/* Applications View */}
-      {viewMode === 'cards' ? (
-        <ApplicationCardsView
-          applications={filteredApplications}
-          onAction={handleApplicationAction}
-        />
-      ) : (
-        <ApplicationTableView
-          applications={filteredApplications}
-          columns={columns}
-          onAction={handleApplicationAction}
-        />
-      )}
-
-      {/* Empty State */}
-      {filteredApplications.length === 0 && mockJobApplications.length > 0 && (
+      {filteredApplications.length > 0 ? (
+        viewMode === 'cards' ? (
+          <ApplicationCardsView
+            applications={filteredApplications}
+            onAction={handleApplicationAction}
+          />
+        ) : (
+          <ApplicationTableView
+            applications={filteredApplications}
+            columns={columns}
+            onAction={handleApplicationAction}
+          />
+        )
+      ) : applications.length > 0 ? (
+        /* No matching results - but applications exist */
         <Card className="border border-gray-100">
           <CardContent className="py-12 text-center">
             <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -463,10 +594,32 @@ function ApplicationsPageContent() {
             </Button>
           </CardContent>
         </Card>
+      ) : (
+        /* No applications at all - empty state */
+        <Card className="border border-gray-100">
+          <CardContent className="py-12 text-center">
+            <div className="w-16 h-16 bg-lavender-light/30 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Briefcase className="w-8 h-8 text-lavender-dark" />
+            </div>
+            <h3 className="text-lg font-semibold text-text-primary mb-2">
+              No applications yet
+            </h3>
+            <p className="text-text-secondary mb-4">
+              Start tracking your job search by creating your first application
+            </p>
+            <Button
+              onClick={() => setShowWizard(true)}
+              className="bg-teal-600 hover:bg-teal-700 text-white"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Create Your First Application
+            </Button>
+          </CardContent>
+        </Card>
       )}
 
       {/* New Application Wizard Modal */}
-      <NewApplicationWizard isOpen={showWizard} onClose={() => setShowWizard(false)} />
+      <NewApplicationWizard isOpen={showWizard} onClose={() => handleWizardClose()} />
 
       {/* Advanced Filters Modal */}
       <AdvancedFiltersModal
