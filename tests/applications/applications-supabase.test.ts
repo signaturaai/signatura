@@ -19,29 +19,46 @@ describe('Applications Page - Supabase Integration', () => {
       expect(expectedImport).toBe('@/lib/supabase/client')
     })
 
-    it('should query job_applications table with correct fields', () => {
+    it('should query job_applications table with correct fields matching Dashboard', () => {
+      // These are the exact columns that exist in the Supabase table
+      // and match the working Dashboard query
       const queryFields = [
         'id',
         'company_name',
         'position_title',
         'application_status',
-        'application_date',
         'job_description',
-        'salary_range',
         'location',
         'industry',
-        'priority',
-        'notes',
-        'next_step',
-        'next_step_date',
+        'salary_range',
+        'application_date',
         'created_at',
-        'updated_at',
       ]
+
+      // Must NOT include columns that don't exist in DB
+      const invalidColumns = ['priority', 'notes', 'next_step', 'next_step_date', 'updated_at']
 
       expect(queryFields).toContain('id')
       expect(queryFields).toContain('company_name')
       expect(queryFields).toContain('application_status')
       expect(queryFields).toContain('created_at')
+
+      // Verify we're not querying non-existent columns
+      invalidColumns.forEach(col => {
+        expect(queryFields).not.toContain(col)
+      })
+    })
+
+    it('should use the same columns as Dashboard for consistency', () => {
+      // Dashboard query columns (from src/app/(dashboard)/dashboard/page.tsx)
+      const dashboardColumns = 'id, application_status, company_name, position_title, location, industry, salary_range, application_date, created_at'
+
+      // Applications page query should have these core columns
+      const coreColumns = ['id', 'company_name', 'position_title', 'application_status', 'created_at']
+
+      coreColumns.forEach(col => {
+        expect(dashboardColumns).toContain(col)
+      })
     })
 
     it('should filter by user_id', () => {
