@@ -151,19 +151,22 @@ export default function CVTailorPage() {
   // Handle application selection
   const handleSelectApplication = (app: Application) => {
     setSelectedApplication(app)
-    if (app.job_description) {
-      setJobDescription(app.job_description)
-    }
+    // Always update jobDescription - clear if null, set if exists
+    // This prevents stale JD from previous app when switching
+    setJobDescription(app.job_description || '')
     setShowApplicationDropdown(false)
   }
 
   // Handle CV selection
   const handleSelectCV = (cv: BaseCV) => {
     setSelectedCV(cv)
-    if (cv.raw_text) {
-      setBaseCVText(cv.raw_text)
-    }
+    // Always update baseCVText - clear if null, set if exists
+    // This prevents stale CV text when switching CVs
+    setBaseCVText(cv.raw_text || '')
   }
+
+  // Check if user has usable CVs (with raw_text)
+  const hasUsableCVs = baseCVs.some(cv => cv.raw_text && cv.raw_text.length > 0)
 
   const canSubmit =
     selectedApplication &&
@@ -448,10 +451,19 @@ export default function CVTailorPage() {
                 <CardDescription>
                   {selectedCV?.raw_text
                     ? 'Using your saved CV. You can edit below if needed.'
-                    : 'Paste your CV text below. We\'ll save it for future use.'}
+                    : baseCVs.length > 0
+                      ? 'Your saved CV has no text content. Please paste your CV below.'
+                      : 'No saved CV found. Paste your CV text below to get started.'}
                 </CardDescription>
               </CardHeader>
               <CardContent>
+                {/* No CV Alert */}
+                {!hasUsableCVs && baseCVText.length === 0 && (
+                  <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <span>No saved CV found. Paste your CV below, and we&apos;ll remember it for next time.</span>
+                  </div>
+                )}
                 <textarea
                   value={baseCVText}
                   onChange={(e) => setBaseCVText(e.target.value)}
