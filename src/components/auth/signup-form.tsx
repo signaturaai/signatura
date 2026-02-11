@@ -10,7 +10,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Button, Input, Label, Card, CardContent, CardFooter } from '@/components/ui'
+import { Input, Label, Card, CardContent, CardFooter } from '@/components/ui'
 import { PrivacyPolicyLink } from '@/components/legal'
 import { Loader2 } from 'lucide-react'
 
@@ -29,105 +29,144 @@ export function SignupForm() {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
+    console.log('🟢 Signup button clicked! Starting signup process...')
+
     setLoading(true)
     setError(null)
 
     // Validation
+    if (!name.trim()) {
+      console.log('🔴 Validation failed: Name is required')
+      setError('Please enter your name')
+      setLoading(false)
+      return
+    }
+
+    if (!email.trim()) {
+      console.log('🔴 Validation failed: Email is required')
+      setError('Please enter your email')
+      setLoading(false)
+      return
+    }
+
     if (!acceptedPrivacy) {
+      console.log('🔴 Validation failed: Privacy policy not accepted')
       setError('You must accept the Privacy Policy to continue')
       setLoading(false)
       return
     }
 
     if (password !== confirmPassword) {
+      console.log('🔴 Validation failed: Passwords do not match')
       setError('Passwords do not match')
       setLoading(false)
       return
     }
 
     if (password.length < 8) {
+      console.log('🔴 Validation failed: Password too short')
       setError('Password must be at least 8 characters')
       setLoading(false)
       return
     }
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: name,
+    console.log('🟢 Validation passed. Calling Supabase auth.signUp...')
+
+    try {
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: name,
+          },
+          emailRedirectTo: `${window.location.origin}/api/auth/callback?next=/onboarding`,
         },
-        emailRedirectTo: `${window.location.origin}/api/auth/callback?next=/onboarding`,
-      },
-    })
+      })
 
-    if (error) {
-      setError(error.message)
-      setLoading(false)
-      return
-    }
+      console.log('🟢 Supabase signUp response:', { data, error: signUpError })
 
-    // Check if email confirmation is required
-    if (data.user && !data.session) {
-      setMessage('Check your email to confirm your account. Then come back and sign in.')
-      setLoading(false)
-      return
-    }
-
-    // If user created successfully, create basic profile (without user_type)
-    // Role selection happens in OnboardingWizard
-    if (data.user) {
-      const { error: profileError } = await (supabase
-        .from('profiles') as any)
-        .upsert({
-          id: data.user.id,
-          email,
-          full_name: name,
-          is_admin: false,
-          onboarding_completed: false,
-          privacy_policy_accepted_at: new Date().toISOString(),
-          terms_accepted_at: new Date().toISOString(),
-        })
-
-      if (profileError) {
-        console.error('Error creating profile:', profileError)
-        // Continue anyway - profile might be created by trigger
+      if (signUpError) {
+        console.log('🔴 Signup error:', signUpError.message)
+        setError(signUpError.message)
+        setLoading(false)
+        return
       }
 
-      // Log consent
-      try {
-        await fetch('/api/consent/log', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            consent_type: 'privacy_policy',
-            action: 'granted',
-            version: '2.0',
-          }),
-        })
-      } catch {
-        // Silently fail - consent was recorded in profile
+      // Check if email confirmation is required
+      if (data.user && !data.session) {
+        console.log('🟡 Email confirmation required')
+        setMessage('Check your email to confirm your account. Then come back and sign in.')
+        setLoading(false)
+        return
       }
-    }
 
-    // Always redirect to onboarding - role selection happens there
-    router.push('/onboarding')
-    router.refresh()
+      // If user created successfully, create basic profile (without user_type)
+      // Role selection happens in OnboardingWizard
+      if (data.user) {
+        console.log('🟢 User created successfully. Creating profile...')
+
+        const { error: profileError } = await (supabase
+          .from('profiles') as any)
+          .upsert({
+            id: data.user.id,
+            email,
+            full_name: name,
+            is_admin: false,
+            onboarding_completed: false,
+            privacy_policy_accepted_at: new Date().toISOString(),
+            terms_accepted_at: new Date().toISOString(),
+          })
+
+        if (profileError) {
+          console.error('🔴 Error creating profile:', profileError)
+          // Continue anyway - profile might be created by trigger
+        } else {
+          console.log('🟢 Profile created successfully')
+        }
+
+        // Log consent
+        try {
+          await fetch('/api/consent/log', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              consent_type: 'privacy_policy',
+              action: 'granted',
+              version: '2.0',
+            }),
+          })
+          console.log('🟢 Consent logged')
+        } catch (consentErr) {
+          console.log('🟡 Failed to log consent (non-critical):', consentErr)
+        }
+      }
+
+      // Always redirect to onboarding - role selection happens there
+      console.log('🟢 Signup complete! Redirecting to /onboarding...')
+      router.push('/onboarding')
+      router.refresh()
+    } catch (err) {
+      console.error('🔴 Unexpected error during signup:', err)
+      setError('An unexpected error occurred. Please try again.')
+      setLoading(false)
+    }
   }
 
   const handleGoogleSignup = async () => {
+    console.log('🟢 Google signup clicked')
     setLoading(true)
     setError(null)
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/api/auth/callback`,
+        redirectTo: `${window.location.origin}/api/auth/callback?next=/onboarding`,
       },
     })
 
     if (error) {
+      console.log('🔴 Google signup error:', error.message)
       setError(error.message)
       setLoading(false)
     }
@@ -219,10 +258,11 @@ export function SignupForm() {
         </CardContent>
 
         <CardFooter className="flex flex-col space-y-4">
-          <Button
+          {/* Native HTML button for guaranteed form submission */}
+          <button
             type="submit"
-            className="w-full"
             disabled={loading || !acceptedPrivacy}
+            className="w-full inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
           >
             {loading ? (
               <>
@@ -232,7 +272,7 @@ export function SignupForm() {
             ) : (
               'Create account'
             )}
-          </Button>
+          </button>
 
           <div className="relative w-full">
             <div className="absolute inset-0 flex items-center">
@@ -245,12 +285,11 @@ export function SignupForm() {
             </div>
           </div>
 
-          <Button
+          <button
             type="button"
-            variant="outline"
-            className="w-full"
             onClick={handleGoogleSignup}
             disabled={loading}
+            className="w-full inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2"
           >
             <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
               <path
@@ -271,7 +310,7 @@ export function SignupForm() {
               />
             </svg>
             Continue with Google
-          </Button>
+          </button>
 
           <p className="text-xs text-center text-muted-foreground">
             By creating an account, you agree to our{' '}
