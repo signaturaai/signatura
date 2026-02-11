@@ -327,8 +327,8 @@ describe('P0 - Mock Data Population', () => {
       expect(interview!.href).toBe('/interview')
     })
 
-    it('should include Add Application action', () => {
-      const addApp = mockQuickActions.find((a) => a.label === 'Add Application')
+    it('should include New Application action', () => {
+      const addApp = mockQuickActions.find((a) => a.label === 'New Application')
       expect(addApp).toBeDefined()
       expect(addApp!.href).toContain('/applications')
     })

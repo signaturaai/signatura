@@ -12,6 +12,24 @@ RALPH is a systematic evaluation framework used to verify application changes:
 - **P (Parameters)**: Data flows correctly through components
 - **H (Handling)**: Empty states and error handling
 
+## Test Directory Structure
+
+```
+tests/
+├── dashboard/
+│   └── dashboard.test.ts      # Dashboard metrics, routing, Quick Actions
+├── cv-tailor/
+│   └── cv-tailor.test.ts      # CV tailoring flow, application selection
+├── interview/
+│   └── interview.test.ts      # Interview Coach, intelligence continuity
+├── negotiator/
+│   └── negotiator.test.ts     # Compensation negotiation, leverage data
+├── contract/
+│   └── contract.test.ts       # Contract review, terms verification
+└── integration/
+    └── ralph-evaluation.test.ts  # Original comprehensive RALPH tests
+```
+
 ## Running Tests
 
 ### Prerequisites
@@ -28,16 +46,26 @@ npm install
 npm test
 ```
 
-### Run RALPH Evaluation Tests
+### Run Tests by Module
 
 ```bash
-npm test -- tests/integration/ralph-evaluation.test.ts
-```
+# Dashboard tests
+npm test -- tests/dashboard
 
-Or with Vitest directly:
+# CV Tailor tests
+npm test -- tests/cv-tailor
 
-```bash
-npx vitest run tests/integration/ralph-evaluation.test.ts
+# Interview Coach tests
+npm test -- tests/interview
+
+# Negotiator tests
+npm test -- tests/negotiator
+
+# Contract Reviewer tests
+npm test -- tests/contract
+
+# Integration tests
+npm test -- tests/integration
 ```
 
 ### Watch Mode
@@ -45,7 +73,33 @@ npx vitest run tests/integration/ralph-evaluation.test.ts
 For development, run tests in watch mode:
 
 ```bash
-npx vitest watch tests/integration/ralph-evaluation.test.ts
+npx vitest watch
+```
+
+## Application-Centric Architecture
+
+All tools now require application selection first. This ensures:
+
+1. **Context Awareness**: Each tool knows which job you're working on
+2. **Intelligence Continuity**: Data flows from previous steps (CV → Interview → Negotiation → Contract)
+3. **Back Navigation**: Returns you to the application detail page
+
+### Intelligence Flow
+
+```
+Application Created
+       ↓
+   CV Tailor
+   (pulls job_description)
+       ↓
+ Interview Coach
+ (pulls tailored_cv, job_description)
+       ↓
+   Negotiator
+   (pulls salary_range, cv_score, interview_strengths)
+       ↓
+Contract Reviewer
+(pulls negotiated_terms, salary_agreed)
 ```
 
 ## Manual Verification Steps
@@ -74,6 +128,45 @@ npx vitest watch tests/integration/ralph-evaluation.test.ts
    - From CV Tailor without an application, click Back
    - Verify you return to `/dashboard`
 
+### Interview Coach Application-Centric Flow
+
+1. **Application Selection Required**
+   - Navigate to `/interview`
+   - Verify application selector is shown
+   - Select an application to proceed
+
+2. **Intelligence Continuity**
+   - If application has tailored CV, verify "Tailored CV Ready" indicator
+   - Verify CV score is displayed
+   - Verify global insights (if any) are shown
+
+3. **Context Passing**
+   - Start interview wizard
+   - Verify company name and position are pre-filled
+
+### Negotiator Application-Centric Flow
+
+1. **Application Priority**
+   - Navigate to `/compensation`
+   - Verify applications with offers are shown first
+   - Verify "Has Offer" badge on relevant applications
+
+2. **Intelligence Aggregation**
+   - Select an application with tailored CV
+   - Verify CV score is shown as leverage
+   - If interview completed, verify strengths are shown
+
+### Contract Reviewer Application-Centric Flow
+
+1. **Application Selection**
+   - Navigate to `/contract`
+   - Verify accepted/offer applications are prioritized
+   - Select an application to upload contract
+
+2. **Terms Verification**
+   - If negotiation completed, verify agreed terms are listed
+   - Verify "We'll Check For" section shows negotiated salary
+
 ### Dashboard Metrics
 
 1. **Interactive Cards**
@@ -98,25 +191,52 @@ npx vitest watch tests/integration/ralph-evaluation.test.ts
    - "Negotiate Offer" (only for offer/interviewing status)
 3. Click each action and verify `application_id` is passed in URL
 
-## Test Coverage
+## Test Coverage Summary
 
-The RALPH evaluation tests cover:
+### Dashboard Tests
+| Category | Tests |
+|----------|-------|
+| R - Routing | Card navigation, Quick Actions links |
+| A - API | job_applications, base_cvs field names |
+| L - Logic | Metric calculations, status filtering |
+| P - Parameters | User context, query filters |
+| H - Handling | Empty states, loading states |
 
-| Category | Test Description |
-|----------|-----------------|
-| R - Routing | Back URL construction with/without application |
-| R - Routing | Custom returnTo parameter handling |
-| A - API | job_applications field name validation |
-| A - API | base_cvs field name validation |
-| L - Logic | Job description null handling |
-| L - Logic | CV raw_text null handling |
-| L - Logic | Usable CVs detection |
-| P - Parameters | application_id URL extraction |
-| P - Parameters | Application lookup by ID |
-| P - Parameters | API request body construction |
-| H - Handling | Empty state detection |
-| H - Handling | CV card description logic |
-| H - Handling | canSubmit validation |
+### CV Tailor Tests
+| Category | Tests |
+|----------|-------|
+| R - Routing | Back URL construction, returnTo handling |
+| A - API | job_applications, base_cvs, cv_tailoring_sessions fields |
+| L - Logic | Null handling, CV detection, JD population |
+| P - Parameters | application_id flow, API request body |
+| H - Handling | Empty states, no CV warning, canSubmit validation |
+
+### Interview Coach Tests
+| Category | Tests |
+|----------|-------|
+| R - Routing | Application-based navigation |
+| A - API | cv_tailoring_sessions, global_user_insights fields |
+| L - Logic | Tailored CV detection, context passing |
+| P - Parameters | Company context, global insights |
+| H - Handling | Empty states, missing CV warning |
+
+### Negotiator Tests
+| Category | Tests |
+|----------|-------|
+| R - Routing | Application-based navigation |
+| A - API | interview_sessions, salary fields |
+| L - Logic | Offer prioritization, intelligence aggregation |
+| P - Parameters | CV achievements, interview strengths |
+| H - Handling | Missing intelligence, offer detection |
+
+### Contract Reviewer Tests
+| Category | Tests |
+|----------|-------|
+| R - Routing | Application-based navigation |
+| A - API | negotiation_sessions, global_user_insights fields |
+| L - Logic | Terms verification, priority sorting |
+| P - Parameters | Negotiated terms, red flag detection |
+| H - Handling | Missing data, salary formatting |
 
 ## Continuous Integration
 
