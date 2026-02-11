@@ -93,18 +93,24 @@ export function SignupForm() {
         return
       }
 
-      // Check if email confirmation is required
-      if (data.user && !data.session) {
-        console.log('🟡 Email confirmation required')
+      // CRITICAL: Check if auto-confirm is enabled (session exists immediately)
+      // In dev mode with auto-confirm, data.session will be present
+      const isAutoConfirmed = data.user && data.session
+      const needsEmailConfirmation = data.user && !data.session
+
+      console.log('🟢 Auth state:', { isAutoConfirmed, needsEmailConfirmation, hasUser: !!data.user, hasSession: !!data.session })
+
+      // Case 1: Email confirmation required (no session yet)
+      if (needsEmailConfirmation) {
+        console.log('🟡 Email confirmation required - showing check email message')
         setMessage('Check your email to confirm your account. Then come back and sign in.')
         setLoading(false)
         return
       }
 
-      // If user created successfully, create basic profile (without user_type)
-      // Role selection happens in OnboardingWizard
+      // Case 2: Auto-confirmed OR session exists - create profile and redirect immediately
       if (data.user) {
-        console.log('🟢 User created successfully. Creating profile...')
+        console.log('🟢 User created/confirmed successfully. Creating profile...')
 
         const { error: profileError } = await (supabase
           .from('profiles') as any)
@@ -120,12 +126,13 @@ export function SignupForm() {
 
         if (profileError) {
           console.error('🔴 Error creating profile:', profileError)
-          // Continue anyway - profile might be created by trigger
+          // Continue anyway - profile might be created by trigger or RLS issue
+          // The onboarding page will handle missing profiles
         } else {
           console.log('🟢 Profile created successfully')
         }
 
-        // Log consent
+        // Log consent (non-blocking)
         try {
           await fetch('/api/consent/log', {
             method: 'POST',
@@ -140,12 +147,18 @@ export function SignupForm() {
         } catch (consentErr) {
           console.log('🟡 Failed to log consent (non-critical):', consentErr)
         }
+
+        // CRITICAL: Redirect immediately to onboarding (auto-confirmed case)
+        console.log('🟢 Signup complete! Redirecting to /onboarding immediately...')
+        router.push('/onboarding')
+        router.refresh()
+        return
       }
 
-      // Always redirect to onboarding - role selection happens there
-      console.log('🟢 Signup complete! Redirecting to /onboarding...')
-      router.push('/onboarding')
-      router.refresh()
+      // Fallback: No user returned (shouldn't happen)
+      console.log('🔴 Unexpected state: No user returned from signUp')
+      setError('An unexpected error occurred. Please try again.')
+      setLoading(false)
     } catch (err) {
       console.error('🔴 Unexpected error during signup:', err)
       setError('An unexpected error occurred. Please try again.')
