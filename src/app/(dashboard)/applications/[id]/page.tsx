@@ -22,6 +22,9 @@ import {
   TrendingUp,
   Clock,
   CheckCircle,
+  Sparkles,
+  Mic,
+  DollarSign,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -199,6 +202,40 @@ export default function ApplicationDetailPage() {
           {currentStatus?.label || application.status}
         </span>
       </div>
+
+      {/* Quick Actions for this Application */}
+      <Card className="border-lavender-light/50 bg-gradient-to-br from-lavender-light/10 to-white">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-lavender-dark" />
+            Quick Actions for {application.company_name}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-3">
+            <Button asChild variant="outline" className="flex-1 min-w-[140px]">
+              <Link href={`/cv/tailor?application_id=${applicationId}`}>
+                <FileText className="w-4 h-4 mr-2 text-peach-dark" />
+                {tailoringSession ? 'Re-Tailor CV' : 'Tailor CV'}
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="flex-1 min-w-[140px]">
+              <Link href={`/interview?application_id=${applicationId}`}>
+                <Mic className="w-4 h-4 mr-2 text-sky-dark" />
+                Practice Interview
+              </Link>
+            </Button>
+            {(application.status === 'offer' || application.status === 'interviewing') && (
+              <Button asChild variant="outline" className="flex-1 min-w-[140px]">
+                <Link href={`/compensation?application_id=${applicationId}`}>
+                  <DollarSign className="w-4 h-4 mr-2 text-success-dark" />
+                  Negotiate Offer
+                </Link>
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
