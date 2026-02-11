@@ -657,6 +657,15 @@ export const mockActivityItems: ActivityItem[] = [
  */
 export const mockQuickActions: QuickAction[] = [
   {
+    id: 'action-003',
+    label: 'New Application',
+    description: 'Track a new job',
+    href: '/applications?new=true',
+    icon: 'Plus',
+    color: 'text-lavender-dark',
+    bgColor: 'bg-lavender-light',
+  },
+  {
     id: 'action-001',
     label: 'Tailor CV',
     description: 'Optimize for a job',
@@ -673,15 +682,6 @@ export const mockQuickActions: QuickAction[] = [
     icon: 'Mic',
     color: 'text-sky-dark',
     bgColor: 'bg-sky-light',
-  },
-  {
-    id: 'action-003',
-    label: 'Add Application',
-    description: 'Track a new job',
-    href: '/applications?new=true',
-    icon: 'Plus',
-    color: 'text-lavender-dark',
-    bgColor: 'bg-lavender-light',
   },
   {
     id: 'action-004',
