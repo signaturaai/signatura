@@ -278,8 +278,8 @@ describe('RALPH Evaluation: CV Tailor Application-Centric Flow', () => {
         baseCVTextLength: number,
         jobDescriptionLength: number,
         isLoading: boolean
-      ) => {
-        return (
+      ): boolean => {
+        return Boolean(
           selectedApplication &&
           baseCVTextLength >= 100 &&
           jobDescriptionLength >= 50 &&
