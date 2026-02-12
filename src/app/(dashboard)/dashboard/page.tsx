@@ -25,10 +25,11 @@ export default async function DashboardPage() {
 
   // Fetch real data from Supabase in parallel
   // IMPORTANT: All column names MUST be lowercase to match PostgreSQL schema
+  // Only query columns that definitely exist in the database
   const [applicationsResult, cvVersionsResult, profileResult] = await Promise.all([
     (supabase
       .from('job_applications') as any)
-      .select('id, application_status, company_name, position_title, location, industry, salary_range, application_date, created_at')
+      .select('id, application_status, company_name, position_title, salary_range, application_date, created_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false }),
     (supabase

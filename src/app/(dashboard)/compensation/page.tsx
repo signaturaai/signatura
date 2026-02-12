@@ -113,8 +113,9 @@ export default function CompensationNegotiatorPage() {
 
       // Fetch applications with offer/interviewing status first, then all
       // IMPORTANT: All column names MUST be lowercase to match PostgreSQL schema
+      // Only query columns that definitely exist in the database
       const { data: apps } = await (supabase.from('job_applications') as any)
-        .select('id, company_name, position_title, job_description, application_status, industry, salary_range, salary_min, salary_max, created_at')
+        .select('id, company_name, position_title, job_description, application_status, salary_range, salary_min, salary_max, created_at')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
 

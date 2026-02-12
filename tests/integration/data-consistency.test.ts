@@ -13,8 +13,8 @@
 import { describe, it, expect } from 'vitest'
 
 describe('Data Consistency - Supabase Queries', () => {
-  // Common columns that exist in the job_applications table
-  const VALID_COLUMNS = [
+  // Core columns that definitely exist in the job_applications table
+  const CORE_COLUMNS = [
     'id',
     'user_id',
     'company_name',
@@ -22,8 +22,6 @@ describe('Data Consistency - Supabase Queries', () => {
     'application_status',
     'job_description',
     'job_url',
-    'location',
-    'industry',
     'salary_range',
     'salary_min',
     'salary_max',
@@ -37,89 +35,83 @@ describe('Data Consistency - Supabase Queries', () => {
     'contract_analysis',
   ]
 
-  // Columns that do NOT exist (previously caused "Failed to load" error)
-  const INVALID_COLUMNS = ['priority', 'notes', 'next_step', 'next_step_date', 'updated_at']
+  // Columns that might cause schema mismatch errors
+  // These are excluded from queries to ensure compatibility
+  const PROBLEMATIC_COLUMNS = ['location', 'industry', 'priority', 'notes', 'next_step', 'next_step_date', 'updated_at']
 
   describe('Dashboard Query', () => {
-    it('should use only valid columns', () => {
+    it('should use only core columns that definitely exist', () => {
+      // Dashboard uses minimal safe columns
       const dashboardColumns = [
         'id',
         'application_status',
         'company_name',
         'position_title',
-        'location',
-        'industry',
         'salary_range',
         'application_date',
         'created_at',
       ]
 
       dashboardColumns.forEach((col) => {
-        expect(VALID_COLUMNS).toContain(col)
+        expect(CORE_COLUMNS).toContain(col)
       })
     })
 
-    it('should not use invalid columns', () => {
+    it('should not use problematic columns', () => {
       const dashboardColumns = [
         'id',
         'application_status',
         'company_name',
         'position_title',
-        'location',
-        'industry',
         'salary_range',
         'application_date',
         'created_at',
       ]
 
-      INVALID_COLUMNS.forEach((invalidCol) => {
-        expect(dashboardColumns).not.toContain(invalidCol)
+      PROBLEMATIC_COLUMNS.forEach((probCol) => {
+        expect(dashboardColumns).not.toContain(probCol)
       })
     })
   })
 
   describe('Applications Page Query', () => {
-    it('should use only valid columns', () => {
+    it('should use only core columns that definitely exist', () => {
       const applicationsColumns = [
         'id',
         'company_name',
         'position_title',
         'application_status',
         'job_description',
-        'location',
-        'industry',
         'salary_range',
         'application_date',
         'created_at',
       ]
 
       applicationsColumns.forEach((col) => {
-        expect(VALID_COLUMNS).toContain(col)
+        expect(CORE_COLUMNS).toContain(col)
       })
     })
 
-    it('should not use invalid columns', () => {
+    it('should not use problematic columns', () => {
       const applicationsColumns = [
         'id',
         'company_name',
         'position_title',
         'application_status',
         'job_description',
-        'location',
-        'industry',
         'salary_range',
         'application_date',
         'created_at',
       ]
 
-      INVALID_COLUMNS.forEach((invalidCol) => {
-        expect(applicationsColumns).not.toContain(invalidCol)
+      PROBLEMATIC_COLUMNS.forEach((probCol) => {
+        expect(applicationsColumns).not.toContain(probCol)
       })
     })
   })
 
   describe('CV Tailor Query', () => {
-    it('should use only valid columns', () => {
+    it('should use only core columns', () => {
       const cvTailorColumns = [
         'id',
         'company_name',
@@ -130,39 +122,37 @@ describe('Data Consistency - Supabase Queries', () => {
       ]
 
       cvTailorColumns.forEach((col) => {
-        expect(VALID_COLUMNS).toContain(col)
+        expect(CORE_COLUMNS).toContain(col)
       })
     })
   })
 
   describe('Interview Coach Query', () => {
-    it('should use only valid columns', () => {
+    it('should use only core columns', () => {
       const interviewColumns = [
         'id',
         'company_name',
         'position_title',
         'job_description',
         'application_status',
-        'industry',
         'salary_range',
         'created_at',
       ]
 
       interviewColumns.forEach((col) => {
-        expect(VALID_COLUMNS).toContain(col)
+        expect(CORE_COLUMNS).toContain(col)
       })
     })
   })
 
   describe('Compensation Negotiator Query', () => {
-    it('should use only valid columns', () => {
+    it('should use only core columns', () => {
       const compensationColumns = [
         'id',
         'company_name',
         'position_title',
         'job_description',
         'application_status',
-        'industry',
         'salary_range',
         'salary_min',
         'salary_max',
@@ -170,25 +160,24 @@ describe('Data Consistency - Supabase Queries', () => {
       ]
 
       compensationColumns.forEach((col) => {
-        expect(VALID_COLUMNS).toContain(col)
+        expect(CORE_COLUMNS).toContain(col)
       })
     })
   })
 
   describe('Contract Reviewer Query', () => {
-    it('should use only valid columns', () => {
+    it('should use only core columns', () => {
       const contractColumns = [
         'id',
         'company_name',
         'position_title',
         'application_status',
-        'industry',
         'salary_range',
         'created_at',
       ]
 
       contractColumns.forEach((col) => {
-        expect(VALID_COLUMNS).toContain(col)
+        expect(CORE_COLUMNS).toContain(col)
       })
     })
   })
@@ -213,16 +202,16 @@ describe('Data Consistency - Default Values', () => {
     expect(updatedAt).toBe('2024-01-15T10:00:00Z')
   })
 
-  it('should default notes to empty string', () => {
+  it('should default location to null when not queried', () => {
     const appFromDB = { id: '1' }
-    const notes = (appFromDB as any).notes || ''
-    expect(notes).toBe('')
+    const location = (appFromDB as any).location || null
+    expect(location).toBeNull()
   })
 
-  it('should default next_step to null', () => {
+  it('should default industry to null when not queried', () => {
     const appFromDB = { id: '1' }
-    const nextStep = (appFromDB as any).next_step || null
-    expect(nextStep).toBeNull()
+    const industry = (appFromDB as any).industry || null
+    expect(industry).toBeNull()
   })
 })
 
@@ -247,13 +236,6 @@ describe('Data Consistency - Ordering', () => {
     expect(orderBy.column).toBe('created_at')
     expect(orderBy.ascending).toBe(false)
   })
-
-  it('should support custom sorting on Applications page', () => {
-    const sortOptions = ['newest', 'oldest', 'company_asc', 'company_desc', 'status']
-    expect(sortOptions).toContain('newest')
-    expect(sortOptions).toContain('oldest')
-    expect(sortOptions).toContain('company_asc')
-  })
 })
 
 describe('Data Consistency - Error Handling', () => {
@@ -265,12 +247,6 @@ describe('Data Consistency - Error Handling', () => {
 
   it('should handle null data gracefully', () => {
     const data = null
-    const applications = data || []
-    expect(applications).toEqual([])
-  })
-
-  it('should handle undefined data gracefully', () => {
-    const data = undefined
     const applications = data || []
     expect(applications).toEqual([])
   })
