@@ -91,7 +91,7 @@ export default function CVPage() {
 
       // Fetch applications and CVs in parallel
       // IMPORTANT: All column names MUST be lowercase to match PostgreSQL schema
-      const [appsResult, cvsResult] = await Promise.all([
+      const [appsResult, cvsResult, profileResult] = await Promise.all([
         (supabase.from('job_applications') as any)
           .select('id, company_name, position_title, job_description, application_status, created_at')
           .eq('user_id', user.id)
@@ -102,10 +102,30 @@ export default function CVPage() {
           .order('is_primary', { ascending: false })
           .order('is_current', { ascending: false })
           .order('created_at', { ascending: false }),
+        // Fallback: check profiles table for base_cv_url (set during onboarding)
+        (supabase.from('profiles') as any)
+          .select('base_cv_url, base_cv_uploaded, full_name')
+          .eq('id', user.id)
+          .single(),
       ])
 
       const apps = (appsResult.data || []) as Application[]
-      const cvs = (cvsResult.data || []) as BaseCV[]
+      let cvs = (cvsResult.data || []) as BaseCV[]
+
+      // FALLBACK: If no CVs in base_cvs but profile has base_cv_url, create synthetic CV record
+      if (cvs.length === 0 && profileResult.data?.base_cv_url) {
+        const profileCV: BaseCV = {
+          id: 'profile-cv',
+          name: profileResult.data.full_name ? `${profileResult.data.full_name}'s CV` : 'My Base CV',
+          raw_text: null,  // Needs processing
+          is_primary: true,
+          is_current: true,
+          file_url: profileResult.data.base_cv_url,
+          file_name: 'Uploaded CV',
+          created_at: new Date().toISOString(),
+        }
+        cvs = [profileCV]
+      }
 
       setApplications(apps)
       setBaseCVs(cvs)

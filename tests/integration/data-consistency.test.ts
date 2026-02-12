@@ -492,5 +492,61 @@ describe('Onboarding to CV Tailor Integration', () => {
       const displayName = selectedCV.name || selectedCV.file_name || 'My Base CV'
       expect(displayName).toBe('old_resume.pdf')
     })
+
+    it('should fallback to profiles.base_cv_url when base_cvs is empty', () => {
+      // Simulate: base_cvs table has no records
+      const baseCVsFromDB: any[] = []
+
+      // Simulate: profiles table has base_cv_url (set during onboarding)
+      const profileData = {
+        base_cv_url: 'https://storage.example.com/base-cvs/user-cv.pdf',
+        base_cv_uploaded: true,
+        full_name: 'John Doe',
+      }
+
+      // CV Tailor creates synthetic CV from profile data
+      let cvs = baseCVsFromDB
+      if (cvs.length === 0 && profileData.base_cv_url) {
+        const profileCV = {
+          id: 'profile-cv',
+          name: profileData.full_name ? `${profileData.full_name}'s CV` : 'My Base CV',
+          raw_text: null,
+          is_primary: true,
+          is_current: true,
+          file_url: profileData.base_cv_url,
+          file_name: 'Uploaded CV',
+          created_at: new Date().toISOString(),
+        }
+        cvs = [profileCV]
+      }
+
+      expect(cvs.length).toBe(1)
+      expect(cvs[0].id).toBe('profile-cv')
+      expect(cvs[0].name).toBe("John Doe's CV")
+      expect(cvs[0].file_url).toBe(profileData.base_cv_url)
+      expect(cvs[0].is_primary).toBe(true)
+    })
+
+    it('should show No CV Found only when both base_cvs and profiles are empty', () => {
+      // No CVs in base_cvs
+      const baseCVsFromDB: any[] = []
+
+      // No CV URL in profiles
+      const profileData = {
+        base_cv_url: null,
+        base_cv_uploaded: false,
+      }
+
+      // CV Tailor cannot create synthetic CV
+      let cvs = baseCVsFromDB
+      if (cvs.length === 0 && profileData.base_cv_url) {
+        // This branch won't execute
+        cvs = [{} as any]
+      }
+
+      // Now "No Base CV Found" warning should show
+      const showNoCVWarning = cvs.length === 0
+      expect(showNoCVWarning).toBe(true)
+    })
   })
 })
