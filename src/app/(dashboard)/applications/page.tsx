@@ -125,23 +125,7 @@ function ApplicationsPageContent() {
 
         const { data, error: fetchError } = await (supabase
           .from('job_applications') as any)
-          .select(`
-            id,
-            company_name,
-            position_title,
-            application_status,
-            application_date,
-            job_description,
-            salary_range,
-            location,
-            industry,
-            priority,
-            notes,
-            next_step,
-            next_step_date,
-            created_at,
-            updated_at
-          `)
+          .select('id, company_name, position_title, application_status, job_description, location, industry, salary_range, application_date, created_at')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false })
 
@@ -162,12 +146,12 @@ function ApplicationsPageContent() {
           salary_range: app.salary_range,
           location: app.location,
           industry: app.industry,
-          priority: app.priority || 'medium',
-          notes: app.notes,
-          next_step: app.next_step,
-          next_step_date: app.next_step_date,
+          priority: 'medium', // Default priority
+          notes: '', // Not stored in DB yet
+          next_step: null, // Not stored in DB yet
+          next_step_date: null, // Not stored in DB yet
           created_at: app.created_at,
-          updated_at: app.updated_at,
+          updated_at: app.created_at, // Use created_at as fallback
         }))
 
         setApplications(mappedApplications)
