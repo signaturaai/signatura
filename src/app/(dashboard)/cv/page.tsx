@@ -43,9 +43,12 @@ interface Application {
 
 interface BaseCV {
   id: string
-  name: string
+  name: string | null
   raw_text: string | null
   is_primary: boolean
+  is_current: boolean
+  file_url: string | null
+  file_name: string | null
   created_at: string
 }
 
@@ -94,9 +97,10 @@ export default function CVPage() {
           .eq('user_id', user.id)
           .order('created_at', { ascending: false }),
         (supabase.from('base_cvs') as any)
-          .select('id, name, raw_text, is_primary, created_at')
+          .select('id, name, raw_text, is_primary, is_current, file_url, file_name, created_at')
           .eq('user_id', user.id)
           .order('is_primary', { ascending: false })
+          .order('is_current', { ascending: false })
           .order('created_at', { ascending: false }),
       ])
 
@@ -116,12 +120,14 @@ export default function CVPage() {
         }
       }
 
-      // Auto-select primary CV or first CV
+      // Auto-select CV: priority is is_primary > is_current > first available
       if (cvs.length > 0) {
-        const primaryCV = cvs.find(cv => cv.is_primary) || cvs[0]
-        setSelectedCV(primaryCV)
-        if (primaryCV.raw_text) {
-          setBaseCVText(primaryCV.raw_text)
+        const selectedCV = cvs.find(cv => cv.is_primary)
+          || cvs.find(cv => cv.is_current)
+          || cvs[0]
+        setSelectedCV(selectedCV)
+        if (selectedCV.raw_text) {
+          setBaseCVText(selectedCV.raw_text)
         }
       }
     }
@@ -524,8 +530,8 @@ export default function CVPage() {
         </div>
       )}
 
-      {/* No CV Warning */}
-      {!selectedCV?.raw_text && baseCVs.length === 0 && (
+      {/* No CV Warning - only show if user has zero CVs in the system */}
+      {baseCVs.length === 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
           <div className="text-amber-800 text-sm">
@@ -533,6 +539,21 @@ export default function CVPage() {
             <p className="mt-1">
               Please upload your base CV first before tailoring. You can do this from your{' '}
               <Link href="/cv/upload" className="underline font-medium">CV Upload</Link> page.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* CV needs processing warning - show if CV exists but raw_text is not available */}
+      {selectedCV && !selectedCV.raw_text && selectedCV.file_url && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-3">
+          <FileText className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+          <div className="text-blue-800 text-sm">
+            <p className="font-semibold">CV Processing Required</p>
+            <p className="mt-1">
+              Your CV <span className="font-medium">{selectedCV.name || selectedCV.file_name || 'uploaded CV'}</span> was uploaded
+              but needs to be processed for text extraction. Please{' '}
+              <Link href="/cv/upload" className="underline font-medium">re-upload your CV</Link> to enable tailoring.
             </p>
           </div>
         </div>
