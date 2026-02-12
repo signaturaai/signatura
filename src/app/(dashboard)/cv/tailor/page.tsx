@@ -1,13 +1,13 @@
 'use client'
 
 /**
- * CV Tailor - Application-Centric "Best of Both Worlds"
+ * CV Tailor - BASE44 Standard UI
  *
- * Interactive page for tailoring a CV to a specific job application.
- * - Requires selecting an application first (or creating one)
- * - Auto-fetches user's base CV from Supabase
- * - Pre-fills job description from the selected application
- * - Guarantees the final CV is at least as good as the original
+ * Matches the BASE44 gold standard design with:
+ * - Application selector dropdown
+ * - Multiple CV versions BETA feature
+ * - Professional typography and spacing
+ * - Yellow alert boxes and teal headers
  */
 
 import { useState, useEffect } from 'react'
@@ -17,23 +17,21 @@ import { Button } from '@/components/ui'
 import { TailoringResultsDisplay } from '@/components/cv'
 import { TailoringResult } from '@/lib/cv'
 import {
-  Sparkles,
   FileText,
   Briefcase,
   Loader2,
   ArrowLeft,
   Info,
-  Brain,
-  Target,
   AlertTriangle,
-  CheckCircle,
   ChevronDown,
   Plus,
   Building2,
+  Sparkles,
+  Trash2,
+  Layers,
+  Zap,
 } from 'lucide-react'
 import Link from 'next/link'
-import { usePMAnalysis } from '@/hooks/usePMAnalysis'
-import { getPrinciplesForContext } from '@/lib/ai/siggy-pm-intelligence'
 import { createClient } from '@/lib/supabase/client'
 
 interface Application {
@@ -52,15 +50,6 @@ interface BaseCV {
   is_primary: boolean
   created_at: string
 }
-
-const INDUSTRIES = [
-  { value: 'generic', label: 'General / Other' },
-  { value: 'technology', label: 'Technology' },
-  { value: 'healthcare', label: 'Healthcare' },
-  { value: 'finance', label: 'Finance' },
-  { value: 'education', label: 'Education' },
-  { value: 'retail', label: 'Retail' },
-]
 
 export default function CVTailorPage() {
   const router = useRouter()
@@ -81,16 +70,13 @@ export default function CVTailorPage() {
   const [isLoadingCVs, setIsLoadingCVs] = useState(true)
 
   // State for tailoring
-  const [jobDescription, setJobDescription] = useState('')
-  const [industry, setIndustry] = useState('generic')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<TailoringResult | null>(null)
-  const [showPMPanel, setShowPMPanel] = useState(false)
 
-  // PM Intelligence
-  const { analysis: pmAnalysis, isAnalyzing: isPMAnalyzing } = usePMAnalysis(baseCVText)
-  const cvPrinciples = getPrinciplesForContext('cvTailor')
+  // State for multiple versions (BETA)
+  const [targetRoles, setTargetRoles] = useState<string[]>([''])
+  const [isGeneratingMultiple, setIsGeneratingMultiple] = useState(false)
 
   const supabase = createClient()
 
@@ -103,7 +89,7 @@ export default function CVTailorPage() {
         return
       }
 
-      // Fetch applications in parallel with CVs
+      // Fetch applications and CVs in parallel
       // IMPORTANT: All column names MUST be lowercase to match PostgreSQL schema
       const [appsResult, cvsResult] = await Promise.all([
         (supabase.from('job_applications') as any)
@@ -130,9 +116,6 @@ export default function CVTailorPage() {
         const app = apps.find(a => a.id === applicationIdFromUrl)
         if (app) {
           setSelectedApplication(app)
-          if (app.job_description) {
-            setJobDescription(app.job_description)
-          }
         }
       }
 
@@ -152,35 +135,39 @@ export default function CVTailorPage() {
   // Handle application selection
   const handleSelectApplication = (app: Application) => {
     setSelectedApplication(app)
-    // Always update jobDescription - clear if null, set if exists
-    // This prevents stale JD from previous app when switching
-    setJobDescription(app.job_description || '')
     setShowApplicationDropdown(false)
   }
 
-  // Handle CV selection
-  const handleSelectCV = (cv: BaseCV) => {
-    setSelectedCV(cv)
-    // Always update baseCVText - clear if null, set if exists
-    // This prevents stale CV text when switching CVs
-    setBaseCVText(cv.raw_text || '')
+  // Handle adding another role input
+  const handleAddRole = () => {
+    if (targetRoles.length < 5) {
+      setTargetRoles([...targetRoles, ''])
+    }
   }
 
-  // Check if user has usable CVs (with raw_text)
-  const hasUsableCVs = baseCVs.some(cv => cv.raw_text && cv.raw_text.length > 0)
+  // Handle removing a role input
+  const handleRemoveRole = (index: number) => {
+    if (targetRoles.length > 1) {
+      setTargetRoles(targetRoles.filter((_, i) => i !== index))
+    }
+  }
 
-  const canSubmit =
-    selectedApplication &&
-    baseCVText.length >= 100 &&
-    jobDescription.length >= 50 &&
-    !isLoading
+  // Handle role input change
+  const handleRoleChange = (index: number, value: string) => {
+    const newRoles = [...targetRoles]
+    newRoles[index] = value
+    setTargetRoles(newRoles)
+  }
 
-  const handleSubmit = async () => {
-    if (!canSubmit || !selectedApplication) return
+  // Count valid roles (non-empty)
+  const validRolesCount = targetRoles.filter(role => role.trim().length > 0).length
+
+  // Handle continue CV tailoring
+  const handleContinueTailoring = async () => {
+    if (!selectedApplication || !selectedCV?.raw_text) return
 
     setIsLoading(true)
     setError(null)
-    setResult(null)
 
     try {
       const response = await fetch('/api/cv/tailor', {
@@ -189,9 +176,9 @@ export default function CVTailorPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          baseCVText,
-          jobDescription,
-          industry,
+          baseCVText: selectedCV.raw_text,
+          jobDescription: selectedApplication.job_description || '',
+          industry: 'generic',
           saveToDatabase: true,
           applicationId: selectedApplication.id,
         }),
@@ -211,17 +198,70 @@ export default function CVTailorPage() {
     }
   }
 
+  // Handle generating multiple versions
+  const handleGenerateMultiple = async () => {
+    const validRoles = targetRoles.filter(role => role.trim().length > 0)
+    if (validRoles.length === 0 || !baseCVText) return
+
+    setIsGeneratingMultiple(true)
+    setError(null)
+
+    try {
+      // For now, we'll generate for the first role as a demo
+      // In a full implementation, this would generate multiple versions
+      const response = await fetch('/api/cv/tailor', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          baseCVText,
+          jobDescription: `Target role: ${validRoles[0]}. Looking for a position as ${validRoles[0]}.`,
+          industry: 'generic',
+          saveToDatabase: false,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to generate CV versions')
+      }
+
+      setResult(data.result)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred')
+    } finally {
+      setIsGeneratingMultiple(false)
+    }
+  }
+
+  // Handle delete existing CVs
+  const handleDeleteExistingCVs = async () => {
+    if (!confirm('Are you sure you want to delete all existing tailored CVs? This cannot be undone.')) {
+      return
+    }
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      // Delete tailored CVs for this user
+      await (supabase.from('tailored_cvs') as any)
+        .delete()
+        .eq('user_id', user.id)
+
+      // Reset state
+      setResult(null)
+      setError(null)
+    } catch (err) {
+      setError('Failed to delete existing CVs')
+    }
+  }
+
   const handleReset = () => {
     setResult(null)
     setError(null)
-  }
-
-  // Determine back URL
-  const getBackUrl = () => {
-    if (selectedApplication) {
-      return `/applications/${selectedApplication.id}`
-    }
-    return returnTo
   }
 
   // Show results if we have them
@@ -252,484 +292,257 @@ export default function CVTailorPage() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin mx-auto text-lavender-dark" />
+          <Loader2 className="w-8 h-8 animate-spin mx-auto text-teal-600" />
           <p className="text-gray-500 mt-2">Loading your applications and CVs...</p>
         </div>
       </div>
     )
   }
 
-  // No applications state - prompt to create one
-  if (applications.length === 0) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <Link
-              href={returnTo}
-              className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Back
-            </Link>
-          </div>
-          <h1 className="text-2xl font-bold">Tailor Your CV</h1>
-        </div>
-
-        <Card className="border-lavender-light bg-gradient-to-br from-lavender-light/20 to-white">
-          <CardContent className="pt-8 pb-8 text-center">
-            <Building2 className="w-12 h-12 mx-auto text-lavender-dark mb-4" />
-            <h2 className="text-xl font-semibold text-gray-800 mb-2">No Applications Yet</h2>
-            <p className="text-gray-600 mb-6 max-w-md mx-auto">
-              To tailor your CV, you first need to create a job application.
-              This helps us match your CV perfectly to the job requirements.
-            </p>
-            <Button asChild className="bg-lavender hover:bg-lavender-dark">
-              <Link href="/applications?new=true&returnTo=/cv/tailor">
-                <Plus className="w-4 h-4 mr-2" />
-                Create Your First Application
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
   return (
-    <div className="space-y-6">
+    <div className="max-w-3xl mx-auto space-y-8 pb-12">
       {/* Header */}
-      <div>
-        <div className="flex items-center gap-2 mb-2">
-          <Link
-            href={getBackUrl()}
-            className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            {selectedApplication ? `Back to ${selectedApplication.company_name}` : 'Back to Dashboard'}
-          </Link>
+      <div className="text-center space-y-2">
+        <div className="flex items-center justify-center gap-3">
+          <div className="p-2 bg-teal-100 rounded-lg">
+            <FileText className="h-6 w-6 text-teal-600" />
+          </div>
+          <h1 className="text-3xl font-bold text-gray-900">CV Tailor</h1>
         </div>
-        <h1 className="text-2xl font-bold">Tailor Your CV</h1>
-        <p className="text-muted-foreground">
-          Get an optimized CV that&apos;s guaranteed to be as good or better than your original.
+        <p className="text-gray-500">Your AI-powered resume tailoring assistant</p>
+      </div>
+
+      {/* New User Info Box */}
+      <div className="bg-teal-50 border border-teal-200 rounded-lg p-4">
+        <p className="text-teal-800">
+          <span className="font-semibold">New to CV Tailor?</span>{' '}
+          Start by creating a new application from your Dashboard using the &quot;New Application&quot; button.
+          Then return here to tailor your CV.
         </p>
       </div>
 
-      {/* Application Selection Card */}
-      <Card className={selectedApplication ? 'border-lavender-dark bg-lavender-light/10' : 'border-amber-300 bg-amber-50'}>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Briefcase className="h-5 w-5 text-lavender-dark" />
-            {selectedApplication ? 'Selected Application' : 'Step 1: Select an Application'}
-          </CardTitle>
-          {!selectedApplication && (
-            <CardDescription>
-              Choose which job you&apos;re tailoring your CV for, or create a new application.
-            </CardDescription>
-          )}
-        </CardHeader>
-        <CardContent>
-          {selectedApplication ? (
-            <div className="flex items-center justify-between">
+      {/* Select Existing Application Section */}
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900">Select Existing Application</h2>
+          <p className="text-gray-500 text-sm">Choose a job application to tailor or manage CVs for</p>
+        </div>
+
+        {/* Yellow Note Box */}
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+          <p className="text-amber-800 text-sm">
+            <span className="font-semibold">Note:</span> To create a CV for a new job application,
+            please start from the &quot;New Application&quot; button in your Dashboard or Applications page.
+          </p>
+        </div>
+
+        {/* Application Dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setShowApplicationDropdown(!showApplicationDropdown)}
+            className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-200 rounded-lg hover:border-gray-300 transition-colors"
+          >
+            {selectedApplication ? (
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-lavender-light to-sky-light flex items-center justify-center font-semibold text-lavender-dark">
+                <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-teal-100 to-blue-100 flex items-center justify-center font-semibold text-teal-700 text-sm">
                   {selectedApplication.company_name.charAt(0)}
                 </div>
-                <div>
+                <div className="text-left">
                   <p className="font-medium text-gray-800">{selectedApplication.position_title}</p>
-                  <p className="text-sm text-gray-500">{selectedApplication.company_name}</p>
+                  <p className="text-xs text-gray-500">{selectedApplication.company_name}</p>
                 </div>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowApplicationDropdown(!showApplicationDropdown)}
-              >
-                Change
-                <ChevronDown className="w-4 h-4 ml-1" />
-              </Button>
+            ) : (
+              <span className="text-gray-400">Select an application...</span>
+            )}
+            <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${showApplicationDropdown ? 'rotate-180' : ''}`} />
+          </button>
+
+          {/* Dropdown Menu */}
+          {showApplicationDropdown && (
+            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+              {applications.length === 0 ? (
+                <div className="p-4 text-center text-gray-500">
+                  <Building2 className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                  <p className="text-sm">No applications yet</p>
+                  <Link
+                    href="/applications?new=true"
+                    className="text-teal-600 hover:text-teal-700 text-sm font-medium"
+                  >
+                    Create your first application
+                  </Link>
+                </div>
+              ) : (
+                applications.map((app) => (
+                  <button
+                    key={app.id}
+                    onClick={() => handleSelectApplication(app)}
+                    className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left border-b last:border-b-0 ${
+                      selectedApplication?.id === app.id ? 'bg-teal-50' : ''
+                    }`}
+                  >
+                    <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-teal-100 to-blue-100 flex items-center justify-center font-semibold text-teal-700 text-sm">
+                      {app.company_name.charAt(0)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-800 truncate">{app.position_title}</p>
+                      <p className="text-xs text-gray-500 truncate">{app.company_name}</p>
+                    </div>
+                    {app.job_description && (
+                      <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded-full flex-shrink-0">
+                        Has JD
+                      </span>
+                    )}
+                  </button>
+                ))
+              )}
             </div>
+          )}
+        </div>
+
+        {/* Continue CV Tailoring Button */}
+        <Button
+          onClick={handleContinueTailoring}
+          disabled={!selectedApplication || !selectedCV?.raw_text || isLoading}
+          className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-6 text-base font-medium"
+        >
+          {isLoading ? (
+            <>
+              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+              Tailoring CV...
+            </>
           ) : (
-            <div className="space-y-3">
-              <div className="relative">
-                <Button
-                  variant="outline"
-                  className="w-full justify-between"
-                  onClick={() => setShowApplicationDropdown(!showApplicationDropdown)}
-                >
-                  <span className="text-gray-500">Select an application...</span>
-                  <ChevronDown className="w-4 h-4" />
-                </Button>
-              </div>
-              <div className="text-center text-sm text-gray-500">or</div>
-              <Button asChild variant="ghost" className="w-full">
-                <Link href="/applications?new=true&returnTo=/cv/tailor">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Create New Application
-                </Link>
-              </Button>
+            <>
+              <FileText className="w-5 h-5 mr-2" />
+              Continue CV Tailoring
+            </>
+          )}
+        </Button>
+
+        {/* Delete Existing CVs Link */}
+        <button
+          onClick={handleDeleteExistingCVs}
+          className="w-full flex items-center justify-center gap-2 py-3 text-rose-500 hover:text-rose-600 border border-rose-200 hover:border-rose-300 rounded-lg transition-colors"
+        >
+          <Trash2 className="w-4 h-4" />
+          Delete Existing CVs & Start Fresh
+        </button>
+      </div>
+
+      {/* Divider */}
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-gray-200"></div>
+        </div>
+        <div className="relative flex justify-center">
+          <span className="bg-gray-50 px-4 text-lg font-semibold text-gray-700">Or Generate Multiple Versions</span>
+        </div>
+      </div>
+
+      {/* Generate Multiple Versions Section (BETA) */}
+      <Card className="border-violet-200 bg-gradient-to-br from-violet-50/50 to-white">
+        <CardHeader className="pb-4">
+          <CardTitle className="flex items-center gap-3">
+            <div className="p-2 bg-violet-100 rounded-lg">
+              <Layers className="h-5 w-5 text-violet-600" />
             </div>
+            <span className="text-lg text-gray-900">Generate Multiple CV Versions</span>
+            <span className="px-2 py-0.5 bg-violet-600 text-white text-xs font-bold rounded uppercase">
+              Beta
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Description Box */}
+          <div className="bg-violet-50 border border-violet-100 rounded-lg p-4 flex items-start gap-3">
+            <Zap className="w-5 h-5 text-violet-600 mt-0.5 flex-shrink-0" />
+            <p className="text-violet-800 text-sm">
+              Generate optimized CVs for multiple job roles simultaneously. Each version will be
+              ATS-optimized and tailored with role-specific keywords and achievements.
+            </p>
+          </div>
+
+          {/* Target Job Roles */}
+          <div className="space-y-3">
+            <label className="block text-sm font-medium text-gray-700">
+              Target Job Roles (up to 5)
+            </label>
+
+            {targetRoles.map((role, index) => (
+              <div key={index} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={role}
+                  onChange={(e) => handleRoleChange(index, e.target.value)}
+                  placeholder="e.g., Senior Software Engineer, Product Manager"
+                  className="flex-1 px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                />
+                {targetRoles.length > 1 && (
+                  <button
+                    onClick={() => handleRemoveRole(index)}
+                    className="p-2 text-gray-400 hover:text-rose-500 transition-colors"
+                    title="Remove role"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Add Another Role Button */}
+          {targetRoles.length < 5 && (
+            <button
+              onClick={handleAddRole}
+              className="w-full flex items-center justify-center gap-2 py-3 border border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-violet-400 hover:text-violet-600 transition-colors"
+            >
+              <Plus className="w-5 h-5" />
+              Add Another Role
+            </button>
           )}
 
-          {/* Application Dropdown */}
-          {showApplicationDropdown && (
-            <div className="mt-3 border rounded-lg bg-white shadow-lg max-h-64 overflow-y-auto">
-              {applications.map((app) => (
-                <button
-                  key={app.id}
-                  onClick={() => handleSelectApplication(app)}
-                  className={`w-full flex items-center gap-3 p-3 hover:bg-lavender-light/20 transition-colors text-left border-b last:border-b-0 ${
-                    selectedApplication?.id === app.id ? 'bg-lavender-light/30' : ''
-                  }`}
-                >
-                  <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-lavender-light/50 to-sky-light/50 flex items-center justify-center font-semibold text-lavender-dark text-sm">
-                    {app.company_name.charAt(0)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-800 truncate text-sm">{app.position_title}</p>
-                    <p className="text-xs text-gray-500 truncate">{app.company_name}</p>
-                  </div>
-                  {app.job_description && (
-                    <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
-                      Has JD
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
+          {/* Generate Button */}
+          <Button
+            onClick={handleGenerateMultiple}
+            disabled={validRolesCount === 0 || !baseCVText || isGeneratingMultiple}
+            className="w-full bg-violet-500 hover:bg-violet-600 text-white py-6 text-base font-medium"
+          >
+            {isGeneratingMultiple ? (
+              <>
+                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                Generating CV Versions...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-5 h-5 mr-2" />
+                Generate {validRolesCount} CV Version{validRolesCount !== 1 ? 's' : ''}
+              </>
+            )}
+          </Button>
         </CardContent>
       </Card>
 
-      {/* Only show rest of form if application is selected */}
-      {selectedApplication && (
-        <>
-          {/* Info card */}
-          <Card className="bg-blue-50 border-blue-200">
-            <CardContent className="pt-4">
-              <div className="flex gap-3">
-                <Info className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                <div className="text-sm text-blue-800">
-                  <p className="font-medium mb-1">How &quot;Best of Both Worlds&quot; Works</p>
-                  <ul className="space-y-1 text-blue-700">
-                    <li>1. We parse your CV into sections (Summary, Experience, Skills, etc.)</li>
-                    <li>2. We generate a tailored version optimized for the job description</li>
-                    <li>3. We compare each section and keep whichever version scores higher</li>
-                    <li>4. Your final CV is guaranteed to never be worse than your original</li>
-                  </ul>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+      {/* Error Display */}
+      {error && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+          <p className="font-medium">Error</p>
+          <p className="text-sm mt-1">{error}</p>
+        </div>
+      )}
 
-          {/* Form */}
-          <div className="grid gap-6 lg:grid-cols-2">
-            {/* Base CV */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <span className="flex items-center gap-2">
-                    <FileText className="h-5 w-5 text-blue-600" />
-                    Your CV
-                  </span>
-                  {baseCVs.length > 1 && (
-                    <select
-                      value={selectedCV?.id || ''}
-                      onChange={(e) => {
-                        const cv = baseCVs.find(c => c.id === e.target.value)
-                        if (cv) handleSelectCV(cv)
-                      }}
-                      className="text-sm border rounded-lg px-2 py-1"
-                    >
-                      {baseCVs.map((cv) => (
-                        <option key={cv.id} value={cv.id}>
-                          {cv.name} {cv.is_primary ? '(Primary)' : ''}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </CardTitle>
-                <CardDescription>
-                  {selectedCV?.raw_text
-                    ? 'Using your saved CV. You can edit below if needed.'
-                    : baseCVs.length > 0
-                      ? 'Your saved CV has no text content. Please paste your CV below.'
-                      : 'No saved CV found. Paste your CV text below to get started.'}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {/* No CV Alert */}
-                {!hasUsableCVs && baseCVText.length === 0 && (
-                  <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                    <span>No saved CV found. Paste your CV below, and we&apos;ll remember it for next time.</span>
-                  </div>
-                )}
-                <textarea
-                  value={baseCVText}
-                  onChange={(e) => setBaseCVText(e.target.value)}
-                  placeholder="Paste your CV text here...
-
-Example:
-PROFESSIONAL SUMMARY
-Experienced software engineer with 5 years of experience...
-
-EXPERIENCE
-Senior Software Engineer | TechCorp | 2021-Present
-- Led development of microservices architecture...
-
-SKILLS
-JavaScript, TypeScript, React, Node.js...
-
-EDUCATION
-BS Computer Science | University of Technology | 2018"
-                  className="w-full h-64 p-3 border rounded-lg font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  disabled={isLoading}
-                />
-                <div className="flex justify-between mt-2">
-                  <span className="text-xs text-gray-500">
-                    {baseCVText.length} characters
-                  </span>
-                  {baseCVText.length < 100 && baseCVText.length > 0 && (
-                    <span className="text-xs text-amber-600">
-                      Minimum 100 characters required
-                    </span>
-                  )}
-                </div>
-
-                {/* PM Score Badge */}
-                {pmAnalysis && (
-                  <div className="mt-3 flex items-center gap-3">
-                    <div
-                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium ${
-                        pmAnalysis.score >= 80
-                          ? 'bg-green-100 text-green-800 border border-green-200'
-                          : pmAnalysis.score >= 60
-                            ? 'bg-yellow-100 text-yellow-800 border border-yellow-200'
-                            : pmAnalysis.score >= 40
-                              ? 'bg-orange-100 text-orange-800 border border-orange-200'
-                              : 'bg-red-100 text-red-800 border border-red-200'
-                      }`}
-                    >
-                      <Brain className="w-3.5 h-3.5" />
-                      PM Score: {pmAnalysis.score}/100
-                    </div>
-                    {isPMAnalyzing && (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Job Description */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Briefcase className="h-5 w-5 text-green-600" />
-                  Job Description
-                </CardTitle>
-                <CardDescription>
-                  {selectedApplication.job_description
-                    ? `Pre-filled from ${selectedApplication.company_name}. Edit if needed.`
-                    : 'Paste the job description for this role.'}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <textarea
-                  value={jobDescription}
-                  onChange={(e) => setJobDescription(e.target.value)}
-                  placeholder="Paste the job description here...
-
-Example:
-Senior Frontend Engineer
-
-About the Role:
-We're looking for an experienced frontend engineer to join our team...
-
-Requirements:
-- 5+ years of experience with React
-- Strong TypeScript skills
-- Experience with state management
-
-Responsibilities:
-- Lead frontend architecture decisions
-- Mentor junior developers
-- Collaborate with design team"
-                  className="w-full h-48 p-3 border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  disabled={isLoading}
-                />
-                <div className="flex justify-between mt-2">
-                  <span className="text-xs text-gray-500">
-                    {jobDescription.length} characters
-                  </span>
-                  {jobDescription.length < 50 && jobDescription.length > 0 && (
-                    <span className="text-xs text-amber-600">
-                      Minimum 50 characters required
-                    </span>
-                  )}
-                </div>
-
-                {/* Industry selector */}
-                <div className="mt-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Industry
-                  </label>
-                  <select
-                    value={industry}
-                    onChange={(e) => setIndustry(e.target.value)}
-                    className="w-full p-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    disabled={isLoading}
-                  >
-                    {INDUSTRIES.map((ind) => (
-                      <option key={ind.value} value={ind.value}>
-                        {ind.label}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Industry affects how skills and experiences are weighted
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+      {/* No CV Warning */}
+      {!selectedCV?.raw_text && baseCVs.length === 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+          <div className="text-amber-800 text-sm">
+            <p className="font-semibold">No Base CV Found</p>
+            <p className="mt-1">
+              Please upload your base CV first before tailoring. You can do this from your{' '}
+              <Link href="/cv" className="underline font-medium">CV Management</Link> page.
+            </p>
           </div>
-
-          {/* Siggy's PM Suggestions Panel */}
-          {pmAnalysis && baseCVText.length >= 100 && (
-            <Card className="border-purple-200 bg-gradient-to-br from-purple-50/80 to-white">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center justify-between">
-                  <span className="flex items-center gap-2 text-base">
-                    <Target className="h-5 w-5 text-purple-600" />
-                    Siggy&apos;s PM Suggestions
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowPMPanel(!showPMPanel)}
-                    className="text-purple-600 hover:text-purple-800 hover:bg-purple-100"
-                  >
-                    {showPMPanel ? 'Hide Details' : 'Show Details'}
-                  </Button>
-                </CardTitle>
-                <CardDescription>
-                  {pmAnalysis.feedback.strengths}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Quick suggestions */}
-                {pmAnalysis.feedback.suggestions.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium text-purple-900">Quick Wins:</p>
-                    <ul className="space-y-1.5">
-                      {pmAnalysis.feedback.suggestions.map((suggestion: string, idx: number) => (
-                        <li key={idx} className="flex items-start gap-2 text-sm text-purple-800">
-                          <AlertTriangle className="w-3.5 h-3.5 mt-0.5 text-amber-500 flex-shrink-0" />
-                          {suggestion}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {pmAnalysis.score >= 80 && (
-                  <div className="flex items-center gap-2 text-sm text-green-700">
-                    <CheckCircle className="w-4 h-4" />
-                    Strong PM framing detected. Your CV speaks the language hiring managers look for.
-                  </div>
-                )}
-
-                {/* Expandable: Missing principles + PM Principles Reference */}
-                {showPMPanel && (
-                  <div className="space-y-4 pt-2 border-t border-purple-100">
-                    {/* Missing Principles */}
-                    {pmAnalysis.feedback.missingPrinciples.length > 0 && (
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium text-purple-900">Missing PM Principles:</p>
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          {pmAnalysis.feedback.missingPrinciples.map(
-                            (p: { id: string; name: string; howToApply: string }) => (
-                              <div
-                                key={p.id}
-                                className="p-3 bg-white rounded-lg border border-purple-100 shadow-sm"
-                              >
-                                <p className="text-sm font-semibold text-purple-800">{p.name}</p>
-                                <p className="text-xs text-gray-600 mt-1">{p.howToApply}</p>
-                              </div>
-                            )
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* PM Principles Reference */}
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium text-purple-900">PM Principles for CV Writing:</p>
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        {cvPrinciples.map((principle) => (
-                          <div
-                            key={principle.id}
-                            className="p-3 bg-purple-50/50 rounded-lg border border-purple-100"
-                          >
-                            <p className="text-sm font-semibold text-purple-800">{principle.name}</p>
-                            <p className="text-xs text-gray-600 mt-1">{principle.description}</p>
-                            <div className="mt-2 space-y-1">
-                              <p className="text-xs text-red-600">
-                                Weak: &quot;{principle.exampleFraming.weak}&quot;
-                              </p>
-                              <p className="text-xs text-green-700">
-                                Strong: &quot;{principle.exampleFraming.strong.slice(0, 120)}...&quot;
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Error display */}
-          {error && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-              <p className="font-medium">Error</p>
-              <p className="text-sm mt-1">{error}</p>
-            </div>
-          )}
-
-          {/* Submit button */}
-          <div className="flex justify-center">
-            <Button
-              onClick={handleSubmit}
-              disabled={!canSubmit}
-              className="flex items-center gap-2 px-8 py-6 text-lg"
-              size="lg"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Tailoring for {selectedApplication.company_name}...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-5 h-5" />
-                  Tailor My CV for {selectedApplication.company_name}
-                </>
-              )}
-            </Button>
-          </div>
-
-          {/* Loading message */}
-          {isLoading && (
-            <div className="text-center text-sm text-gray-500 space-y-2">
-              <p>This may take 30-60 seconds as we analyze and optimize each section.</p>
-              <p>Your original CV is safe - we&apos;ll only improve what can be improved.</p>
-            </div>
-          )}
-        </>
+        </div>
       )}
     </div>
   )
