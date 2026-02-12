@@ -8,6 +8,7 @@
  */
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
@@ -147,9 +148,13 @@ export function DashboardNav({ user }: DashboardNavProps) {
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
           <Link href="/dashboard" className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-brand-gradient flex items-center justify-center shadow-soft">
-              <Heart className="h-4 w-4 text-white" />
-            </div>
+            <Image
+              src="/logo.svg"
+              alt="Signatura"
+              width={32}
+              height={32}
+              className="rounded-lg shadow-soft"
+            />
             <span className="text-xl font-semibold text-text-primary">Signatura</span>
           </Link>
 
