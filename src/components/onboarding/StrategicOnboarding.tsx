@@ -207,14 +207,19 @@ export function StrategicOnboarding({ userId }: StrategicOnboardingProps) {
 
       const { data: { publicUrl } } = supabase.storage.from('user-files').getPublicUrl(filePath)
 
-      // Save record
+      // Mark existing CVs as not primary (in addition to not current)
+      await supabase.from('base_cvs').update({ is_primary: false }).eq('user_id', userId)
+
+      // Save record with all required fields for CV Tailor compatibility
       await supabase.from('base_cvs').insert({
         user_id: userId,
+        name: file.name.replace(/\.(pdf|doc|docx)$/i, '') || 'My Base CV',
         file_name: file.name,
         file_url: publicUrl,
         file_path: filePath,
         file_type: ext,
         is_current: true,
+        is_primary: true,  // Required for CV Tailor to find this CV
       })
 
       // Update profile
