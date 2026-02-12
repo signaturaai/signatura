@@ -123,6 +123,7 @@ function ApplicationsPageContent() {
           return
         }
 
+        // IMPORTANT: All column names MUST be lowercase to match PostgreSQL schema
         const { data, error: fetchError } = await (supabase
           .from('job_applications') as any)
           .select('id, company_name, position_title, application_status, job_description, location, industry, salary_range, application_date, created_at')

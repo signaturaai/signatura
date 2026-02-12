@@ -104,6 +104,7 @@ export default function CVTailorPage() {
       }
 
       // Fetch applications in parallel with CVs
+      // IMPORTANT: All column names MUST be lowercase to match PostgreSQL schema
       const [appsResult, cvsResult] = await Promise.all([
         (supabase.from('job_applications') as any)
           .select('id, company_name, position_title, job_description, application_status, created_at')

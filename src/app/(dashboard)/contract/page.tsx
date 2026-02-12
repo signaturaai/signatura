@@ -97,6 +97,7 @@ export default function ContractReviewerPage() {
       }
 
       // Fetch applications - prioritize those with offers
+      // IMPORTANT: All column names MUST be lowercase to match PostgreSQL schema
       const { data: apps } = await (supabase.from('job_applications') as any)
         .select('id, company_name, position_title, application_status, industry, salary_range, created_at')
         .eq('user_id', user.id)
