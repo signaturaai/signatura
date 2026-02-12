@@ -1,30 +1,45 @@
-<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="brandGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+    <linearGradient id="swGradient" x1="20%" y1="100%" x2="80%" y2="0%">
       <stop offset="0%" stop-color="#F97316"/>
-      <stop offset="50%" stop-color="#EC4899"/>
-      <stop offset="100%" stop-color="#8B5CF6"/>
+      <stop offset="35%" stop-color="#EC4899"/>
+      <stop offset="65%" stop-color="#8B5CF6"/>
+      <stop offset="100%" stop-color="#3B82F6"/>
+    </linearGradient>
+    <linearGradient id="penGradient" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#8B5CF6"/>
+      <stop offset="100%" stop-color="#3B82F6"/>
     </linearGradient>
   </defs>
-  <!-- Background rounded square -->
-  <rect width="48" height="48" rx="12" fill="url(#brandGradient)"/>
-  <!-- Stylized S with pen/quill integrated -->
-  <path d="M28 12C28 12 22 14 20 18C18 22 20 26 24 28C28 30 30 32 30 36C30 40 26 42 22 42"
-        stroke="white"
-        stroke-width="3"
-        stroke-linecap="round"
-        fill="none"/>
-  <!-- Pen nib on top -->
-  <path d="M28 12L32 6L34 8L30 14"
-        fill="white"
-        stroke="white"
-        stroke-width="1"
-        stroke-linejoin="round"/>
-  <!-- w letter integrated with flow -->
-  <path d="M14 28L16 36L20 30L24 36L26 28"
-        stroke="white"
-        stroke-width="2.5"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        fill="none"/>
+
+  <!-- Main S curve with w extension -->
+  <path
+    d="M45 95
+       C25 95, 15 80, 15 65
+       C15 50, 25 40, 40 40
+       C55 40, 65 50, 65 35
+       C65 20, 50 15, 35 20
+       M40 40
+       C50 45, 55 55, 50 65
+       C45 75, 35 80, 45 95
+       M50 65
+       C55 60, 60 55, 65 58
+       C70 61, 68 67, 75 65
+       C82 63, 85 58, 95 45"
+    stroke="url(#swGradient)"
+    stroke-width="8"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"/>
+
+  <!-- Pen nib -->
+  <path
+    d="M95 45 L108 25 L103 23 L98 28 L95 45 M108 25 L110 20 L105 22 L108 25"
+    fill="url(#penGradient)"
+    stroke="url(#penGradient)"
+    stroke-width="1"
+    stroke-linejoin="round"/>
+
+  <!-- Pen nib hole -->
+  <ellipse cx="106" cy="24" rx="1.5" ry="1" fill="white"/>
 </svg>
