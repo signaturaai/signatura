@@ -1,0 +1,30 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="brandGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F97316"/>
+      <stop offset="50%" stop-color="#EC4899"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
+    </linearGradient>
+  </defs>
+  <!-- Background rounded square -->
+  <rect width="48" height="48" rx="12" fill="url(#brandGradient)"/>
+  <!-- Stylized S with pen/quill integrated -->
+  <path d="M28 12C28 12 22 14 20 18C18 22 20 26 24 28C28 30 30 32 30 36C30 40 26 42 22 42"
+        stroke="white"
+        stroke-width="3"
+        stroke-linecap="round"
+        fill="none"/>
+  <!-- Pen nib on top -->
+  <path d="M28 12L32 6L34 8L30 14"
+        fill="white"
+        stroke="white"
+        stroke-width="1"
+        stroke-linejoin="round"/>
+  <!-- w letter integrated with flow -->
+  <path d="M14 28L16 36L20 30L24 36L26 28"
+        stroke="white"
+        stroke-width="2.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        fill="none"/>
+</svg>

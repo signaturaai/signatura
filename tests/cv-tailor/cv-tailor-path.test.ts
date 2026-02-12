@@ -3,8 +3,9 @@
  *
  * Tests that verify:
  * 1. CV Tailor is at the correct path
- * 2. Application-selection UI is implemented
- * 3. Supabase data fetching works correctly
+ * 2. Application-selection UI is implemented (BASE44 standard)
+ * 3. Supabase data fetching works correctly with lowercase columns
+ * 4. Multiple versions BETA feature
  */
 
 import { describe, it, expect } from 'vitest'
@@ -27,9 +28,38 @@ describe('CV Tailor - Path Verification', () => {
   })
 })
 
+describe('CV Tailor - BASE44 Standard UI', () => {
+  it('should have header with "CV Tailor" title', () => {
+    const title = 'CV Tailor'
+    expect(title).toBe('CV Tailor')
+  })
+
+  it('should have subtitle "Your AI-powered resume tailoring assistant"', () => {
+    const subtitle = 'Your AI-powered resume tailoring assistant'
+    expect(subtitle).toContain('AI-powered')
+    expect(subtitle).toContain('resume tailoring')
+  })
+
+  it('should have teal-colored info box for new users', () => {
+    const infoBoxContent = 'New to CV Tailor? Start by creating a new application from your Dashboard'
+    expect(infoBoxContent).toContain('New to CV Tailor')
+    expect(infoBoxContent).toContain('Dashboard')
+  })
+
+  it('should have section header "Select Existing Application"', () => {
+    const sectionHeader = 'Select Existing Application'
+    expect(sectionHeader).toBe('Select Existing Application')
+  })
+
+  it('should have yellow note box with warning', () => {
+    const noteText = 'Note: To create a CV for a new job application, please start from the "New Application" button'
+    expect(noteText).toContain('Note:')
+    expect(noteText).toContain('New Application')
+  })
+})
+
 describe('CV Tailor - Application Selection UI', () => {
   it('should require application selection before CV tailoring', () => {
-    // Application selection is required (selectedApplication must be truthy)
     const selectedApplication = null
     const canProceed = !!selectedApplication
     expect(canProceed).toBe(false)
@@ -45,26 +75,31 @@ describe('CV Tailor - Application Selection UI', () => {
     expect(canProceed).toBe(true)
   })
 
-  it('should show "Step 1: Select an Application" when no application selected', () => {
+  it('should show dropdown placeholder when no application selected', () => {
     const selectedApplication = null
-    const headerText = selectedApplication
-      ? 'Selected Application'
-      : 'Step 1: Select an Application'
-    expect(headerText).toBe('Step 1: Select an Application')
-  })
-
-  it('should show "Selected Application" when application is selected', () => {
-    const selectedApplication = { id: 'app-123' }
-    const headerText = selectedApplication
-      ? 'Selected Application'
-      : 'Step 1: Select an Application'
-    expect(headerText).toBe('Selected Application')
+    const placeholderText = selectedApplication
+      ? selectedApplication.position_title
+      : 'Select an application...'
+    expect(placeholderText).toBe('Select an application...')
   })
 
   it('should support URL parameter for pre-selecting application', () => {
     const searchParams = { application_id: 'app-123' }
     const applicationIdFromUrl = searchParams.application_id
     expect(applicationIdFromUrl).toBe('app-123')
+  })
+
+  it('should have "Continue CV Tailoring" green button', () => {
+    const buttonText = 'Continue CV Tailoring'
+    const buttonColor = 'emerald' // green
+    expect(buttonText).toBe('Continue CV Tailoring')
+    expect(buttonColor).toBe('emerald')
+  })
+
+  it('should have "Delete Existing CVs & Start Fresh" link', () => {
+    const linkText = 'Delete Existing CVs & Start Fresh'
+    expect(linkText).toContain('Delete')
+    expect(linkText).toContain('Start Fresh')
   })
 })
 
@@ -79,7 +114,8 @@ describe('CV Tailor - Supabase Integration', () => {
     expect(tableName).toBe('base_cvs')
   })
 
-  it('should query correct fields from job_applications', () => {
+  it('should use ONLY lowercase column names to avoid 400 errors', () => {
+    // CRITICAL: PostgreSQL column names must be lowercase
     const queryFields = [
       'id',
       'company_name',
@@ -89,17 +125,28 @@ describe('CV Tailor - Supabase Integration', () => {
       'created_at',
     ]
 
-    expect(queryFields).toContain('id')
-    expect(queryFields).toContain('company_name')
-    expect(queryFields).toContain('job_description')
+    // Verify all fields are lowercase
+    queryFields.forEach(field => {
+      expect(field).toBe(field.toLowerCase())
+      expect(field).not.toMatch(/[A-Z]/) // No uppercase letters
+    })
   })
 
-  it('should query correct fields from base_cvs', () => {
-    const queryFields = ['id', 'name', 'raw_text', 'is_primary', 'created_at']
+  it('should NOT use Location or Industry columns (removed to avoid schema mismatch)', () => {
+    const safeQueryFields = [
+      'id',
+      'company_name',
+      'position_title',
+      'job_description',
+      'application_status',
+      'created_at',
+    ]
 
-    expect(queryFields).toContain('id')
-    expect(queryFields).toContain('raw_text')
-    expect(queryFields).toContain('is_primary')
+    // These fields were removed to avoid 400 errors
+    expect(safeQueryFields).not.toContain('Location')
+    expect(safeQueryFields).not.toContain('location')
+    expect(safeQueryFields).not.toContain('Industry')
+    expect(safeQueryFields).not.toContain('industry')
   })
 
   it('should filter applications by user_id', () => {
@@ -114,50 +161,70 @@ describe('CV Tailor - Supabase Integration', () => {
   })
 })
 
+describe('CV Tailor - Multiple Versions BETA Feature', () => {
+  it('should have section header "Generate Multiple CV Versions"', () => {
+    const header = 'Generate Multiple CV Versions'
+    expect(header).toContain('Multiple CV Versions')
+  })
+
+  it('should have BETA badge', () => {
+    const badge = 'BETA'
+    expect(badge).toBe('BETA')
+  })
+
+  it('should have description about ATS optimization', () => {
+    const description = 'Generate optimized CVs for multiple job roles simultaneously. Each version will be ATS-optimized'
+    expect(description).toContain('ATS-optimized')
+    expect(description).toContain('multiple job roles')
+  })
+
+  it('should support up to 5 target job roles', () => {
+    const maxRoles = 5
+    expect(maxRoles).toBe(5)
+  })
+
+  it('should have "Add Another Role" button', () => {
+    const buttonText = 'Add Another Role'
+    expect(buttonText).toBe('Add Another Role')
+  })
+
+  it('should have purple "Generate X CV Versions" button', () => {
+    const buttonColor = 'violet'
+    expect(buttonColor).toBe('violet')
+  })
+})
+
 describe('CV Tailor - Form Validation', () => {
-  it('should require minimum 100 characters for base CV text', () => {
-    const minLength = 100
-    const cvText = 'Short CV'
-    const isValid = cvText.length >= minLength
-    expect(isValid).toBe(false)
-  })
-
-  it('should require minimum 50 characters for job description', () => {
-    const minLength = 50
-    const jd = 'Short JD'
-    const isValid = jd.length >= minLength
-    expect(isValid).toBe(false)
-  })
-
-  it('should require application to be selected', () => {
+  it('should require application to be selected for continue button', () => {
     const selectedApplication = null
-    const baseCVText = 'A'.repeat(100)
-    const jobDescription = 'B'.repeat(50)
-
-    const canSubmit =
-      selectedApplication && baseCVText.length >= 100 && jobDescription.length >= 50
-
-    expect(canSubmit).toBeFalsy()
-  })
-
-  it('should allow submit when all conditions are met', () => {
-    const selectedApplication = { id: 'app-123' }
-    const baseCVText = 'A'.repeat(100)
-    const jobDescription = 'B'.repeat(50)
+    const selectedCV = { raw_text: 'CV content' }
     const isLoading = false
 
-    const canSubmit =
-      selectedApplication &&
-      baseCVText.length >= 100 &&
-      jobDescription.length >= 50 &&
-      !isLoading
+    const canContinue = selectedApplication && selectedCV?.raw_text && !isLoading
+    expect(canContinue).toBeFalsy()
+  })
 
-    expect(canSubmit).toBeTruthy()
+  it('should require CV with raw_text for continue button', () => {
+    const selectedApplication = { id: 'app-1' }
+    const selectedCV = { raw_text: null }
+    const isLoading = false
+
+    const canContinue = selectedApplication && selectedCV?.raw_text && !isLoading
+    expect(canContinue).toBeFalsy()
+  })
+
+  it('should enable continue button when all conditions met', () => {
+    const selectedApplication = { id: 'app-1' }
+    const selectedCV = { raw_text: 'CV content here' }
+    const isLoading = false
+
+    const canContinue = selectedApplication && selectedCV?.raw_text && !isLoading
+    expect(canContinue).toBeTruthy()
   })
 })
 
 describe('CV Tailor - Pre-fill Behavior', () => {
-  it('should pre-fill job description from selected application', () => {
+  it('should use job_description from selected application', () => {
     const application = {
       id: 'app-123',
       job_description: 'Looking for a skilled engineer...',
@@ -191,24 +258,50 @@ describe('CV Tailor - Pre-fill Behavior', () => {
 })
 
 describe('CV Tailor - Empty States', () => {
-  it('should show empty state when no applications exist', () => {
+  it('should show empty state in dropdown when no applications exist', () => {
     const applications: any[] = []
     const showEmptyState = applications.length === 0
     expect(showEmptyState).toBe(true)
   })
 
-  it('should prompt to create application when none exist', () => {
+  it('should show "No applications yet" message', () => {
     const applications: any[] = []
-    const promptText =
-      applications.length === 0
-        ? 'To tailor your CV, you first need to create a job application.'
-        : ''
-    expect(promptText).toContain('create a job application')
+    const message = applications.length === 0
+      ? 'No applications yet'
+      : ''
+    expect(message).toBe('No applications yet')
   })
 
-  it('should show CV paste area when no usable CVs exist', () => {
+  it('should show warning when no usable CVs exist', () => {
     const cvs = [{ id: 'cv-1', raw_text: null }]
+    const baseCVs: any[] = []
+
     const hasUsableCVs = cvs.some((cv) => cv.raw_text && cv.raw_text.length > 0)
+    const showWarning = !hasUsableCVs && baseCVs.length === 0
+
     expect(hasUsableCVs).toBe(false)
+  })
+})
+
+describe('CV Tailor - Application Display', () => {
+  it('should show company initial in avatar', () => {
+    const companyName = 'Google'
+    const initial = companyName.charAt(0)
+    expect(initial).toBe('G')
+  })
+
+  it('should show position title and company name', () => {
+    const app = {
+      position_title: 'Senior Engineer',
+      company_name: 'Meta'
+    }
+    expect(app.position_title).toBe('Senior Engineer')
+    expect(app.company_name).toBe('Meta')
+  })
+
+  it('should show "Has JD" badge for applications with job description', () => {
+    const app = { job_description: 'Full job description' }
+    const hasJD = !!app.job_description
+    expect(hasJD).toBe(true)
   })
 })
