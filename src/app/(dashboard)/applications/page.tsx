@@ -124,9 +124,10 @@ function ApplicationsPageContent() {
         }
 
         // IMPORTANT: All column names MUST be lowercase to match PostgreSQL schema
+        // Only query columns that definitely exist in the database
         const { data, error: fetchError } = await (supabase
           .from('job_applications') as any)
-          .select('id, company_name, position_title, application_status, job_description, location, industry, salary_range, application_date, created_at')
+          .select('id, company_name, position_title, application_status, job_description, salary_range, application_date, created_at')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false })
 
@@ -137,6 +138,7 @@ function ApplicationsPageContent() {
         }
 
         // Map Supabase data to JobApplication type
+        // Note: location and industry columns removed to avoid schema mismatch
         const mappedApplications: JobApplication[] = (data || []).map((app: any) => ({
           id: app.id,
           company_name: app.company_name,
@@ -145,8 +147,8 @@ function ApplicationsPageContent() {
           application_date: app.application_date || app.created_at,
           job_description: app.job_description,
           salary_range: app.salary_range,
-          location: app.location,
-          industry: app.industry,
+          location: null, // Not queried to avoid schema mismatch
+          industry: null, // Not queried to avoid schema mismatch
           priority: 'medium', // Default priority
           notes: '', // Not stored in DB yet
           next_step: null, // Not stored in DB yet
