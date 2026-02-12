@@ -24,6 +24,7 @@ export default async function DashboardPage() {
   }
 
   // Fetch real data from Supabase in parallel
+  // IMPORTANT: All column names MUST be lowercase to match PostgreSQL schema
   const [applicationsResult, cvVersionsResult, profileResult] = await Promise.all([
     (supabase
       .from('job_applications') as any)
