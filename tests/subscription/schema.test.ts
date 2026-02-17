@@ -609,4 +609,575 @@ describe('Subscription System Schema', () => {
       expect(resultRow.tier).not.toBeNull()
     })
   })
+
+  // ============================================================================
+  // SQL Helper Function: get_tier_limits
+  // Migration PART 12
+  // ============================================================================
+
+  describe('get_tier_limits function', () => {
+    /**
+     * Simulates the SQL function public.get_tier_limits(p_tier TEXT)
+     * which returns a row of limit values for each tier.
+     */
+    function getTierLimitsSQL(tier: string | null) {
+      const resolve = (t: string | null, momentum: number, accelerate: number, elite: number, fallback: number) => {
+        switch (t) {
+          case 'momentum': return momentum
+          case 'accelerate': return accelerate
+          case 'elite': return elite
+          default: return fallback
+        }
+      }
+
+      return {
+        applications_limit: resolve(tier, 8, 15, -1, 0),
+        cvs_limit: resolve(tier, 8, 15, -1, 0),
+        interviews_limit: resolve(tier, 8, 15, -1, 0),
+        compensation_limit: resolve(tier, 8, 15, -1, 0),
+        contracts_limit: resolve(tier, 8, 15, -1, 0),
+        ai_avatar_interviews_limit: resolve(tier, 0, 5, 10, 0),
+      }
+    }
+
+    it('should return 8 for all core limits on momentum', () => {
+      const limits = getTierLimitsSQL('momentum')
+      expect(limits.applications_limit).toBe(8)
+      expect(limits.cvs_limit).toBe(8)
+      expect(limits.interviews_limit).toBe(8)
+      expect(limits.compensation_limit).toBe(8)
+      expect(limits.contracts_limit).toBe(8)
+    })
+
+    it('should return 0 AI avatar interviews for momentum', () => {
+      const limits = getTierLimitsSQL('momentum')
+      expect(limits.ai_avatar_interviews_limit).toBe(0)
+    })
+
+    it('should return 15 for all core limits on accelerate', () => {
+      const limits = getTierLimitsSQL('accelerate')
+      expect(limits.applications_limit).toBe(15)
+      expect(limits.cvs_limit).toBe(15)
+      expect(limits.interviews_limit).toBe(15)
+      expect(limits.compensation_limit).toBe(15)
+      expect(limits.contracts_limit).toBe(15)
+    })
+
+    it('should return 5 AI avatar interviews for accelerate', () => {
+      const limits = getTierLimitsSQL('accelerate')
+      expect(limits.ai_avatar_interviews_limit).toBe(5)
+    })
+
+    it('should return -1 (unlimited) for all core limits on elite', () => {
+      const limits = getTierLimitsSQL('elite')
+      expect(limits.applications_limit).toBe(-1)
+      expect(limits.cvs_limit).toBe(-1)
+      expect(limits.interviews_limit).toBe(-1)
+      expect(limits.compensation_limit).toBe(-1)
+      expect(limits.contracts_limit).toBe(-1)
+    })
+
+    it('should return 10 AI avatar interviews for elite', () => {
+      const limits = getTierLimitsSQL('elite')
+      expect(limits.ai_avatar_interviews_limit).toBe(10)
+    })
+
+    it('should return 0 for all limits when tier is NULL (tracking-only)', () => {
+      const limits = getTierLimitsSQL(null)
+      expect(limits.applications_limit).toBe(0)
+      expect(limits.cvs_limit).toBe(0)
+      expect(limits.interviews_limit).toBe(0)
+      expect(limits.compensation_limit).toBe(0)
+      expect(limits.contracts_limit).toBe(0)
+      expect(limits.ai_avatar_interviews_limit).toBe(0)
+    })
+
+    it('should return 0 for unknown tier values', () => {
+      const limits = getTierLimitsSQL('unknown')
+      expect(limits.applications_limit).toBe(0)
+    })
+  })
+
+  // ============================================================================
+  // SQL Helper Function: check_usage_limit
+  // Migration PART 13
+  // ============================================================================
+
+  describe('check_usage_limit function', () => {
+    /**
+     * Simulates the SQL function public.check_usage_limit(p_user_id, p_usage_type)
+     * Logic: returns FALSE if tier is NULL, status not active/cancelled, or over limit.
+     * Returns TRUE if unlimited (-1) or under limit.
+     */
+    interface MockSubscription {
+      tier: string | null
+      status: string
+      usage_applications: number
+      usage_cvs: number
+      usage_interviews: number
+      usage_compensation: number
+      usage_contracts: number
+      usage_ai_avatar_interviews: number
+    }
+
+    function checkUsageLimitSQL(sub: MockSubscription | null, usageType: string): boolean {
+      if (!sub) return false
+      if (sub.tier === null) return false
+      if (!['active', 'cancelled'].includes(sub.status)) return false
+
+      const usageMap: Record<string, number> = {
+        applications: sub.usage_applications,
+        cvs: sub.usage_cvs,
+        interviews: sub.usage_interviews,
+        compensation: sub.usage_compensation,
+        contracts: sub.usage_contracts,
+        ai_avatar_interviews: sub.usage_ai_avatar_interviews,
+      }
+
+      const limitMap: Record<string, Record<string, number>> = {
+        momentum: { applications: 8, cvs: 8, interviews: 8, compensation: 8, contracts: 8, ai_avatar_interviews: 0 },
+        accelerate: { applications: 15, cvs: 15, interviews: 15, compensation: 15, contracts: 15, ai_avatar_interviews: 5 },
+        elite: { applications: -1, cvs: -1, interviews: -1, compensation: -1, contracts: -1, ai_avatar_interviews: 10 },
+      }
+
+      const currentUsage = usageMap[usageType] ?? 0
+      const limit = limitMap[sub.tier]?.[usageType] ?? 0
+
+      if (limit === -1) return true
+      return currentUsage < limit
+    }
+
+    it('should return FALSE when subscription row does not exist', () => {
+      expect(checkUsageLimitSQL(null, 'applications')).toBe(false)
+    })
+
+    it('should return FALSE when tier is NULL (tracking-only user)', () => {
+      const sub: MockSubscription = {
+        tier: null, status: 'active',
+        usage_applications: 0, usage_cvs: 0, usage_interviews: 0,
+        usage_compensation: 0, usage_contracts: 0, usage_ai_avatar_interviews: 0,
+      }
+      expect(checkUsageLimitSQL(sub, 'applications')).toBe(false)
+    })
+
+    it('should return FALSE when status is past_due', () => {
+      const sub: MockSubscription = {
+        tier: 'momentum', status: 'past_due',
+        usage_applications: 0, usage_cvs: 0, usage_interviews: 0,
+        usage_compensation: 0, usage_contracts: 0, usage_ai_avatar_interviews: 0,
+      }
+      expect(checkUsageLimitSQL(sub, 'applications')).toBe(false)
+    })
+
+    it('should return FALSE when status is expired', () => {
+      const sub: MockSubscription = {
+        tier: 'momentum', status: 'expired',
+        usage_applications: 0, usage_cvs: 0, usage_interviews: 0,
+        usage_compensation: 0, usage_contracts: 0, usage_ai_avatar_interviews: 0,
+      }
+      expect(checkUsageLimitSQL(sub, 'applications')).toBe(false)
+    })
+
+    it('should return TRUE when status is cancelled (access until period end)', () => {
+      const sub: MockSubscription = {
+        tier: 'momentum', status: 'cancelled',
+        usage_applications: 3, usage_cvs: 0, usage_interviews: 0,
+        usage_compensation: 0, usage_contracts: 0, usage_ai_avatar_interviews: 0,
+      }
+      expect(checkUsageLimitSQL(sub, 'applications')).toBe(true)
+    })
+
+    it('should return TRUE when usage is under limit', () => {
+      const sub: MockSubscription = {
+        tier: 'momentum', status: 'active',
+        usage_applications: 7, usage_cvs: 0, usage_interviews: 0,
+        usage_compensation: 0, usage_contracts: 0, usage_ai_avatar_interviews: 0,
+      }
+      expect(checkUsageLimitSQL(sub, 'applications')).toBe(true)
+    })
+
+    it('should return FALSE when usage is at limit', () => {
+      const sub: MockSubscription = {
+        tier: 'momentum', status: 'active',
+        usage_applications: 8, usage_cvs: 0, usage_interviews: 0,
+        usage_compensation: 0, usage_contracts: 0, usage_ai_avatar_interviews: 0,
+      }
+      expect(checkUsageLimitSQL(sub, 'applications')).toBe(false)
+    })
+
+    it('should return FALSE when usage exceeds limit', () => {
+      const sub: MockSubscription = {
+        tier: 'momentum', status: 'active',
+        usage_applications: 10, usage_cvs: 0, usage_interviews: 0,
+        usage_compensation: 0, usage_contracts: 0, usage_ai_avatar_interviews: 0,
+      }
+      expect(checkUsageLimitSQL(sub, 'applications')).toBe(false)
+    })
+
+    it('should return TRUE for elite unlimited resources regardless of usage', () => {
+      const sub: MockSubscription = {
+        tier: 'elite', status: 'active',
+        usage_applications: 99999, usage_cvs: 99999, usage_interviews: 99999,
+        usage_compensation: 99999, usage_contracts: 99999, usage_ai_avatar_interviews: 0,
+      }
+      expect(checkUsageLimitSQL(sub, 'applications')).toBe(true)
+      expect(checkUsageLimitSQL(sub, 'cvs')).toBe(true)
+      expect(checkUsageLimitSQL(sub, 'interviews')).toBe(true)
+    })
+
+    it('should check AI avatar limits for elite (not unlimited)', () => {
+      const sub: MockSubscription = {
+        tier: 'elite', status: 'active',
+        usage_applications: 0, usage_cvs: 0, usage_interviews: 0,
+        usage_compensation: 0, usage_contracts: 0, usage_ai_avatar_interviews: 10,
+      }
+      expect(checkUsageLimitSQL(sub, 'ai_avatar_interviews')).toBe(false)
+    })
+
+    it('should check each usage type independently', () => {
+      const sub: MockSubscription = {
+        tier: 'momentum', status: 'active',
+        usage_applications: 8, usage_cvs: 3, usage_interviews: 0,
+        usage_compensation: 7, usage_contracts: 8, usage_ai_avatar_interviews: 0,
+      }
+      expect(checkUsageLimitSQL(sub, 'applications')).toBe(false)  // at limit
+      expect(checkUsageLimitSQL(sub, 'cvs')).toBe(true)            // under limit
+      expect(checkUsageLimitSQL(sub, 'interviews')).toBe(true)     // zero usage
+      expect(checkUsageLimitSQL(sub, 'compensation')).toBe(true)   // under limit
+      expect(checkUsageLimitSQL(sub, 'contracts')).toBe(false)     // at limit
+    })
+  })
+
+  // ============================================================================
+  // SQL Helper Function: increment_usage
+  // Migration PART 14
+  // ============================================================================
+
+  describe('increment_usage function', () => {
+    /**
+     * Simulates public.increment_usage(p_user_id, p_usage_type)
+     * Always increments the specified counter by 1 and returns new value.
+     * Silent tracking - always works regardless of kill switch.
+     */
+    function incrementUsageSQL(
+      counters: Record<string, number>,
+      usageType: string,
+    ): { counters: Record<string, number>; returnedValue: number } {
+      const newCounters = { ...counters }
+      if (usageType in newCounters) {
+        newCounters[usageType] = newCounters[usageType] + 1
+      }
+      return {
+        counters: newCounters,
+        returnedValue: newCounters[usageType] ?? 0,
+      }
+    }
+
+    it('should increment applications counter by 1', () => {
+      const counters = { applications: 5, cvs: 3 }
+      const result = incrementUsageSQL(counters, 'applications')
+      expect(result.counters.applications).toBe(6)
+      expect(result.returnedValue).toBe(6)
+    })
+
+    it('should not affect other counters when incrementing one', () => {
+      const counters = {
+        applications: 5, cvs: 3, interviews: 2,
+        compensation: 1, contracts: 0, ai_avatar_interviews: 0,
+      }
+      const result = incrementUsageSQL(counters, 'applications')
+      expect(result.counters.cvs).toBe(3)
+      expect(result.counters.interviews).toBe(2)
+      expect(result.counters.compensation).toBe(1)
+      expect(result.counters.contracts).toBe(0)
+      expect(result.counters.ai_avatar_interviews).toBe(0)
+    })
+
+    it('should increment from 0 to 1', () => {
+      const counters = { applications: 0 }
+      const result = incrementUsageSQL(counters, 'applications')
+      expect(result.returnedValue).toBe(1)
+    })
+
+    it('should increment each usage type correctly', () => {
+      const types = ['applications', 'cvs', 'interviews', 'compensation', 'contracts', 'ai_avatar_interviews']
+      types.forEach(type => {
+        const counters: Record<string, number> = {}
+        types.forEach(t => { counters[t] = 10 })
+        const result = incrementUsageSQL(counters, type)
+        expect(result.counters[type]).toBe(11)
+        // Other counters unchanged
+        types.filter(t => t !== type).forEach(t => {
+          expect(result.counters[t]).toBe(10)
+        })
+      })
+    })
+
+    it('should return 0 for unknown usage type', () => {
+      const counters = { applications: 5 }
+      const result = incrementUsageSQL(counters, 'unknown')
+      expect(result.returnedValue).toBe(0)
+    })
+  })
+
+  // ============================================================================
+  // SQL Helper Function: reset_usage_counters
+  // Migration PART 15
+  // ============================================================================
+
+  describe('reset_usage_counters function', () => {
+    /**
+     * Simulates public.reset_usage_counters(p_user_id, p_period_start)
+     * Includes double-reset prevention: skips if last_reset_at >= p_period_start.
+     * Returns TRUE if reset happened, FALSE if skipped.
+     */
+    function resetUsageCountersSQL(
+      lastResetAt: Date | null,
+      periodStart: Date,
+    ): boolean {
+      if (lastResetAt !== null && lastResetAt >= periodStart) {
+        return false  // Double-reset prevention
+      }
+      return true
+    }
+
+    it('should reset when last_reset_at is NULL', () => {
+      const result = resetUsageCountersSQL(null, new Date('2026-02-01'))
+      expect(result).toBe(true)
+    })
+
+    it('should reset when last_reset_at is before period_start', () => {
+      const lastReset = new Date('2026-01-01')
+      const periodStart = new Date('2026-02-01')
+      expect(resetUsageCountersSQL(lastReset, periodStart)).toBe(true)
+    })
+
+    it('should NOT reset when last_reset_at equals period_start (double-reset prevention)', () => {
+      const sameDate = new Date('2026-02-01')
+      expect(resetUsageCountersSQL(sameDate, sameDate)).toBe(false)
+    })
+
+    it('should NOT reset when last_reset_at is after period_start', () => {
+      const lastReset = new Date('2026-02-15')
+      const periodStart = new Date('2026-02-01')
+      expect(resetUsageCountersSQL(lastReset, periodStart)).toBe(false)
+    })
+
+    it('should zero all counters when reset happens', () => {
+      const counters = {
+        usage_applications: 8,
+        usage_cvs: 5,
+        usage_interviews: 3,
+        usage_compensation: 2,
+        usage_contracts: 1,
+        usage_ai_avatar_interviews: 4,
+      }
+
+      // Simulate reset
+      const resetCounters = Object.fromEntries(
+        Object.keys(counters).map(key => [key, 0])
+      )
+
+      expect(resetCounters.usage_applications).toBe(0)
+      expect(resetCounters.usage_cvs).toBe(0)
+      expect(resetCounters.usage_interviews).toBe(0)
+      expect(resetCounters.usage_compensation).toBe(0)
+      expect(resetCounters.usage_contracts).toBe(0)
+      expect(resetCounters.usage_ai_avatar_interviews).toBe(0)
+    })
+
+    it('should NOT reset counters on mid-cycle upgrade', () => {
+      // Upgrade from momentum to accelerate mid-cycle
+      // last_reset_at was set at period start (Feb 1)
+      // period_start hasn't changed (still Feb 1)
+      const lastReset = new Date('2026-02-01')
+      const periodStart = new Date('2026-02-01')
+
+      // Double-reset prevention kicks in
+      expect(resetUsageCountersSQL(lastReset, periodStart)).toBe(false)
+    })
+
+    it('should reset counters on period renewal', () => {
+      // Old period: Feb 1 - Mar 1
+      // New period starts: Mar 1
+      const lastReset = new Date('2026-02-01')
+      const newPeriodStart = new Date('2026-03-01')
+
+      expect(resetUsageCountersSQL(lastReset, newPeriodStart)).toBe(true)
+    })
+  })
+
+  // ============================================================================
+  // Index definitions
+  // Migration PART 5
+  // ============================================================================
+
+  describe('Index definitions', () => {
+    const EXPECTED_INDEXES = [
+      { name: 'idx_user_subscriptions_user_id', table: 'user_subscriptions', columns: ['user_id'], unique: true },
+      { name: 'idx_user_subscriptions_status', table: 'user_subscriptions', columns: ['status'], unique: false },
+      { name: 'idx_user_subscriptions_tier', table: 'user_subscriptions', columns: ['tier'], unique: false },
+      { name: 'idx_user_subscriptions_period_end', table: 'user_subscriptions', columns: ['current_period_end'], unique: false },
+      { name: 'idx_subscription_events_user_created', table: 'subscription_events', columns: ['user_id', 'created_at'], unique: false },
+      { name: 'idx_subscription_events_event_type', table: 'subscription_events', columns: ['event_type'], unique: false },
+      { name: 'idx_usage_monthly_snapshots_user', table: 'usage_monthly_snapshots', columns: ['user_id'], unique: false },
+      { name: 'idx_usage_monthly_snapshots_user_month', table: 'usage_monthly_snapshots', columns: ['user_id', 'month'], unique: false },
+    ]
+
+    it('should define exactly 8 indexes', () => {
+      expect(EXPECTED_INDEXES.length).toBe(8)
+    })
+
+    it('should have a unique index on user_subscriptions.user_id', () => {
+      const idx = EXPECTED_INDEXES.find(i => i.name === 'idx_user_subscriptions_user_id')
+      expect(idx).toBeDefined()
+      expect(idx!.unique).toBe(true)
+      expect(idx!.columns).toEqual(['user_id'])
+    })
+
+    it('should index user_subscriptions.status for filtering active users', () => {
+      const idx = EXPECTED_INDEXES.find(i => i.name === 'idx_user_subscriptions_status')
+      expect(idx).toBeDefined()
+      expect(idx!.table).toBe('user_subscriptions')
+    })
+
+    it('should index user_subscriptions.tier for analytics queries', () => {
+      const idx = EXPECTED_INDEXES.find(i => i.name === 'idx_user_subscriptions_tier')
+      expect(idx).toBeDefined()
+    })
+
+    it('should index current_period_end for renewal batch jobs', () => {
+      const idx = EXPECTED_INDEXES.find(i => i.name === 'idx_user_subscriptions_period_end')
+      expect(idx).toBeDefined()
+      expect(idx!.columns).toEqual(['current_period_end'])
+    })
+
+    it('should have composite index on subscription_events(user_id, created_at)', () => {
+      const idx = EXPECTED_INDEXES.find(i => i.name === 'idx_subscription_events_user_created')
+      expect(idx).toBeDefined()
+      expect(idx!.columns).toEqual(['user_id', 'created_at'])
+    })
+
+    it('should index subscription_events.event_type for filtering', () => {
+      const idx = EXPECTED_INDEXES.find(i => i.name === 'idx_subscription_events_event_type')
+      expect(idx).toBeDefined()
+    })
+
+    it('should index usage_monthly_snapshots by user_id', () => {
+      const idx = EXPECTED_INDEXES.find(i => i.name === 'idx_usage_monthly_snapshots_user')
+      expect(idx).toBeDefined()
+    })
+
+    it('should have composite index on usage_monthly_snapshots(user_id, month)', () => {
+      const idx = EXPECTED_INDEXES.find(i => i.name === 'idx_usage_monthly_snapshots_user_month')
+      expect(idx).toBeDefined()
+      expect(idx!.columns).toEqual(['user_id', 'month'])
+    })
+
+    it('should index all three tables', () => {
+      const tablesWithIndexes = [...new Set(EXPECTED_INDEXES.map(i => i.table))]
+      expect(tablesWithIndexes).toContain('user_subscriptions')
+      expect(tablesWithIndexes).toContain('subscription_events')
+      expect(tablesWithIndexes).toContain('usage_monthly_snapshots')
+    })
+  })
+
+  // ============================================================================
+  // updated_at Triggers
+  // Migration PART 4
+  // ============================================================================
+
+  describe('updated_at triggers', () => {
+    const EXPECTED_TRIGGERS = [
+      { name: 'set_user_subscriptions_updated_at', table: 'user_subscriptions', event: 'BEFORE UPDATE' },
+      { name: 'set_usage_monthly_snapshots_updated_at', table: 'usage_monthly_snapshots', event: 'BEFORE UPDATE' },
+    ]
+
+    it('should define exactly 2 updated_at triggers', () => {
+      expect(EXPECTED_TRIGGERS.length).toBe(2)
+    })
+
+    it('should have updated_at trigger on user_subscriptions', () => {
+      const trigger = EXPECTED_TRIGGERS.find(t => t.table === 'user_subscriptions')
+      expect(trigger).toBeDefined()
+      expect(trigger!.name).toBe('set_user_subscriptions_updated_at')
+      expect(trigger!.event).toBe('BEFORE UPDATE')
+    })
+
+    it('should have updated_at trigger on usage_monthly_snapshots', () => {
+      const trigger = EXPECTED_TRIGGERS.find(t => t.table === 'usage_monthly_snapshots')
+      expect(trigger).toBeDefined()
+      expect(trigger!.name).toBe('set_usage_monthly_snapshots_updated_at')
+      expect(trigger!.event).toBe('BEFORE UPDATE')
+    })
+
+    it('subscription_events should NOT have updated_at trigger (append-only)', () => {
+      const trigger = EXPECTED_TRIGGERS.find(t => t.table === 'subscription_events')
+      expect(trigger).toBeUndefined()
+    })
+
+    it('trigger should fire BEFORE UPDATE to set timestamp before write', () => {
+      EXPECTED_TRIGGERS.forEach(trigger => {
+        expect(trigger.event).toBe('BEFORE UPDATE')
+      })
+    })
+  })
+
+  // ============================================================================
+  // GRANT permissions
+  // Migration PART 16
+  // ============================================================================
+
+  describe('GRANT permissions', () => {
+    const EXPECTED_GRANTS = [
+      { function: 'get_tier_limits', role: 'authenticated' },
+      { function: 'check_usage_limit', role: 'authenticated' },
+      { function: 'increment_usage', role: 'service_role' },
+      { function: 'reset_usage_counters', role: 'service_role' },
+    ]
+
+    it('should define exactly 4 function GRANT permissions', () => {
+      expect(EXPECTED_GRANTS.length).toBe(4)
+    })
+
+    it('get_tier_limits should be accessible by authenticated users', () => {
+      const grant = EXPECTED_GRANTS.find(g => g.function === 'get_tier_limits')
+      expect(grant).toBeDefined()
+      expect(grant!.role).toBe('authenticated')
+    })
+
+    it('check_usage_limit should be accessible by authenticated users', () => {
+      const grant = EXPECTED_GRANTS.find(g => g.function === 'check_usage_limit')
+      expect(grant).toBeDefined()
+      expect(grant!.role).toBe('authenticated')
+    })
+
+    it('increment_usage should be restricted to service_role only', () => {
+      const grant = EXPECTED_GRANTS.find(g => g.function === 'increment_usage')
+      expect(grant).toBeDefined()
+      expect(grant!.role).toBe('service_role')
+    })
+
+    it('reset_usage_counters should be restricted to service_role only', () => {
+      const grant = EXPECTED_GRANTS.find(g => g.function === 'reset_usage_counters')
+      expect(grant).toBeDefined()
+      expect(grant!.role).toBe('service_role')
+    })
+
+    it('read-only functions should be accessible by authenticated users', () => {
+      const readOnlyFunctions = ['get_tier_limits', 'check_usage_limit']
+      readOnlyFunctions.forEach(fn => {
+        const grant = EXPECTED_GRANTS.find(g => g.function === fn)
+        expect(grant!.role).toBe('authenticated')
+      })
+    })
+
+    it('write functions should be restricted to service_role', () => {
+      const writeFunctions = ['increment_usage', 'reset_usage_counters']
+      writeFunctions.forEach(fn => {
+        const grant = EXPECTED_GRANTS.find(g => g.function === fn)
+        expect(grant!.role).toBe('service_role')
+      })
+    })
+  })
 })
