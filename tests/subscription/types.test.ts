@@ -1178,9 +1178,10 @@ describe('Type Compatibility with Config Module', () => {
     })
 
     it('should have correct pricing for each tier', () => {
-      expect(TIER_CONFIGS.momentum.pricing.monthly).toBe(12)
-      expect(TIER_CONFIGS.accelerate.pricing.monthly).toBe(18)
-      expect(TIER_CONFIGS.elite.pricing.monthly).toBe(29)
+      // Note: TIER_CONFIGS pricing is now { amount, currency, discount } objects
+      expect(TIER_CONFIGS.momentum.pricing.monthly.amount).toBe(12)
+      expect(TIER_CONFIGS.accelerate.pricing.monthly.amount).toBe(18)
+      expect(TIER_CONFIGS.elite.pricing.monthly.amount).toBe(29)
     })
   })
 })

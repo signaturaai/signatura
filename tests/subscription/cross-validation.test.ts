@@ -488,10 +488,11 @@ describe('TypeScript Types Internal Consistency', () => {
   })
 
   describe('Config TierConfig matches subscription.ts TierConfig shape', () => {
-    it('each TIER_CONFIGS entry should have name, displayName, limits, pricing, features', () => {
+    it('each TIER_CONFIGS entry should have name, tagline, isMostPopular, limits, pricing, features', () => {
       Object.values(TIER_CONFIGS).forEach(config => {
         expect(config).toHaveProperty('name')
-        expect(config).toHaveProperty('displayName')
+        expect(config).toHaveProperty('tagline')
+        expect(config).toHaveProperty('isMostPopular')
         expect(config).toHaveProperty('limits')
         expect(config).toHaveProperty('pricing')
         expect(config).toHaveProperty('features')

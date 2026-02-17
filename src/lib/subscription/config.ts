@@ -8,34 +8,67 @@
  * Set SUBSCRIPTION_ENABLED=true to activate enforcement.
  */
 
+import type {
+  SubscriptionTier,
+  BillingPeriod,
+  SubscriptionStatus,
+  TierLimits,
+} from '@/types/subscription'
+
+// Re-export types for convenience
+export type { SubscriptionTier, BillingPeriod, SubscriptionStatus, TierLimits }
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/**
+ * Tier order from lowest to highest (for upgrade/downgrade logic)
+ */
+export const TIER_ORDER: SubscriptionTier[] = ['momentum', 'accelerate', 'elite']
+
+/**
+ * Available billing periods
+ */
+export const BILLING_PERIODS: BillingPeriod[] = ['monthly', 'quarterly', 'yearly']
+
+/**
+ * Grace period days for past_due subscriptions before expiration
+ */
+export const GRACE_PERIOD_DAYS = 3
+
 // ============================================================================
 // Types
 // ============================================================================
 
-export type SubscriptionTier = 'momentum' | 'accelerate' | 'elite'
-export type BillingPeriod = 'monthly' | 'quarterly' | 'yearly'
-export type SubscriptionStatus = 'active' | 'cancelled' | 'past_due' | 'expired'
+export interface TierFeatures {
+  applicationTracker: boolean
+  tailoredCvs: boolean
+  interviewCoach: boolean
+  compensationSessions: boolean
+  contractReviews: boolean
+  aiAvatarInterviews: boolean
+}
 
-export interface TierLimits {
-  applications: number      // -1 means unlimited
-  cvs: number
-  interviews: number
-  compensation: number
-  contracts: number
-  aiAvatarInterviews: number
+export interface PricingOption {
+  amount: number
+  currency: string
+  discount: string | null
+}
+
+export interface TierPricing {
+  monthly: PricingOption
+  quarterly: PricingOption
+  yearly: PricingOption
 }
 
 export interface TierConfig {
   name: string
-  displayName: string
+  tagline: string
+  isMostPopular: boolean
   limits: TierLimits
-  pricing: {
-    monthly: number
-    quarterly: number
-    yearly: number
-  }
-  features: string[]
-  isPopular?: boolean
+  features: TierFeatures
+  pricing: TierPricing
 }
 
 // ============================================================================
@@ -44,8 +77,9 @@ export interface TierConfig {
 
 export const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
   momentum: {
-    name: 'momentum',
-    displayName: 'Momentum',
+    name: 'Momentum',
+    tagline: 'Best for job seekers actively applying and exploring multiple opportunities',
+    isMostPopular: false,
     limits: {
       applications: 8,
       cvs: 8,
@@ -54,23 +88,24 @@ export const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
       contracts: 8,
       aiAvatarInterviews: 0,
     },
-    pricing: {
-      monthly: 12,
-      quarterly: 30,   // 17% off
-      yearly: 99,      // 31% off
+    features: {
+      applicationTracker: true,
+      tailoredCvs: true,
+      interviewCoach: true,
+      compensationSessions: true,
+      contractReviews: true,
+      aiAvatarInterviews: false,
     },
-    features: [
-      '8 Application Tracking',
-      '8 Tailored CVs',
-      '8 Interview Coach Sessions',
-      '8 Compensation Sessions',
-      '8 Contract Reviews',
-    ],
+    pricing: {
+      monthly: { amount: 12, currency: 'USD', discount: null },
+      quarterly: { amount: 30, currency: 'USD', discount: '17%' },
+      yearly: { amount: 99, currency: 'USD', discount: '31%' },
+    },
   },
   accelerate: {
-    name: 'accelerate',
-    displayName: 'Accelerate',
-    isPopular: true,
+    name: 'Accelerate',
+    tagline: 'Best for serious job seekers who want to run a full, structured job search',
+    isMostPopular: true,
     limits: {
       applications: 15,
       cvs: 15,
@@ -79,49 +114,70 @@ export const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
       contracts: 15,
       aiAvatarInterviews: 5,
     },
-    pricing: {
-      monthly: 18,
-      quarterly: 45,   // 17% off
-      yearly: 149,     // 31% off
+    features: {
+      applicationTracker: true,
+      tailoredCvs: true,
+      interviewCoach: true,
+      compensationSessions: true,
+      contractReviews: true,
+      aiAvatarInterviews: true,
     },
-    features: [
-      '15 Application Tracking',
-      '15 Tailored CVs',
-      '15 Interview Coach Sessions',
-      '15 Compensation Sessions',
-      '15 Contract Reviews',
-      '5 AI Avatar Interviews',
-    ],
+    pricing: {
+      monthly: { amount: 18, currency: 'USD', discount: null },
+      quarterly: { amount: 45, currency: 'USD', discount: '17%' },
+      yearly: { amount: 149, currency: 'USD', discount: '31%' },
+    },
   },
   elite: {
-    name: 'elite',
-    displayName: 'Elite',
+    name: 'Elite',
+    tagline: 'Best for uncompromising job seekers who want to experience quick wins before committing',
+    isMostPopular: false,
     limits: {
-      applications: -1,  // unlimited
+      applications: -1, // unlimited
       cvs: -1,
       interviews: -1,
       compensation: -1,
       contracts: -1,
       aiAvatarInterviews: 10,
     },
-    pricing: {
-      monthly: 29,
-      quarterly: 75,   // 14% off
-      yearly: 249,     // 28% off
+    features: {
+      applicationTracker: true,
+      tailoredCvs: true,
+      interviewCoach: true,
+      compensationSessions: true,
+      contractReviews: true,
+      aiAvatarInterviews: true,
     },
-    features: [
-      'Unlimited Application Tracking',
-      'Unlimited Tailored CVs',
-      'Unlimited Interview Coach Sessions',
-      'Unlimited Compensation Sessions',
-      'Unlimited Contract Reviews',
-      '10 AI Avatar Interviews',
-    ],
+    pricing: {
+      monthly: { amount: 29, currency: 'USD', discount: null },
+      quarterly: { amount: 75, currency: 'USD', discount: '14%' },
+      yearly: { amount: 249, currency: 'USD', discount: '28%' },
+    },
   },
 }
 
-// Tier order for upgrade/downgrade logic
-const TIER_ORDER: SubscriptionTier[] = ['momentum', 'accelerate', 'elite']
+// ============================================================================
+// Kill Switch
+// ============================================================================
+
+/**
+ * Check if subscription system is enabled
+ *
+ * CRITICAL: Returns false by default (DORMANT mode).
+ * When false:
+ * - All users have unlimited access
+ * - Usage is still tracked silently
+ * - No limit enforcement
+ *
+ * Set SUBSCRIPTION_ENABLED=true (server) or
+ * NEXT_PUBLIC_SUBSCRIPTION_ENABLED=true (client) to activate.
+ */
+export function isSubscriptionEnabled(): boolean {
+  if (typeof window !== 'undefined') {
+    return process.env.NEXT_PUBLIC_SUBSCRIPTION_ENABLED === 'true'
+  }
+  return process.env.SUBSCRIPTION_ENABLED === 'true'
+}
 
 // ============================================================================
 // Helper Functions
@@ -142,32 +198,40 @@ export function getTierLimits(tier: SubscriptionTier): TierLimits {
 }
 
 /**
- * Get price for a tier and billing period
+ * Get price amount for a tier and billing period
  */
 export function getPrice(tier: SubscriptionTier, period: BillingPeriod): number {
+  return TIER_CONFIGS[tier].pricing[period].amount
+}
+
+/**
+ * Get full pricing option for a tier and billing period
+ */
+export function getPricingOption(tier: SubscriptionTier, period: BillingPeriod): PricingOption {
   return TIER_CONFIGS[tier].pricing[period]
 }
 
 /**
  * Check if moving from oldTier to newTier is an upgrade
  */
-export function isUpgrade(oldTier: SubscriptionTier, newTier: SubscriptionTier): boolean {
-  const oldIndex = TIER_ORDER.indexOf(oldTier)
-  const newIndex = TIER_ORDER.indexOf(newTier)
-  return newIndex > oldIndex
+export function isUpgrade(from: SubscriptionTier, to: SubscriptionTier): boolean {
+  const fromIndex = TIER_ORDER.indexOf(from)
+  const toIndex = TIER_ORDER.indexOf(to)
+  return toIndex > fromIndex
 }
 
 /**
  * Check if moving from oldTier to newTier is a downgrade
  */
-export function isDowngrade(oldTier: SubscriptionTier, newTier: SubscriptionTier): boolean {
-  const oldIndex = TIER_ORDER.indexOf(oldTier)
-  const newIndex = TIER_ORDER.indexOf(newTier)
-  return newIndex < oldIndex
+export function isDowngrade(from: SubscriptionTier, to: SubscriptionTier): boolean {
+  const fromIndex = TIER_ORDER.indexOf(from)
+  const toIndex = TIER_ORDER.indexOf(to)
+  return toIndex < fromIndex
 }
 
 /**
  * Calculate the end date for a billing period
+ * Adds 1/3/12 months to the start date
  */
 export function getPeriodEndDate(startDate: Date, period: BillingPeriod): Date {
   const endDate = new Date(startDate)
@@ -188,24 +252,58 @@ export function getPeriodEndDate(startDate: Date, period: BillingPeriod): Date {
 }
 
 /**
- * Check if subscription system is enabled
- * Returns false when SUBSCRIPTION_ENABLED is unset, empty, or "false"
+ * Calculate prorated charge for a tier upgrade
+ *
+ * Formula: ((newPrice - oldPrice) / totalDays) × remainingDays
+ * Rounded to 2 decimal places
+ *
+ * @param currentTier - The user's current tier
+ * @param newTier - The tier being upgraded to
+ * @param billingPeriod - The billing period for price calculation
+ * @param periodStart - Start date of the current billing period
+ * @param periodEnd - End date of the current billing period
+ * @returns Prorated charge amount (0 or negative if not an upgrade)
  */
-export function isSubscriptionEnabled(): boolean {
-  // Check both server-side and client-side env vars
-  const serverValue = process.env.SUBSCRIPTION_ENABLED
-  const clientValue = process.env.NEXT_PUBLIC_SUBSCRIPTION_ENABLED
+export function calculateProratedCharge(
+  currentTier: SubscriptionTier,
+  newTier: SubscriptionTier,
+  billingPeriod: BillingPeriod,
+  periodStart: Date,
+  periodEnd: Date
+): number {
+  const oldPrice = getPrice(currentTier, billingPeriod)
+  const newPrice = getPrice(newTier, billingPeriod)
 
-  const value = serverValue || clientValue || ''
-  return value.toLowerCase() === 'true'
+  // No proration needed if prices are the same or it's a downgrade
+  if (newPrice <= oldPrice) {
+    return 0
+  }
+
+  const totalDays = Math.ceil(
+    (periodEnd.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24)
+  )
+
+  const now = new Date()
+  const remainingDays = Math.ceil(
+    (periodEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+  )
+
+  // If no remaining days, no proration needed
+  if (remainingDays <= 0 || totalDays <= 0) {
+    return 0
+  }
+
+  const priceDifference = newPrice - oldPrice
+  const dailyRate = priceDifference / totalDays
+  const proratedAmount = dailyRate * remainingDays
+
+  // Round to 2 decimal places
+  return Math.round(proratedAmount * 100) / 100
 }
 
-/**
- * Get all tiers in order (lowest to highest)
- */
-export function getAllTiers(): SubscriptionTier[] {
-  return [...TIER_ORDER]
-}
+// ============================================================================
+// Validation Functions
+// ============================================================================
 
 /**
  * Check if a value is a valid tier
@@ -220,7 +318,7 @@ export function isValidTier(tier: string | null | undefined): tier is Subscripti
  */
 export function isValidBillingPeriod(period: string | null | undefined): period is BillingPeriod {
   if (!period) return false
-  return ['monthly', 'quarterly', 'yearly'].includes(period)
+  return BILLING_PERIODS.includes(period as BillingPeriod)
 }
 
 /**
@@ -231,14 +329,33 @@ export function isValidStatus(status: string | null | undefined): status is Subs
   return ['active', 'cancelled', 'past_due', 'expired'].includes(status)
 }
 
+// ============================================================================
+// Additional Utility Functions
+// ============================================================================
+
+/**
+ * Get all tiers in order (lowest to highest)
+ */
+export function getAllTiers(): SubscriptionTier[] {
+  return [...TIER_ORDER]
+}
+
+/**
+ * Get the most popular tier
+ */
+export function getMostPopularTier(): SubscriptionTier {
+  const tier = TIER_ORDER.find((t) => TIER_CONFIGS[t].isMostPopular)
+  return tier || 'accelerate' // fallback
+}
+
 /**
  * Calculate savings percentage for non-monthly periods
  */
 export function getSavingsPercentage(tier: SubscriptionTier, period: BillingPeriod): number {
   if (period === 'monthly') return 0
 
-  const monthlyPrice = TIER_CONFIGS[tier].pricing.monthly
-  const periodPrice = TIER_CONFIGS[tier].pricing[period]
+  const monthlyPrice = getPrice(tier, 'monthly')
+  const periodPrice = getPrice(tier, period)
   const months = period === 'quarterly' ? 3 : 12
   const fullPrice = monthlyPrice * months
 
@@ -253,6 +370,28 @@ export function formatPrice(amount: number, currency = 'USD'): string {
     style: 'currency',
     currency,
     minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
+    maximumFractionDigits: 2,
   }).format(amount)
+}
+
+/**
+ * Check if a feature is available for a tier
+ */
+export function hasFeature(tier: SubscriptionTier, feature: keyof TierFeatures): boolean {
+  return TIER_CONFIGS[tier].features[feature]
+}
+
+/**
+ * Get the limit for a resource in a tier
+ * Returns -1 for unlimited
+ */
+export function getResourceLimit(tier: SubscriptionTier, resource: keyof TierLimits): number {
+  return TIER_CONFIGS[tier].limits[resource]
+}
+
+/**
+ * Check if a resource is unlimited for a tier
+ */
+export function isResourceUnlimited(tier: SubscriptionTier, resource: keyof TierLimits): boolean {
+  return TIER_CONFIGS[tier].limits[resource] === -1
 }
