@@ -384,6 +384,127 @@ export interface Database {
         }
         Update: Partial<Database['public']['Tables']['application_follow_ups']['Insert']>
       }
+
+      user_subscriptions: {
+        Row: {
+          id: string
+          user_id: string
+          tier: 'momentum' | 'accelerate' | 'elite' | null
+          billing_period: 'monthly' | 'quarterly' | 'yearly' | null
+          status: 'active' | 'cancelled' | 'past_due' | 'expired'
+          current_period_start: string | null
+          current_period_end: string | null
+          cancel_at_period_end: boolean
+          cancelled_at: string | null
+          cancel_reason: string | null
+          scheduled_tier: 'momentum' | 'accelerate' | 'elite' | null
+          scheduled_billing_period: 'monthly' | 'quarterly' | 'yearly' | null
+          scheduled_change_at: string | null
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          usage_applications: number
+          usage_cvs: number
+          usage_interviews: number
+          usage_compensation: number
+          usage_contracts: number
+          usage_ai_avatar_interviews: number
+          last_reset_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          tier?: 'momentum' | 'accelerate' | 'elite' | null
+          billing_period?: 'monthly' | 'quarterly' | 'yearly' | null
+          status?: 'active' | 'cancelled' | 'past_due' | 'expired'
+          current_period_start?: string | null
+          current_period_end?: string | null
+          cancel_at_period_end?: boolean
+          cancelled_at?: string | null
+          cancel_reason?: string | null
+          scheduled_tier?: 'momentum' | 'accelerate' | 'elite' | null
+          scheduled_billing_period?: 'monthly' | 'quarterly' | 'yearly' | null
+          scheduled_change_at?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          usage_applications?: number
+          usage_cvs?: number
+          usage_interviews?: number
+          usage_compensation?: number
+          usage_contracts?: number
+          usage_ai_avatar_interviews?: number
+          last_reset_at?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['user_subscriptions']['Insert']>
+      }
+
+      subscription_events: {
+        Row: {
+          id: string
+          user_id: string
+          event_type: string
+          event_data: Json
+          previous_tier: 'momentum' | 'accelerate' | 'elite' | null
+          new_tier: 'momentum' | 'accelerate' | 'elite' | null
+          previous_billing_period: 'monthly' | 'quarterly' | 'yearly' | null
+          new_billing_period: 'monthly' | 'quarterly' | 'yearly' | null
+          amount_paid: number | null
+          currency: string | null
+          stripe_event_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          event_type: string
+          event_data?: Json
+          previous_tier?: 'momentum' | 'accelerate' | 'elite' | null
+          new_tier?: 'momentum' | 'accelerate' | 'elite' | null
+          previous_billing_period?: 'monthly' | 'quarterly' | 'yearly' | null
+          new_billing_period?: 'monthly' | 'quarterly' | 'yearly' | null
+          amount_paid?: number | null
+          currency?: string | null
+          stripe_event_id?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['subscription_events']['Insert']>
+      }
+
+      usage_monthly_snapshots: {
+        Row: {
+          id: string
+          user_id: string
+          snapshot_month: string
+          tier: 'momentum' | 'accelerate' | 'elite' | null
+          billing_period: 'monthly' | 'quarterly' | 'yearly' | null
+          applications_used: number
+          cvs_used: number
+          interviews_used: number
+          compensation_used: number
+          contracts_used: number
+          ai_avatar_interviews_used: number
+          days_active: number
+          peak_usage_day: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          snapshot_month: string
+          tier?: 'momentum' | 'accelerate' | 'elite' | null
+          billing_period?: 'monthly' | 'quarterly' | 'yearly' | null
+          applications_used?: number
+          cvs_used?: number
+          interviews_used?: number
+          compensation_used?: number
+          contracts_used?: number
+          ai_avatar_interviews_used?: number
+          days_active?: number
+          peak_usage_day?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['usage_monthly_snapshots']['Insert']>
+      }
+
       // Allow access to tables not yet fully typed
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       [key: string]: any
