@@ -24,6 +24,7 @@ import {
 } from '@/components/applications'
 import type { ColumnConfig, FilterState } from '@/components/applications'
 import { ToastProvider, useToast } from '@/components/ui'
+import { UsageBadge, UpgradePrompt } from '@/components/subscription'
 import type { JobApplication, ApplicationStatus } from '@/lib/types/dashboard'
 import {
   Plus,
@@ -86,6 +87,7 @@ function ApplicationsPageContent() {
   const [showWizard, setShowWizard] = useState(false)
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false)
 
   // Filter state
   const [searchQuery, setSearchQuery] = useState('')
@@ -343,6 +345,7 @@ function ApplicationsPageContent() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <UsageBadge resource="applications" />
           <Button
             variant="outline"
             onClick={() => setShowImportModal(true)}
@@ -606,7 +609,11 @@ function ApplicationsPageContent() {
       )}
 
       {/* New Application Wizard Modal */}
-      <NewApplicationWizard isOpen={showWizard} onClose={() => handleWizardClose()} />
+      <NewApplicationWizard
+        isOpen={showWizard}
+        onClose={() => handleWizardClose()}
+        onLimitReached={() => setShowUpgradePrompt(true)}
+      />
 
       {/* Advanced Filters Modal */}
       <AdvancedFiltersModal
@@ -630,6 +637,13 @@ function ApplicationsPageContent() {
           showToast(`Successfully imported application for ${application.company_name}`, 'success')
           setShowImportModal(false)
         }}
+      />
+
+      {/* Upgrade Prompt Modal */}
+      <UpgradePrompt
+        resource="applications"
+        open={showUpgradePrompt}
+        onClose={() => setShowUpgradePrompt(false)}
       />
 
       {/* Click outside to close dropdowns */}

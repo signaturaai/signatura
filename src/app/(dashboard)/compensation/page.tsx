@@ -14,6 +14,7 @@ import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button } from '@/components/ui'
+import { UsageBadge, UpgradePrompt } from '@/components/subscription'
 import {
   DollarSign,
   ArrowLeft,
@@ -99,6 +100,9 @@ export default function CompensationNegotiatorPage() {
   const [strategy, setStrategy] = useState<CompensationStrategy | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Subscription state
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false)
 
   const supabase = createClient()
 
@@ -257,6 +261,15 @@ export default function CompensationNegotiatorPage() {
         })
 
         if (!response.ok) {
+          // Handle subscription-specific errors
+          if (response.status === 402) {
+            router.push('/pricing')
+            return
+          }
+          if (response.status === 403) {
+            setShowUpgradePrompt(true)
+            return
+          }
           const errorData = await response.json()
           throw new Error(errorData.error || 'Failed to generate strategy')
         }
@@ -300,6 +313,15 @@ export default function CompensationNegotiatorPage() {
         })
 
         if (!response.ok) {
+          // Handle subscription-specific errors
+          if (response.status === 402) {
+            router.push('/pricing')
+            return
+          }
+          if (response.status === 403) {
+            setShowUpgradePrompt(true)
+            return
+          }
           const errorData = await response.json()
           throw new Error(errorData.error || 'Failed to regenerate strategy')
         }
@@ -500,7 +522,10 @@ export default function CompensationNegotiatorPage() {
             {selectedApplication ? `Back to ${selectedApplication.company_name}` : 'Back'}
           </Link>
         </div>
-        <h1 className="text-3xl font-bold text-gray-900">Compensation Negotiator</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-3xl font-bold text-gray-900">Compensation Negotiator</h1>
+          <UsageBadge resource="compensation" />
+        </div>
         <p className="text-gray-600 mt-2">
           {mode === 'wizard'
             ? `Enter your offer details for ${selectedApplication?.company_name} to get personalized negotiation strategies`
@@ -655,6 +680,13 @@ export default function CompensationNegotiatorPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Upgrade Prompt Modal */}
+      <UpgradePrompt
+        resource="compensation"
+        open={showUpgradePrompt}
+        onClose={() => setShowUpgradePrompt(false)}
+      />
     </div>
   )
 }

@@ -15,6 +15,8 @@ import { X, Loader2, CheckCircle, FileText, Briefcase, Sparkles, ArrowRight } fr
 interface NewApplicationWizardProps {
   isOpen: boolean
   onClose: () => void
+  /** Callback when usage limit is reached (403 response) */
+  onLimitReached?: () => void
 }
 
 const INDUSTRIES = [
@@ -26,7 +28,7 @@ const INDUSTRIES = [
   { value: 'finance', label: 'Finance' },
 ]
 
-export default function NewApplicationWizard({ isOpen, onClose }: NewApplicationWizardProps) {
+export default function NewApplicationWizard({ isOpen, onClose, onLimitReached }: NewApplicationWizardProps) {
   const router = useRouter()
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1)
   const [loading, setLoading] = useState(false)
@@ -113,6 +115,19 @@ export default function NewApplicationWizard({ isOpen, onClose }: NewApplication
       const data = await response.json()
 
       if (!response.ok) {
+        // Handle subscription-specific errors
+        if (response.status === 402) {
+          // No subscription - redirect to pricing
+          handleClose()
+          router.push('/pricing')
+          return
+        }
+        if (response.status === 403) {
+          // Usage limit reached - show upgrade prompt
+          handleClose()
+          onLimitReached?.()
+          return
+        }
         throw new Error(data.error || 'Failed to create application')
       }
 
