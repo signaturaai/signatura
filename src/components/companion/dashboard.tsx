@@ -12,6 +12,7 @@ import { CompanionChat } from './chat'
 import { EmotionalState } from './emotional-state'
 import { GoalCard } from './goal-card'
 import { Button, Card, CardContent } from '@/components/ui'
+import { FeatureGate } from '@/components/subscription'
 import { Heart, Sparkles, AlertTriangle, MessageCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { EnergyLevel } from '@/types/database'
@@ -218,19 +219,21 @@ export function CompanionDashboard({
             </Button>
           </div>
 
-          {/* Chat Interface */}
+          {/* Chat Interface - Gated by aiAvatarInterviews feature */}
           <div className={cn(
             'transition-all duration-300',
             showChat ? 'block' : 'hidden lg:block'
           )}>
-            <CompanionChat
-              userId={userId}
-              userName={userName}
-              hasCheckedInToday={state.hasCheckedIn}
-              todayContext={initialData.todayCheckin}
-              streak={streak}
-              totalCheckins={initialData.totalCheckins}
-            />
+            <FeatureGate feature="aiAvatarInterviews">
+              <CompanionChat
+                userId={userId}
+                userName={userName}
+                hasCheckedInToday={state.hasCheckedIn}
+                todayContext={initialData.todayCheckin}
+                streak={streak}
+                totalCheckins={initialData.totalCheckins}
+              />
+            </FeatureGate>
           </div>
         </div>
       </div>

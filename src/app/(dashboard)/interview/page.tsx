@@ -12,6 +12,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button, Textarea, Label } from '@/components/ui'
+import { UsageBadge, UpgradePrompt } from '@/components/subscription'
 import {
   Mic,
   Play,
@@ -86,6 +87,9 @@ export default function InterviewPage() {
   const [wizardConfig, setWizardConfig] = useState<WizardConfig | null>(null)
   const [showInputs, setShowInputs] = useState(false)
   const [jobDescription, setJobDescription] = useState('')
+
+  // Subscription state
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false)
 
   const supabase = createClient()
 
@@ -224,6 +228,16 @@ export default function InterviewPage() {
       const data = await response.json()
 
       if (!response.ok) {
+        // Handle subscription-specific errors
+        if (response.status === 402) {
+          router.push('/pricing')
+          return
+        }
+        if (response.status === 403) {
+          setMode('landing')
+          setShowUpgradePrompt(true)
+          return
+        }
         throw new Error(data.error || 'Failed to generate plan')
       }
 
@@ -267,6 +281,15 @@ export default function InterviewPage() {
       const data = await response.json()
 
       if (!response.ok) {
+        // Handle subscription-specific errors
+        if (response.status === 402) {
+          router.push('/pricing')
+          return
+        }
+        if (response.status === 403) {
+          setShowUpgradePrompt(true)
+          return
+        }
         throw new Error(data.error || 'Failed to regenerate plan')
       }
 
@@ -644,7 +667,10 @@ export default function InterviewPage() {
             {selectedApplication ? `Back to ${selectedApplication.company_name}` : 'Back to Dashboard'}
           </Link>
         </div>
-        <h1 className="text-2xl font-bold">Interview Coach</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold">Interview Coach</h1>
+          <UsageBadge resource="interviews" />
+        </div>
         <p className="text-muted-foreground">
           I'll be your practice partner. Let's build your confidence together.
         </p>
@@ -813,6 +839,13 @@ export default function InterviewPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Upgrade Prompt Modal */}
+      <UpgradePrompt
+        resource="interviews"
+        open={showUpgradePrompt}
+        onClose={() => setShowUpgradePrompt(false)}
+      />
     </div>
   )
 }

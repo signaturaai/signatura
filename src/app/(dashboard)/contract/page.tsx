@@ -13,6 +13,7 @@ import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button } from '@/components/ui'
+import { UsageBadge, UpgradePrompt } from '@/components/subscription'
 import {
   FileCheck,
   ArrowLeft,
@@ -84,6 +85,9 @@ export default function ContractReviewerPage() {
   const [fileName, setFileName] = useState<string | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Subscription state
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false)
 
   const supabase = createClient()
 
@@ -214,6 +218,15 @@ export default function ContractReviewerPage() {
         })
 
         if (!response.ok) {
+          // Handle subscription-specific errors
+          if (response.status === 402) {
+            router.push('/pricing')
+            return
+          }
+          if (response.status === 403) {
+            setShowUpgradePrompt(true)
+            return
+          }
           const errorData = await response.json()
           throw new Error(errorData.error || 'Failed to analyze contract')
         }
@@ -420,7 +433,10 @@ export default function ContractReviewerPage() {
             {selectedApplication ? `Back to ${selectedApplication.company_name}` : 'Back'}
           </Link>
         </div>
-        <h1 className="text-3xl font-bold text-gray-900">Contract Reviewer</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-3xl font-bold text-gray-900">Contract Reviewer</h1>
+          <UsageBadge resource="contracts" />
+        </div>
         <p className="text-gray-600 mt-2">
           {mode === 'upload'
             ? `Upload your employment contract from ${selectedApplication?.company_name} for AI-powered legal analysis`
@@ -624,6 +640,13 @@ export default function ContractReviewerPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Upgrade Prompt Modal */}
+      <UpgradePrompt
+        resource="contracts"
+        open={showUpgradePrompt}
+        onClose={() => setShowUpgradePrompt(false)}
+      />
     </div>
   )
 }

@@ -16,6 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui'
 import { Button } from '@/components/ui'
 import { TailoringResultsDisplay } from '@/components/cv'
 import { TailoringResult } from '@/lib/cv'
+import { UsageBadge, UpgradePrompt } from '@/components/subscription'
 import {
   FileText,
   Loader2,
@@ -77,6 +78,9 @@ export default function CVPage() {
   // State for multiple versions (BETA)
   const [targetRoles, setTargetRoles] = useState<string[]>([''])
   const [isGeneratingMultiple, setIsGeneratingMultiple] = useState(false)
+
+  // State for subscription prompt
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false)
 
   const supabase = createClient()
 
@@ -210,6 +214,15 @@ export default function CVPage() {
       const data = await response.json()
 
       if (!response.ok || !data.success) {
+        // Handle subscription-specific errors
+        if (response.status === 402) {
+          router.push('/pricing')
+          return
+        }
+        if (response.status === 403) {
+          setShowUpgradePrompt(true)
+          return
+        }
         throw new Error(data.error || 'Failed to tailor CV')
       }
 
@@ -246,6 +259,15 @@ export default function CVPage() {
       const data = await response.json()
 
       if (!response.ok || !data.success) {
+        // Handle subscription-specific errors
+        if (response.status === 402) {
+          router.push('/pricing')
+          return
+        }
+        if (response.status === 403) {
+          setShowUpgradePrompt(true)
+          return
+        }
         throw new Error(data.error || 'Failed to generate CV versions')
       }
 
@@ -327,6 +349,7 @@ export default function CVPage() {
             <FileText className="h-6 w-6 text-teal-600" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900">CV Tailor</h1>
+          <UsageBadge resource="cvs" />
         </div>
         <p className="text-gray-500">Your AI-powered resume tailoring assistant</p>
       </div>
@@ -578,6 +601,13 @@ export default function CVPage() {
           </div>
         </div>
       )}
+
+      {/* Upgrade Prompt Modal */}
+      <UpgradePrompt
+        resource="cvs"
+        open={showUpgradePrompt}
+        onClose={() => setShowUpgradePrompt(false)}
+      />
     </div>
   )
 }
