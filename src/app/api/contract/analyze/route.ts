@@ -6,8 +6,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { analyzeContract } from '@/lib/contract'
+import { checkUsageLimit, incrementUsage } from '@/lib/subscription/access-control'
 import type {
   AnalyzeContractRequest,
   AnalyzeContractResponse,
@@ -46,6 +47,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<AnalyzeCo
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       )
+    }
+
+    // SPLIT PATTERN: Check usage limit first
+    const serviceSupabase = createServiceClient()
+    const limitCheck = await checkUsageLimit(serviceSupabase, user.id, 'contracts')
+    if (!limitCheck.allowed) {
+      if (limitCheck.reason === 'NO_SUBSCRIPTION') {
+        return NextResponse.json({ success: false, error: 'Subscription required', ...limitCheck }, { status: 402 })
+      }
+      return NextResponse.json({ success: false, error: 'Usage limit reached', ...limitCheck }, { status: 403 })
     }
 
     // Parse request body
@@ -126,6 +137,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<AnalyzeCo
         console.error('Error updating job application:', updateError)
       }
     }
+
+    // SPLIT PATTERN: Increment usage after successful creation
+    await incrementUsage(serviceSupabase, user.id, 'contracts')
 
     return NextResponse.json({
       success: true,

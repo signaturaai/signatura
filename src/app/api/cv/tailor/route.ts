@@ -7,8 +7,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { generateBestOfBothWorldsCV, TailoringResult } from '@/lib/cv'
+import { checkUsageLimit, incrementUsage } from '@/lib/subscription/access-control'
 
 export const maxDuration = 60 // Allow up to 60 seconds for AI processing
 
@@ -43,6 +44,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<TailorRes
         { success: false, error: 'Authentication required' },
         { status: 401 }
       )
+    }
+
+    // SPLIT PATTERN: Check usage limit first
+    const serviceSupabase = createServiceClient()
+    const limitCheck = await checkUsageLimit(serviceSupabase, user.id, 'cvs')
+    if (!limitCheck.allowed) {
+      if (limitCheck.reason === 'NO_SUBSCRIPTION') {
+        return NextResponse.json({ success: false, error: 'Subscription required', ...limitCheck }, { status: 402 })
+      }
+      return NextResponse.json({ success: false, error: 'Usage limit reached', ...limitCheck }, { status: 403 })
     }
 
     // Parse request body
@@ -153,6 +164,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<TailorRes
         `Improvement: +${result.overallImprovement.toFixed(1)} points. ` +
         `Sections improved: ${result.sectionsImproved}/${result.totalSections}`
     )
+
+    // SPLIT PATTERN: Increment usage after successful creation
+    if (result.success) {
+      await incrementUsage(serviceSupabase, user.id, 'cvs')
+    }
 
     return NextResponse.json({
       success: true,
