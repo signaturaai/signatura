@@ -272,6 +272,7 @@ export interface UsageLimitCheck {
   isUnlimited: boolean
   tier: SubscriptionTier | null
   resource: SubscriptionResource
+  adminBypass?: boolean
 }
 
 /**
@@ -283,6 +284,7 @@ export interface FeatureAccessCheck {
   reason: FeatureAccessReason
   subscription: UserSubscription | null
   isEnforcementEnabled: boolean
+  adminBypass?: boolean
 }
 
 /**

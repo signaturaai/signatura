@@ -11,6 +11,7 @@ import {
   checkUsageLimit,
   incrementUsage,
   getSubscriptionStatus,
+  isAdmin,
   type FeatureKey,
   type ResourceKey,
 } from '@/lib/subscription/access-control'
@@ -40,6 +41,8 @@ interface MockOptions {
   insertError?: { message: string } | null
   rpcError?: { code: string; message: string } | null
   snapshotData?: Record<string, unknown> | null
+  profileData?: Record<string, unknown> | null
+  profileError?: { code: string; message: string } | null
 }
 
 function createMockSupabase(options: MockOptions = {}) {
@@ -50,44 +53,61 @@ function createMockSupabase(options: MockOptions = {}) {
     insertError = null,
     rpcError = null,
     snapshotData = null,
+    profileData = null,
+    profileError = null,
   } = options
 
   const updateCalls: Record<string, unknown>[] = []
   const insertCalls: Record<string, unknown>[] = []
   const rpcCalls: { name: string; params: unknown }[] = []
 
-  const mockBuilder = {
-    select: vi.fn().mockReturnThis(),
-    insert: vi.fn().mockImplementation((data: Record<string, unknown>) => {
-      insertCalls.push(data)
-      return Promise.resolve({ error: insertError })
-    }),
-    update: vi.fn().mockImplementation((data: Record<string, unknown>) => {
-      updateCalls.push(data)
+  const createBuilder = (tableName: string) => {
+    if (tableName === 'profiles') {
       return {
-        eq: vi.fn().mockResolvedValue({ error: updateError }),
-      }
-    }),
-    eq: vi.fn().mockImplementation(() => {
-      return {
-        single: vi.fn().mockResolvedValue({
-          data: subscriptionData,
-          error: subscriptionError,
-        }),
-        eq: vi.fn().mockResolvedValue({
-          data: snapshotData,
-          error: null,
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue({
+              data: profileData,
+              error: profileError,
+            }),
+          }),
         }),
       }
-    }),
-    single: vi.fn().mockResolvedValue({
-      data: subscriptionData,
-      error: subscriptionError,
-    }),
+    }
+
+    return {
+      select: vi.fn().mockReturnThis(),
+      insert: vi.fn().mockImplementation((data: Record<string, unknown>) => {
+        insertCalls.push(data)
+        return Promise.resolve({ error: insertError })
+      }),
+      update: vi.fn().mockImplementation((data: Record<string, unknown>) => {
+        updateCalls.push(data)
+        return {
+          eq: vi.fn().mockResolvedValue({ error: updateError }),
+        }
+      }),
+      eq: vi.fn().mockImplementation(() => {
+        return {
+          single: vi.fn().mockResolvedValue({
+            data: subscriptionData,
+            error: subscriptionError,
+          }),
+          eq: vi.fn().mockResolvedValue({
+            data: snapshotData,
+            error: null,
+          }),
+        }
+      }),
+      single: vi.fn().mockResolvedValue({
+        data: subscriptionData,
+        error: subscriptionError,
+      }),
+    }
   }
 
   return {
-    from: vi.fn().mockReturnValue(mockBuilder),
+    from: vi.fn().mockImplementation((tableName: string) => createBuilder(tableName)),
     rpc: vi.fn().mockImplementation((name: string, params: unknown) => {
       rpcCalls.push({ name, params })
       return Promise.resolve({ error: rpcError })
@@ -171,9 +191,11 @@ describe('Access Control', () => {
         expect(result.reason).toBeUndefined()
       })
 
-      it('should NOT query database when kill switch is OFF', async () => {
+      it('should NOT query user_subscriptions when kill switch is OFF (non-admin)', async () => {
         mockSubscriptionEnabled = false
-        const supabase = createMockSupabase()
+        const supabase = createMockSupabase({
+          profileData: { role: 'user', is_admin: false },
+        })
 
         await checkFeatureAccess(
           supabase as unknown as Parameters<typeof checkFeatureAccess>[0],
@@ -181,7 +203,10 @@ describe('Access Control', () => {
           'applicationTracker'
         )
 
-        expect(supabase.from).not.toHaveBeenCalled()
+        // Should query profiles (admin check) but NOT user_subscriptions
+        const calls = supabase.from.mock.calls.map((c: string[]) => c[0])
+        expect(calls).toContain('profiles')
+        expect(calls).not.toContain('user_subscriptions')
       })
     })
 
@@ -389,9 +414,11 @@ describe('Access Control', () => {
         expect(result.unlimited).toBe(true)
       })
 
-      it('should NOT query database when kill switch is OFF', async () => {
+      it('should NOT query user_subscriptions when kill switch is OFF (non-admin)', async () => {
         mockSubscriptionEnabled = false
-        const supabase = createMockSupabase()
+        const supabase = createMockSupabase({
+          profileData: { role: 'user', is_admin: false },
+        })
 
         await checkUsageLimit(
           supabase as unknown as Parameters<typeof checkUsageLimit>[0],
@@ -399,7 +426,10 @@ describe('Access Control', () => {
           'applications'
         )
 
-        expect(supabase.from).not.toHaveBeenCalled()
+        // Should query profiles (admin check) but NOT user_subscriptions
+        const calls = supabase.from.mock.calls.map((c: string[]) => c[0])
+        expect(calls).toContain('profiles')
+        expect(calls).not.toContain('user_subscriptions')
       })
     })
 
@@ -1300,6 +1330,194 @@ describe('Access Control', () => {
         'aiAvatarInterviews',
       ]
       expect(resources).toHaveLength(6)
+    })
+  })
+
+  // ==========================================================================
+  // Admin Bypass Tests
+  // ==========================================================================
+
+  describe('Admin Bypass', () => {
+    describe('isAdmin helper', () => {
+      it('should return true when profile role is admin', async () => {
+        const supabase = createMockSupabase({
+          profileData: { role: 'admin', is_admin: false },
+        })
+
+        const result = await isAdmin(
+          supabase as unknown as Parameters<typeof isAdmin>[0],
+          'user-admin'
+        )
+
+        expect(result).toBe(true)
+      })
+
+      it('should return true when profile is_admin is true (role != admin)', async () => {
+        const supabase = createMockSupabase({
+          profileData: { role: 'user', is_admin: true },
+        })
+
+        const result = await isAdmin(
+          supabase as unknown as Parameters<typeof isAdmin>[0],
+          'user-admin'
+        )
+
+        expect(result).toBe(true)
+      })
+
+      it('should return false for non-admin user', async () => {
+        const supabase = createMockSupabase({
+          profileData: { role: 'user', is_admin: false },
+        })
+
+        const result = await isAdmin(
+          supabase as unknown as Parameters<typeof isAdmin>[0],
+          'user-regular'
+        )
+
+        expect(result).toBe(false)
+      })
+
+      it('should return false when profile not found', async () => {
+        const supabase = createMockSupabase({
+          profileError: { code: 'PGRST116', message: 'Not found' },
+        })
+
+        const result = await isAdmin(
+          supabase as unknown as Parameters<typeof isAdmin>[0],
+          'user-missing'
+        )
+
+        expect(result).toBe(false)
+      })
+    })
+
+    describe('checkFeatureAccess with admin', () => {
+      it('should allow admin with kill switch OFF, adminBypass=true', async () => {
+        mockSubscriptionEnabled = false
+        const supabase = createMockSupabase({
+          profileData: { role: 'admin', is_admin: false },
+        })
+
+        const result = await checkFeatureAccess(
+          supabase as unknown as Parameters<typeof checkFeatureAccess>[0],
+          'user-admin',
+          'applicationTracker'
+        )
+
+        expect(result.allowed).toBe(true)
+        expect(result.adminBypass).toBe(true)
+      })
+
+      it('should allow admin with kill switch ON + tier=NULL, adminBypass=true', async () => {
+        mockSubscriptionEnabled = true
+        const supabase = createMockSupabase({
+          profileData: { role: 'admin', is_admin: true },
+          subscriptionData: createMockSubscriptionRow({ tier: null }),
+        })
+
+        const result = await checkFeatureAccess(
+          supabase as unknown as Parameters<typeof checkFeatureAccess>[0],
+          'user-admin',
+          'applicationTracker'
+        )
+
+        expect(result.allowed).toBe(true)
+        expect(result.adminBypass).toBe(true)
+      })
+
+      it('should allow admin with kill switch ON + no subscription record', async () => {
+        mockSubscriptionEnabled = true
+        const supabase = createMockSupabase({
+          profileData: { role: 'admin', is_admin: false },
+          subscriptionError: { code: 'PGRST116', message: 'Not found' },
+        })
+
+        const result = await checkFeatureAccess(
+          supabase as unknown as Parameters<typeof checkFeatureAccess>[0],
+          'user-admin',
+          'aiAvatarInterviews'
+        )
+
+        expect(result.allowed).toBe(true)
+        expect(result.adminBypass).toBe(true)
+      })
+    })
+
+    describe('checkUsageLimit with admin', () => {
+      it('should always allow admin, unlimited, adminBypass=true', async () => {
+        mockSubscriptionEnabled = true
+        const supabase = createMockSupabase({
+          profileData: { role: 'admin', is_admin: true },
+          subscriptionData: createMockSubscriptionRow({
+            tier: 'momentum',
+            usage_applications: 100, // way over limit
+          }),
+        })
+
+        const result = await checkUsageLimit(
+          supabase as unknown as Parameters<typeof checkUsageLimit>[0],
+          'user-admin',
+          'applications'
+        )
+
+        expect(result.allowed).toBe(true)
+        expect(result.unlimited).toBe(true)
+        expect(result.adminBypass).toBe(true)
+      })
+    })
+
+    describe('Non-admin + kill switch ON + tier=NULL', () => {
+      it('should still block non-admin user with no subscription', async () => {
+        mockSubscriptionEnabled = true
+        const supabase = createMockSupabase({
+          profileData: { role: 'user', is_admin: false },
+          subscriptionData: createMockSubscriptionRow({ tier: null }),
+        })
+
+        const result = await checkFeatureAccess(
+          supabase as unknown as Parameters<typeof checkFeatureAccess>[0],
+          'user-regular',
+          'applicationTracker'
+        )
+
+        expect(result.allowed).toBe(false)
+        expect(result.reason).toBe('NO_SUBSCRIPTION')
+        expect(result.adminBypass).toBeUndefined()
+      })
+    })
+
+    describe('getSubscriptionStatus with admin', () => {
+      it('should return virtual Elite with isAdmin=true for admin users', async () => {
+        mockSubscriptionEnabled = true
+        const supabase = createMockSupabase({
+          profileData: { role: 'admin', is_admin: false },
+        })
+
+        const result = await getSubscriptionStatus(
+          supabase as unknown as Parameters<typeof getSubscriptionStatus>[0],
+          'user-admin'
+        )
+
+        expect(result.isAdmin).toBe(true)
+        expect(result.tier).toBe('elite')
+        expect(result.billingPeriod).toBe('yearly')
+        expect(result.status).toBe('active')
+        expect(result.hasSubscription).toBe(true)
+        expect(result.canUpgrade).toBe(false)
+        expect(result.canDowngrade).toBe(false)
+
+        // All usage should be unlimited
+        expect(result.usage.applications.unlimited).toBe(true)
+        expect(result.usage.cvs.unlimited).toBe(true)
+        expect(result.usage.interviews.unlimited).toBe(true)
+        expect(result.usage.compensation.unlimited).toBe(true)
+        expect(result.usage.contracts.unlimited).toBe(true)
+        expect(result.usage.aiAvatarInterviews.unlimited).toBe(true)
+
+        // Features should be elite features
+        expect(result.features).not.toBeNull()
+      })
     })
   })
 })

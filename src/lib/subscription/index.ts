@@ -95,6 +95,7 @@ export {
   checkUsageLimit,
   incrementUsage,
   getSubscriptionStatus,
+  isAdmin,
   type FeatureKey,
   type FeatureAccessCheck,
   type UsageLimitCheck,
