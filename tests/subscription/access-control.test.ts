@@ -1177,6 +1177,106 @@ describe('Access Control', () => {
     })
   })
 
+  // ==========================================================================
+  // Phase 14 Spec: Cancelled but within period
+  // ==========================================================================
+
+  describe('Cancelled but within period', () => {
+    it('should allow feature access when cancelled but cancellation_effective_at is in the future', async () => {
+      mockSubscriptionEnabled = true
+      // Cancelled at Feb 10, but effective at Mar 15 (period end) - user still has access
+      const supabase = createMockSupabase({
+        subscriptionData: createMockSubscriptionRow({
+          status: 'cancelled',
+          cancelled_at: '2026-02-10T10:00:00Z',
+          cancellation_effective_at: '2026-03-15T10:00:00Z', // Future date
+        }),
+      })
+
+      const result = await checkFeatureAccess(
+        supabase as unknown as Parameters<typeof checkFeatureAccess>[0],
+        'user-123',
+        'applicationTracker'
+      )
+
+      expect(result.allowed).toBe(true)
+      expect(result.enforced).toBe(true)
+      expect(result.tier).toBe('momentum')
+    })
+
+    it('should allow usage check when cancelled but within period', async () => {
+      mockSubscriptionEnabled = true
+      const supabase = createMockSupabase({
+        subscriptionData: createMockSubscriptionRow({
+          status: 'cancelled',
+          cancelled_at: '2026-02-10T10:00:00Z',
+          cancellation_effective_at: '2026-03-15T10:00:00Z',
+          usage_applications: 5,
+        }),
+      })
+
+      const result = await checkUsageLimit(
+        supabase as unknown as Parameters<typeof checkUsageLimit>[0],
+        'user-123',
+        'applications'
+      )
+
+      expect(result.allowed).toBe(true)
+      expect(result.enforced).toBe(true)
+      expect(result.used).toBe(5)
+      expect(result.limit).toBe(8)
+    })
+  })
+
+  // ==========================================================================
+  // Phase 14 Spec: Accelerate AI avatar 5-limit enforcement
+  // ==========================================================================
+
+  describe('Accelerate tier: AI avatar 5-limit enforcement', () => {
+    it('should allow aiAvatarInterviews when under limit (4 used, limit 5)', async () => {
+      mockSubscriptionEnabled = true
+      const supabase = createMockSupabase({
+        subscriptionData: createMockSubscriptionRow({
+          tier: 'accelerate',
+          usage_ai_avatar_interviews: 4,
+        }),
+      })
+
+      const result = await checkUsageLimit(
+        supabase as unknown as Parameters<typeof checkUsageLimit>[0],
+        'user-123',
+        'aiAvatarInterviews'
+      )
+
+      expect(result.allowed).toBe(true)
+      expect(result.used).toBe(4)
+      expect(result.limit).toBe(5)
+      expect(result.remaining).toBe(1)
+    })
+
+    it('should deny aiAvatarInterviews when at limit (5 used, limit 5)', async () => {
+      mockSubscriptionEnabled = true
+      const supabase = createMockSupabase({
+        subscriptionData: createMockSubscriptionRow({
+          tier: 'accelerate',
+          usage_ai_avatar_interviews: 5,
+        }),
+      })
+
+      const result = await checkUsageLimit(
+        supabase as unknown as Parameters<typeof checkUsageLimit>[0],
+        'user-123',
+        'aiAvatarInterviews'
+      )
+
+      expect(result.allowed).toBe(false)
+      expect(result.reason).toBe('LIMIT_EXCEEDED')
+      expect(result.used).toBe(5)
+      expect(result.limit).toBe(5)
+      expect(result.remaining).toBe(0)
+    })
+  })
+
   describe('Type exports', () => {
     it('FeatureKey should cover all tier features', () => {
       const features: FeatureKey[] = [

@@ -708,6 +708,91 @@ describe('Subscription Manager', () => {
 
       expect(supabase.from).toHaveBeenCalledWith('subscription_events')
     })
+
+    it('should apply scheduledTierChange on renewal', async () => {
+      const mockRow = createMockSubscriptionRow({
+        tier: 'elite',
+        scheduled_tier_change: 'momentum',
+      })
+      const supabase = createMockSupabase({ subscriptionData: mockRow })
+
+      await renewSubscription(supabase as never, 'user-abc', 'txn-456')
+
+      const updateCalls = supabase._getUpdateCalls()
+      // Tier should now be the scheduled tier (momentum), not the original (elite)
+      expect(updateCalls[0].tier).toBe('momentum')
+      // Scheduled change should be cleared
+      expect(updateCalls[0].scheduled_tier_change).toBeNull()
+    })
+
+    it('should apply scheduledBillingPeriodChange on renewal', async () => {
+      const mockRow = createMockSubscriptionRow({
+        tier: 'momentum',
+        billing_period: 'monthly',
+        scheduled_billing_period_change: 'yearly',
+      })
+      const supabase = createMockSupabase({ subscriptionData: mockRow })
+
+      await renewSubscription(supabase as never, 'user-abc', 'txn-789')
+
+      const updateCalls = supabase._getUpdateCalls()
+      expect(updateCalls[0].billing_period).toBe('yearly')
+      expect(updateCalls[0].scheduled_billing_period_change).toBeNull()
+    })
+
+    it('should keep current tier if no scheduledTierChange', async () => {
+      const mockRow = createMockSubscriptionRow({
+        tier: 'accelerate',
+        scheduled_tier_change: null,
+      })
+      const supabase = createMockSupabase({ subscriptionData: mockRow })
+
+      await renewSubscription(supabase as never, 'user-abc', 'txn-abc')
+
+      const updateCalls = supabase._getUpdateCalls()
+      expect(updateCalls[0].tier).toBe('accelerate')
+    })
+
+    it('should reset counters when last_reset_at < current_period_start (double-reset prevention)', async () => {
+      // last_reset_at is before current_period_start → should reset
+      const mockRow = createMockSubscriptionRow({
+        last_reset_at: '2026-01-01T00:00:00Z', // Before period start
+        current_period_start: '2026-02-15T10:00:00Z', // Period start
+        usage_applications: 5,
+        usage_cvs: 3,
+      })
+      const supabase = createMockSupabase({ subscriptionData: mockRow })
+
+      await renewSubscription(supabase as never, 'user-abc', 'txn-reset')
+
+      const updateCalls = supabase._getUpdateCalls()
+      // Counters should be reset to 0
+      expect(updateCalls[0].usage_applications).toBe(0)
+      expect(updateCalls[0].usage_cvs).toBe(0)
+      expect(updateCalls[0].usage_interviews).toBe(0)
+      expect(updateCalls[0].usage_compensation).toBe(0)
+      expect(updateCalls[0].usage_contracts).toBe(0)
+      expect(updateCalls[0].usage_ai_avatar_interviews).toBe(0)
+      expect(updateCalls[0].last_reset_at).toBeDefined()
+    })
+
+    it('should NOT reset counters when last_reset_at >= current_period_start (double-reset prevention)', async () => {
+      // last_reset_at equals current_period_start → already reset, don't reset again
+      const mockRow = createMockSubscriptionRow({
+        last_reset_at: '2026-02-15T10:00:00Z', // Same as period start
+        current_period_start: '2026-02-15T10:00:00Z',
+        usage_applications: 5,
+      })
+      const supabase = createMockSupabase({ subscriptionData: mockRow })
+
+      await renewSubscription(supabase as never, 'user-abc', 'txn-no-reset')
+
+      const updateCalls = supabase._getUpdateCalls()
+      // Counters should NOT be in the update
+      expect(updateCalls[0].usage_applications).toBeUndefined()
+      expect(updateCalls[0].usage_cvs).toBeUndefined()
+      expect(updateCalls[0].last_reset_at).toBeUndefined()
+    })
   })
 
   // ==========================================================================
