@@ -6,8 +6,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { generateInterviewPlan, getMockInterviewPlan } from '@/lib/interview'
+import { checkUsageLimit, incrementUsage } from '@/lib/subscription/access-control'
 import type { GeneratePlanRequest, InterviewPlan } from '@/types/interview'
 
 const USE_MOCK = process.env.NODE_ENV === 'development' && process.env.USE_MOCK_AI === 'true'
@@ -22,6 +23,16 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // SPLIT PATTERN: Check usage limit first
+    const serviceSupabase = createServiceClient()
+    const limitCheck = await checkUsageLimit(serviceSupabase, user.id, 'interviews')
+    if (!limitCheck.allowed) {
+      if (limitCheck.reason === 'NO_SUBSCRIPTION') {
+        return NextResponse.json({ error: 'Subscription required', ...limitCheck }, { status: 402 })
+      }
+      return NextResponse.json({ error: 'Usage limit reached', ...limitCheck }, { status: 403 })
     }
 
     // Parse request body
@@ -103,6 +114,9 @@ export async function POST(request: NextRequest) {
         // Don't fail the request, just log the error
       }
     }
+
+    // SPLIT PATTERN: Increment usage after successful creation
+    await incrementUsage(serviceSupabase, user.id, 'interviews')
 
     return NextResponse.json({
       success: true,
