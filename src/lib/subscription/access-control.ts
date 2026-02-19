@@ -48,6 +48,7 @@ export interface FeatureAccessCheck {
   enforced: boolean
   reason?: 'NO_SUBSCRIPTION' | 'FEATURE_NOT_INCLUDED' | 'SUBSCRIPTION_EXPIRED' | 'PAST_DUE_GRACE_EXCEEDED'
   tier?: SubscriptionTier | null
+  adminBypass?: boolean
 }
 
 /**
@@ -62,6 +63,7 @@ export interface UsageLimitCheck {
   limit?: number
   remaining?: number
   tier?: SubscriptionTier | null
+  adminBypass?: boolean
 }
 
 /**
@@ -104,6 +106,7 @@ export interface SubscriptionStatusResponse {
   isExpired: boolean
   canUpgrade: boolean
   canDowngrade: boolean
+  isAdmin?: boolean
 }
 
 // ============================================================================
@@ -192,6 +195,33 @@ function checkGracePeriod(
   return { inGrace: false, beyondGrace: false }
 }
 
+/**
+ * Check if a user is an admin
+ *
+ * Admins are identified by:
+ * - profiles.role = 'admin' OR
+ * - profiles.is_admin = true
+ *
+ * Admins bypass ALL subscription checks including the kill switch.
+ */
+export async function isAdmin(
+  supabase: ServiceClient,
+  userId: string
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('role, is_admin')
+    .eq('id', userId)
+    .single()
+
+  if (error || !data) {
+    return false
+  }
+
+  const profile = data as Record<string, unknown>
+  return profile.role === 'admin' || profile.is_admin === true
+}
+
 // ============================================================================
 // Main Functions
 // ============================================================================
@@ -210,6 +240,11 @@ export async function checkFeatureAccess(
   userId: string,
   featureKey: FeatureKey
 ): Promise<FeatureAccessCheck> {
+  // 0. Admin bypass — runs BEFORE kill switch check
+  if (await isAdmin(supabase, userId)) {
+    return { allowed: true, enforced: false, adminBypass: true }
+  }
+
   // a. Kill switch OFF → unlimited access
   if (!isSubscriptionEnabled()) {
     return { allowed: true, enforced: false }
@@ -286,6 +321,16 @@ export async function checkUsageLimit(
   userId: string,
   resource: ResourceKey
 ): Promise<UsageLimitCheck> {
+  // 0. Admin bypass — runs BEFORE kill switch check
+  if (await isAdmin(supabase, userId)) {
+    return {
+      allowed: true,
+      enforced: false,
+      unlimited: true,
+      adminBypass: true,
+    }
+  }
+
   // a. Kill switch OFF → unlimited access
   if (!isSubscriptionEnabled()) {
     return {
@@ -498,6 +543,34 @@ export async function getSubscriptionStatus(
   userId: string
 ): Promise<SubscriptionStatusResponse> {
   const subscriptionEnabled = isSubscriptionEnabled()
+
+  // Admin bypass → return "virtual Elite" with unlimited everything
+  if (await isAdmin(supabase, userId)) {
+    const eliteConfig = getTierConfig('elite')
+    const adminUsage = createEliteAdminUsage()
+    return {
+      subscriptionEnabled,
+      hasSubscription: true,
+      tier: 'elite',
+      billingPeriod: 'yearly',
+      status: 'active',
+      usage: adminUsage,
+      features: eliteConfig.features,
+      currentPeriodStart: null,
+      currentPeriodEnd: null,
+      cancelledAt: null,
+      cancellationEffectiveAt: null,
+      scheduledTierChange: null,
+      scheduledBillingPeriodChange: null,
+      isCancelled: false,
+      isPastDue: false,
+      isExpired: false,
+      canUpgrade: false,
+      canDowngrade: false,
+      isAdmin: true,
+    }
+  }
+
   const row = await getSubscriptionRow(supabase, userId)
 
   // Default response for no subscription
@@ -575,6 +648,31 @@ export async function getSubscriptionStatus(
  * Create empty usage summary (all zeros, unlimited)
  */
 function createEmptyUsage(): Record<ResourceKey, UsageSummary> {
+  const resources: ResourceKey[] = [
+    'applications',
+    'cvs',
+    'interviews',
+    'compensation',
+    'contracts',
+    'aiAvatarInterviews',
+  ]
+
+  return resources.reduce((acc, resource) => {
+    acc[resource] = {
+      used: 0,
+      limit: -1,
+      remaining: -1,
+      percentUsed: 0,
+      unlimited: true,
+    }
+    return acc
+  }, {} as Record<ResourceKey, UsageSummary>)
+}
+
+/**
+ * Create usage summary for admin users (all unlimited, zero used)
+ */
+function createEliteAdminUsage(): Record<ResourceKey, UsageSummary> {
   const resources: ResourceKey[] = [
     'applications',
     'cvs',

@@ -61,6 +61,7 @@ export interface SubscriptionStatusResponse {
   isExpired: boolean
   canUpgrade: boolean
   canDowngrade: boolean
+  isAdmin?: boolean
 }
 
 export interface TierRecommendation {
@@ -241,6 +242,11 @@ export function useSubscription() {
    */
   const canAccessFeature = useCallback(
     (featureKey: FeatureKey): boolean => {
+      // Admin bypass — always allowed
+      if (subscription?.isAdmin) {
+        return true
+      }
+
       // If subscription system is disabled, always allow
       if (!subscriptionEnabled) {
         return true
@@ -267,6 +273,17 @@ export function useSubscription() {
    */
   const usageFor = useCallback(
     (resource: ResourceKey): UsageSummary => {
+      // Admin bypass — always unlimited
+      if (subscription?.isAdmin) {
+        return {
+          used: 0,
+          limit: -1,
+          remaining: -1,
+          percentUsed: 0,
+          unlimited: true,
+        }
+      }
+
       if (!subscription?.usage) {
         return {
           used: 0,
@@ -482,6 +499,7 @@ export function useSubscription() {
     tier,
     billingPeriod,
     status,
+    isAdmin: subscription?.isAdmin ?? false,
 
     // Access checks
     canAccessFeature,
