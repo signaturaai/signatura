@@ -3,7 +3,10 @@
  *
  * TypeScript definitions for the AI Job Search Agent feature.
  * These types map to the job_postings table and related API structures.
+ * Includes Zod schemas for runtime validation of API inputs.
  */
+
+import { z } from 'zod'
 
 // ============================================================================
 // Database Types (match job_postings table)
@@ -395,3 +398,214 @@ export interface FeedbackStats {
   avoided_companies: string[]
   preferred_salary_range: SalaryRange | null
 }
+
+// ============================================================================
+// Pipeline Types (used between discovery and storage)
+// ============================================================================
+
+/**
+ * Raw job data from Gemini before scoring — no user-specific fields
+ */
+export interface DiscoveredJob {
+  title: string
+  company_name: string
+  company_logo_url?: string | null
+  description?: string | null
+  location?: string | null
+  work_type?: WorkType | null
+  experience_level?: ExperienceLevel | null
+  salary_min?: number | null
+  salary_max?: number | null
+  salary_currency?: string
+  required_skills: string[]
+  benefits: string[]
+  company_size?: CompanySize | null
+  source_url: string
+  source_platform?: SourcePlatform | null
+  posted_date?: string | null
+  content_hash?: string | null
+}
+
+/**
+ * Scoring output from the match algorithm
+ */
+export interface MatchResult {
+  totalScore: number // 0-100
+  breakdown: MatchBreakdown
+  matchReasons: string[] // Human-readable reasons for the match
+  passesThreshold: boolean // totalScore >= 75
+  isBorderline: boolean // totalScore >= 65 && totalScore < 75
+}
+
+/**
+ * AI-generated search intelligence for a user's preferences
+ */
+export interface SearchInsights {
+  keywords: string[]
+  recommendedBoards: Array<{
+    name: string
+    url: string
+    reason: string
+  }>
+  marketInsights: string
+  personalizedStrategy: string
+  generatedAt: string // ISO 8601 timestamp
+}
+
+/**
+ * API request to submit feedback on a job posting
+ */
+export interface FeedbackRequest {
+  jobPostingId: string
+  feedback: UserFeedback
+  reason?: FeedbackReason | null
+}
+
+/**
+ * Subset of preferences used for active job filtering
+ */
+export interface JobSearchFilters {
+  job_titles?: string[]
+  locations?: string[]
+  work_types?: WorkType[]
+  experience_level?: ExperienceLevel | null
+  salary_min?: number | null
+  salary_currency?: string
+  company_sizes?: CompanySize[]
+  required_skills?: string[]
+  avoid_companies?: string[]
+  avoid_keywords?: string[]
+}
+
+// ============================================================================
+// Zod Schemas (runtime validation for API inputs)
+// ============================================================================
+
+export const WorkTypeSchema = z.enum(['remote', 'hybrid', 'onsite', 'flexible'])
+
+export const JobPostingStatusSchema = z.enum(['new', 'viewed', 'applied', 'dismissed', 'liked'])
+
+export const UserFeedbackSchema = z.enum(['like', 'dislike', 'hide'])
+
+export const FeedbackReasonSchema = z.enum([
+  'Salary too low',
+  'Wrong location',
+  'Not interested in company',
+  'Skills mismatch',
+  'Other',
+])
+
+export const ExperienceLevelSchema = z.enum(['entry', 'mid', 'senior', 'executive'])
+
+export const CompanySizeSchema = z.enum(['1-10', '11-50', '51-200', '201-500', '501-1000', '1000+'])
+
+export const SourcePlatformSchema = z.enum([
+  'LinkedIn',
+  'Indeed',
+  'Glassdoor',
+  'Wellfound',
+  'Company Website',
+  'Other',
+])
+
+export const ExperienceYearsSchema = z.enum(['0-2', '2-5', '5-10', '10+'])
+
+export const SkillProficiencySchema = z.enum(['beginner', 'intermediate', 'expert'])
+
+export const EmailNotificationFrequencySchema = z.enum(['daily', 'weekly', 'monthly', 'disabled'])
+
+export const MatchBreakdownSchema = z.object({
+  skills: z.number(),
+  experience: z.number(),
+  location: z.number(),
+  salary: z.number(),
+  preferences: z.number(),
+  behavioral: z.number().optional(),
+})
+
+export const SkillRequirementSchema = z.object({
+  skill: z.string().min(1),
+  proficiency: SkillProficiencySchema,
+})
+
+/** Zod schema for JobPostingUpdateRequest */
+export const JobPostingUpdateRequestSchema = z.object({
+  status: JobPostingStatusSchema.optional(),
+  user_feedback: UserFeedbackSchema.nullish(),
+  feedback_reason: FeedbackReasonSchema.nullish(),
+  job_application_id: z.string().uuid().nullish(),
+})
+
+/** Zod schema for JobDiscoveryRequest */
+export const JobDiscoveryRequestSchema = z.object({
+  forceRefresh: z.boolean().optional(),
+  maxJobs: z.number().int().min(1).max(100).optional(),
+})
+
+/** Zod schema for JobSearchPreferencesUpdateRequest */
+export const JobSearchPreferencesUpdateRequestSchema = z.object({
+  is_active: z.boolean().optional(),
+  preferred_job_titles: z.array(z.string().min(1)).optional(),
+  preferred_locations: z.array(z.string().min(1)).optional(),
+  experience_years: ExperienceYearsSchema.nullish(),
+  required_skills: z.array(SkillRequirementSchema).optional(),
+  company_size_preferences: z.array(CompanySizeSchema).optional(),
+  remote_policy_preferences: z.array(WorkTypeSchema).optional(),
+  required_benefits: z.array(z.string().min(1)).optional(),
+  salary_min_override: z.number().min(0).nullish(),
+  salary_currency_override: z.string().length(3).nullish(),
+  avoid_companies: z.array(z.string().min(1)).optional(),
+  avoid_keywords: z.array(z.string().min(1)).optional(),
+  email_notification_frequency: EmailNotificationFrequencySchema.optional(),
+})
+
+/** Zod schema for FeedbackRequest */
+export const FeedbackRequestSchema = z.object({
+  jobPostingId: z.string().uuid(),
+  feedback: UserFeedbackSchema,
+  reason: FeedbackReasonSchema.nullish(),
+})
+
+/** Zod schema for JobSearchFilters */
+export const JobSearchFiltersSchema = z.object({
+  job_titles: z.array(z.string().min(1)).optional(),
+  locations: z.array(z.string().min(1)).optional(),
+  work_types: z.array(WorkTypeSchema).optional(),
+  experience_level: ExperienceLevelSchema.nullish(),
+  salary_min: z.number().min(0).nullish(),
+  salary_currency: z.string().length(3).optional(),
+  company_sizes: z.array(CompanySizeSchema).optional(),
+  required_skills: z.array(z.string().min(1)).optional(),
+  avoid_companies: z.array(z.string().min(1)).optional(),
+  avoid_keywords: z.array(z.string().min(1)).optional(),
+})
+
+/** Zod schema for DiscoveredJob */
+export const DiscoveredJobSchema = z.object({
+  title: z.string().min(1),
+  company_name: z.string().min(1),
+  company_logo_url: z.string().url().nullish(),
+  description: z.string().nullish(),
+  location: z.string().nullish(),
+  work_type: WorkTypeSchema.nullish(),
+  experience_level: ExperienceLevelSchema.nullish(),
+  salary_min: z.number().min(0).nullish(),
+  salary_max: z.number().min(0).nullish(),
+  salary_currency: z.string().length(3).optional(),
+  required_skills: z.array(z.string()),
+  benefits: z.array(z.string()),
+  company_size: CompanySizeSchema.nullish(),
+  source_url: z.string().url(),
+  source_platform: SourcePlatformSchema.nullish(),
+  posted_date: z.string().nullish(),
+  content_hash: z.string().nullish(),
+})
+
+/** Zod schema for MatchResult */
+export const MatchResultSchema = z.object({
+  totalScore: z.number().min(0).max(100),
+  breakdown: MatchBreakdownSchema,
+  matchReasons: z.array(z.string()),
+  passesThreshold: z.boolean(),
+  isBorderline: z.boolean(),
+})
