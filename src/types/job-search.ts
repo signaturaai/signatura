@@ -191,51 +191,114 @@ export interface LocationPreference {
   willingToRelocate: boolean
 }
 
+// ============================================================================
+// Job Search Preferences Types (match job_search_preferences table)
+// ============================================================================
+
+export type ExperienceYears = '0-2' | '2-5' | '5-10' | '10+'
+
+export type SkillProficiency = 'beginner' | 'intermediate' | 'expert'
+
+export type EmailNotificationFrequency = 'daily' | 'weekly' | 'monthly' | 'disabled'
+
 /**
- * User's job search preferences
- * Stored in a separate table or as part of candidate_profile
+ * Skill with proficiency level
  */
-export interface JobSearchPreferences {
+export interface SkillRequirement {
+  skill: string
+  proficiency: SkillProficiency
+}
+
+/**
+ * AI-learned implicit preferences from user feedback patterns
+ */
+export interface ImplicitPreferences {
+  salary_adjustment?: number // Percentage adjustment e.g., +10
+  remote_bias?: number // 0-1 preference for remote
+  preferred_industries?: string[]
+  avoided_industries?: string[]
+  preferred_company_sizes?: CompanySize[]
+  title_preferences?: string[]
+  [key: string]: unknown // Allow additional learned preferences
+}
+
+/**
+ * Feedback statistics for learning algorithm
+ */
+export interface PreferencesFeedbackStats {
+  total_likes: number
+  total_dislikes: number
+  total_hides: number
+  reasons: Record<string, number> // reason -> count
+}
+
+/**
+ * Database row structure for job_search_preferences table
+ */
+export interface JobSearchPreferencesRow {
   id: string
   user_id: string
+  is_active: boolean
 
-  // What they're looking for
-  target_titles: string[] // e.g., ["Senior Frontend Engineer", "Staff Engineer"]
-  target_industries: string[] // e.g., ["Fintech", "Healthcare", "SaaS"]
-  excluded_companies: string[] // Companies to never show
-  excluded_industries: string[] // e.g., ["Gambling", "Tobacco"]
+  // Explicit Search Filters
+  preferred_job_titles: string[]
+  preferred_locations: string[]
+  experience_years: ExperienceYears | null
+  required_skills: SkillRequirement[]
+  company_size_preferences: CompanySize[]
+  remote_policy_preferences: WorkType[]
+  required_benefits: string[]
+  salary_min_override: number | null
+  salary_currency_override: string | null
+  avoid_companies: string[]
+  avoid_keywords: string[]
 
-  // Location
-  location_preferences: LocationPreference[]
+  // AI-Generated Search Intelligence
+  ai_keywords: string[]
+  ai_recommended_boards: string[]
+  ai_market_insights: string | null
+  ai_personalized_strategy: string | null
+  ai_last_analysis_at: string | null
 
-  // Compensation
-  salary_expectations: SalaryRange | null
+  // Implicit/Learned Preferences
+  implicit_preferences: ImplicitPreferences
+  feedback_stats: PreferencesFeedbackStats
 
-  // Work style
-  preferred_work_types: WorkType[]
-  preferred_company_sizes: CompanySize[]
-
-  // Experience
-  min_experience_match: ExperienceLevel | null
-  max_experience_match: ExperienceLevel | null
-
-  // Must-haves vs nice-to-haves
-  required_benefits: string[] // e.g., ["Health insurance", "401k match"]
-  preferred_benefits: string[] // e.g., ["Unlimited PTO", "Remote stipend"]
-
-  // Notification preferences
-  email_notifications: boolean
-  notification_frequency: 'daily' | 'weekly' | 'instant'
-  notification_min_score: number // Only notify for jobs above this score (default 80)
-
-  // Status
-  is_active: boolean // Whether to run daily searches
+  // Notification Settings
+  email_notification_frequency: EmailNotificationFrequency
+  last_email_sent_at: string | null
   last_search_at: string | null
+  consecutive_zero_match_days: number
 
   // Timestamps
   created_at: string
   updated_at: string
 }
+
+/**
+ * API request to update job search preferences
+ */
+export interface JobSearchPreferencesUpdateRequest {
+  is_active?: boolean
+  preferred_job_titles?: string[]
+  preferred_locations?: string[]
+  experience_years?: ExperienceYears | null
+  required_skills?: SkillRequirement[]
+  company_size_preferences?: CompanySize[]
+  remote_policy_preferences?: WorkType[]
+  required_benefits?: string[]
+  salary_min_override?: number | null
+  salary_currency_override?: string | null
+  avoid_companies?: string[]
+  avoid_keywords?: string[]
+  email_notification_frequency?: EmailNotificationFrequency
+}
+
+/**
+ * Legacy interface for backwards compatibility
+ * @deprecated Use JobSearchPreferencesRow instead
+ */
+export interface JobSearchPreferences extends JobSearchPreferencesRow {}
 
 // ============================================================================
 // AI Insights Types
