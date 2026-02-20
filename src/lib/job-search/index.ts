@@ -18,3 +18,15 @@ export {
   generateContentHash,
   parseGeminiJobResponse,
 } from './discover-jobs'
+
+// Job matching/scoring
+export {
+  calculateMatchScore,
+  calculateSkillsScore,
+  calculateExperienceScore,
+  calculateLocationScore,
+  calculateSalaryScore,
+  calculatePreferenceScore,
+  generateMatchReasons,
+  SKILL_RELATIONSHIPS,
+} from './match-score'
