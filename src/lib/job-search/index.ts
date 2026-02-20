@@ -38,3 +38,11 @@ export {
   parseKeywordsResponse,
   parseBoardsResponse,
 } from './ai-insights'
+
+// Email notifications
+export {
+  sendJobMatchDigest,
+  sendBatchDigests,
+  buildEmailHtml,
+} from './email-notifications'
+export type { EmailJob, SendDigestResult } from './email-notifications'
