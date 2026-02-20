@@ -30,3 +30,11 @@ export {
   generateMatchReasons,
   SKILL_RELATIONSHIPS,
 } from './match-score'
+
+// AI insights
+export {
+  generateSearchInsights,
+  shouldRefreshInsights,
+  parseKeywordsResponse,
+  parseBoardsResponse,
+} from './ai-insights'
