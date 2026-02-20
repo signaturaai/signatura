@@ -336,6 +336,45 @@ export interface MarketInsights {
   last_updated: string
 }
 
+// ============================================================================
+// Profile Job Search Fields (added to profiles table for Job Search Agent)
+// ============================================================================
+
+/**
+ * Cached AI analysis of the user's base CV
+ */
+export interface GeneralCvAnalysis {
+  skills: string[]
+  experience_years: number
+  industries: string[]
+  seniority_level: ExperienceLevel | string
+  key_achievements?: string[]
+  education?: string[]
+  certifications?: string[]
+}
+
+/**
+ * Structured location preferences on profile
+ */
+export interface ProfileLocationPreferences {
+  city?: string
+  remote_policy?: WorkType
+}
+
+/**
+ * Job search related fields on the profiles table
+ */
+export interface ProfileJobSearchFields {
+  preferred_job_titles: string[]
+  preferred_industries: string[]
+  minimum_salary_expectation: number | null
+  salary_currency: string
+  location_preferences: ProfileLocationPreferences
+  company_size_preferences: CompanySize[]
+  career_goals: string | null
+  general_cv_analysis: GeneralCvAnalysis | null
+}
+
 /**
  * Feedback aggregation for learning
  */
