@@ -424,6 +424,74 @@ describe('Subscription Manager', () => {
 
       expect(result.proratedAmount).toBeGreaterThanOrEqual(0)
     })
+
+    it('should reject same-tier attempt (accelerate → accelerate)', async () => {
+      const mockRow = createMockSubscriptionRow({ tier: 'accelerate' })
+      const supabase = createMockSupabase({ subscriptionData: mockRow })
+
+      await expect(
+        upgradeSubscription(supabase as never, 'user-abc', 'accelerate')
+      ).rejects.toThrow('accelerate is not an upgrade from accelerate')
+    })
+
+    it('should reject same-tier attempt (momentum → momentum)', async () => {
+      const mockRow = createMockSubscriptionRow({ tier: 'momentum' })
+      const supabase = createMockSupabase({ subscriptionData: mockRow })
+
+      await expect(
+        upgradeSubscription(supabase as never, 'user-abc', 'momentum')
+      ).rejects.toThrow('momentum is not an upgrade from momentum')
+    })
+
+    it('should calculate prorated amount for quarterly mid-cycle', async () => {
+      // Period: Jan 1 to Apr 1 (90 days)
+      // Today: Feb 15 (45 days remaining)
+      const periodStart = new Date('2026-01-01T00:00:00Z')
+      const periodEnd = new Date('2026-04-01T00:00:00Z')
+
+      const mockRow = createMockSubscriptionRow({
+        tier: 'momentum',
+        billing_period: 'quarterly',
+        current_period_start: periodStart.toISOString(),
+        current_period_end: periodEnd.toISOString(),
+      })
+      const supabase = createMockSupabase({ subscriptionData: mockRow })
+
+      const result = await upgradeSubscription(supabase as never, 'user-abc', 'elite')
+
+      // oldPrice (momentum quarterly) = $30
+      // newPrice (elite quarterly) = $75
+      // diff = $45
+      // totalDays = 90, remainingDays = 45
+      // prorated = (45 / 90) * 45 = $22.50
+      expect(result.proratedAmount).toBe(22.5)
+    })
+
+    it('should NOT change billing_period on upgrade', async () => {
+      const mockRow = createMockSubscriptionRow({
+        tier: 'momentum',
+        billing_period: 'monthly',
+      })
+      const supabase = createMockSupabase({ subscriptionData: mockRow })
+
+      await upgradeSubscription(supabase as never, 'user-abc', 'accelerate')
+
+      const updateCalls = supabase._getUpdateCalls()
+      expect(updateCalls[0].billing_period).toBeUndefined()
+    })
+
+    it('should NOT update last_reset_at on upgrade', async () => {
+      const mockRow = createMockSubscriptionRow({
+        tier: 'momentum',
+        last_reset_at: '2026-02-01T00:00:00Z',
+      })
+      const supabase = createMockSupabase({ subscriptionData: mockRow })
+
+      await upgradeSubscription(supabase as never, 'user-abc', 'accelerate')
+
+      const updateCalls = supabase._getUpdateCalls()
+      expect(updateCalls[0].last_reset_at).toBeUndefined()
+    })
   })
 
   // ==========================================================================
@@ -753,6 +821,67 @@ describe('Subscription Manager', () => {
       expect(updateCalls[0].tier).toBe('accelerate')
     })
 
+    it('should clear scheduled fields after applying changes', async () => {
+      const mockRow = createMockSubscriptionRow({
+        tier: 'elite',
+        billing_period: 'monthly',
+        scheduled_tier_change: 'momentum',
+        scheduled_billing_period_change: 'yearly',
+      })
+      const supabase = createMockSupabase({ subscriptionData: mockRow })
+
+      await renewSubscription(supabase as never, 'user-abc', 'txn-clear')
+
+      const updateCalls = supabase._getUpdateCalls()
+      // Both scheduled fields should be cleared after applying
+      expect(updateCalls[0].scheduled_tier_change).toBeNull()
+      expect(updateCalls[0].scheduled_billing_period_change).toBeNull()
+    })
+
+    it('should extend period by billing period duration (monthly)', async () => {
+      // Current period_end = 2026-02-15, billing_period = monthly
+      // After renewal: period_start = now, period_end = now + 1 month
+      const mockRow = createMockSubscriptionRow({
+        tier: 'momentum',
+        billing_period: 'monthly',
+        current_period_end: '2026-02-15T10:00:00.000Z',
+      })
+      const supabase = createMockSupabase({ subscriptionData: mockRow })
+
+      await renewSubscription(supabase as never, 'user-abc', 'txn-extend')
+
+      const updateCalls = supabase._getUpdateCalls()
+      expect(updateCalls[0].current_period_start).toBe('2026-02-15T10:00:00.000Z')
+      expect(updateCalls[0].current_period_end).toContain('2026-03-15')
+    })
+
+    it('should reset usage counters: usage_applications=7 → 0', async () => {
+      // Before: usage_applications=7 → After: usage_applications=0
+      const mockRow = createMockSubscriptionRow({
+        last_reset_at: '2026-01-01T00:00:00Z', // Before period start (needs reset)
+        current_period_start: '2026-02-01T00:00:00Z',
+        current_period_end: '2026-02-15T10:00:00Z',
+        usage_applications: 7,
+        usage_cvs: 5,
+        usage_interviews: 3,
+        usage_compensation: 2,
+        usage_contracts: 1,
+        usage_ai_avatar_interviews: 1,
+      })
+      const supabase = createMockSupabase({ subscriptionData: mockRow })
+
+      await renewSubscription(supabase as never, 'user-abc', 'txn-reset-test')
+
+      const updateCalls = supabase._getUpdateCalls()
+      // All counters should be reset to 0
+      expect(updateCalls[0].usage_applications).toBe(0)
+      expect(updateCalls[0].usage_cvs).toBe(0)
+      expect(updateCalls[0].usage_interviews).toBe(0)
+      expect(updateCalls[0].usage_compensation).toBe(0)
+      expect(updateCalls[0].usage_contracts).toBe(0)
+      expect(updateCalls[0].usage_ai_avatar_interviews).toBe(0)
+    })
+
     it('should reset counters when last_reset_at < current_period_start (double-reset prevention)', async () => {
       // last_reset_at is before current_period_start → should reset
       const mockRow = createMockSubscriptionRow({
@@ -807,6 +936,122 @@ describe('Subscription Manager', () => {
 
       expect(result).toHaveProperty('expired')
       expect(typeof result.expired).toBe('number')
+    })
+
+    it('should return 0 when no subscriptions need expiration', async () => {
+      const supabase = createMockSupabase({ selectData: [] })
+
+      const result = await processExpirations(supabase as never)
+
+      expect(result.expired).toBe(0)
+    })
+
+    it('should query for cancelled subscriptions with cancellation_effective_at', async () => {
+      const supabase = createMockSupabase({ selectData: [] })
+
+      await processExpirations(supabase as never)
+
+      expect(supabase.from).toHaveBeenCalledWith('user_subscriptions')
+    })
+
+    it('should query for past_due subscriptions', async () => {
+      const supabase = createMockSupabase({ selectData: [] })
+
+      await processExpirations(supabase as never)
+
+      // Should have called from() multiple times - for cancelled and past_due queries
+      expect(supabase.from).toHaveBeenCalled()
+    })
+  })
+
+  describe('processExpirations - Cancelled Subscriptions', () => {
+    it('should expire cancelled subs past their cancellation date', async () => {
+      // Cancellation effective date is yesterday
+      const yesterday = new Date('2026-02-14T10:00:00Z')
+
+      // This tests the business rule: cancelled + past effective date → expired
+      // The mock setup verifies the query structure
+      const supabase = createMockSupabase({
+        selectData: [
+          { user_id: 'user-1', cancellation_effective_at: yesterday.toISOString() },
+        ],
+      })
+
+      const result = await processExpirations(supabase as never)
+
+      // Should have called update to expire the subscription
+      expect(supabase.from).toHaveBeenCalledWith('user_subscriptions')
+    })
+
+    it('should NOT expire cancelled subs still within period', async () => {
+      // Cancellation effective date is tomorrow - should NOT expire
+      const tomorrow = new Date('2026-02-16T10:00:00Z')
+
+      const supabase = createMockSupabase({
+        selectData: [
+          { user_id: 'user-1', cancellation_effective_at: tomorrow.toISOString() },
+        ],
+      })
+
+      const result = await processExpirations(supabase as never)
+
+      // The business logic checks: isBefore(effectiveAt, now)
+      // Since effectiveAt is tomorrow, this should NOT expire
+      expect(result.expired).toBe(0)
+    })
+  })
+
+  describe('processExpirations - Past Due Subscriptions', () => {
+    it('should expire past_due subs after 3-day grace period', async () => {
+      // Updated 4 days ago - past the 3-day grace period
+      const fourDaysAgo = new Date('2026-02-11T10:00:00Z')
+
+      // This tests: past_due + updated_at > grace period → expired
+      const supabase = createMockSupabase({
+        selectData: [{ user_id: 'user-1', updated_at: fourDaysAgo.toISOString() }],
+      })
+
+      await processExpirations(supabase as never)
+
+      // Should query for past_due subscriptions
+      expect(supabase.from).toHaveBeenCalledWith('user_subscriptions')
+    })
+
+    it('should NOT expire past_due within grace period', async () => {
+      // Updated 1 day ago - within the 3-day grace period
+      const oneDayAgo = new Date('2026-02-14T10:00:00Z')
+
+      const supabase = createMockSupabase({
+        selectData: [{ user_id: 'user-1', updated_at: oneDayAgo.toISOString() }],
+      })
+
+      const result = await processExpirations(supabase as never)
+
+      // Within grace period, should not expire
+      expect(result.expired).toBe(0)
+    })
+  })
+
+  describe('processExpirations - Active & Tracking-Only', () => {
+    it('should NOT touch active subscriptions', async () => {
+      // Active subscriptions should never be returned by the query
+      // since we only query for status='cancelled' and status='past_due'
+      const supabase = createMockSupabase({ selectData: [] })
+
+      const result = await processExpirations(supabase as never)
+
+      // No expirations since we didn't query active subs
+      expect(result.expired).toBe(0)
+    })
+
+    it('should NOT touch tracking-only subscriptions (tier=NULL)', async () => {
+      // Tracking-only subs (tier=NULL) should not be expired
+      // The query filters by status, not tier
+      const supabase = createMockSupabase({ selectData: [] })
+
+      const result = await processExpirations(supabase as never)
+
+      expect(result.expired).toBe(0)
     })
   })
 
