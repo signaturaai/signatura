@@ -97,6 +97,33 @@ describe('Analytics (Phase 14.1)', () => {
       expect(result.monthsTracked).toBe(0)
     })
 
+    it('1 month of data → exact values, monthsTracked=1', async () => {
+      const supabase = createMockSupabase([
+        createSnapshot({
+          month: '2026-01-01',
+          usage_applications: 5,
+          usage_cvs: 3,
+          usage_interviews: 2,
+          usage_compensation: 1,
+          usage_contracts: 0,
+          usage_ai_avatar_interviews: 1,
+        }),
+      ])
+
+      const result = await getUsageAverages(
+        supabase as unknown as Parameters<typeof getUsageAverages>[0],
+        'user-123'
+      )
+
+      expect(result.monthsTracked).toBe(1)
+      expect(result.applications).toBe(5)
+      expect(result.cvs).toBe(3)
+      expect(result.interviews).toBe(2)
+      expect(result.compensation).toBe(1)
+      expect(result.contracts).toBe(0)
+      expect(result.aiAvatarInterviews).toBe(1)
+    })
+
     it('3 months → correct averages rounded to 1 decimal', async () => {
       const supabase = createMockSupabase([
         createSnapshot({
@@ -157,6 +184,99 @@ describe('Analytics (Phase 14.1)', () => {
       // (1+2+4)/3 = 2.333...
       expect(result.applications).toBe(2.3)
     })
+
+    it('3 months with specific values → correct averages per spec', async () => {
+      // As per RALPH Loop 5 spec:
+      // Month 1: apps=10, cvs=8, interviews=4
+      // Month 2: apps=12, cvs=6, interviews=5
+      // Month 3: apps=11, cvs=7, interviews=6
+      const supabase = createMockSupabase([
+        createSnapshot({
+          month: '2026-01-01',
+          usage_applications: 10,
+          usage_cvs: 8,
+          usage_interviews: 4,
+        }),
+        createSnapshot({
+          month: '2026-02-01',
+          usage_applications: 12,
+          usage_cvs: 6,
+          usage_interviews: 5,
+        }),
+        createSnapshot({
+          month: '2026-03-01',
+          usage_applications: 11,
+          usage_cvs: 7,
+          usage_interviews: 6,
+        }),
+      ])
+
+      const result = await getUsageAverages(
+        supabase as unknown as Parameters<typeof getUsageAverages>[0],
+        'user-123'
+      )
+
+      expect(result.monthsTracked).toBe(3)
+      expect(result.applications).toBe(11) // (10+12+11)/3 = 11.0
+      expect(result.cvs).toBe(7)            // (8+6+7)/3 = 7.0
+      expect(result.interviews).toBe(5)     // (4+5+6)/3 = 5.0
+    })
+
+    it('rounds to 1 decimal place: 7,8,6 → 7.0 and 3,4 → 3.5', async () => {
+      // Test 7,8,6 → Average = 7.0 (not 7.000000)
+      const supabase1 = createMockSupabase([
+        createSnapshot({ month: '2026-01-01', usage_applications: 7 }),
+        createSnapshot({ month: '2026-02-01', usage_applications: 8 }),
+        createSnapshot({ month: '2026-03-01', usage_applications: 6 }),
+      ])
+
+      const result1 = await getUsageAverages(
+        supabase1 as unknown as Parameters<typeof getUsageAverages>[0],
+        'user-123'
+      )
+      expect(result1.applications).toBe(7) // (7+8+6)/3 = 7.0
+
+      // Test 3,4 → Average = 3.5
+      const supabase2 = createMockSupabase([
+        createSnapshot({ month: '2026-01-01', usage_applications: 3 }),
+        createSnapshot({ month: '2026-02-01', usage_applications: 4 }),
+      ])
+
+      const result2 = await getUsageAverages(
+        supabase2 as unknown as Parameters<typeof getUsageAverages>[0],
+        'user-123'
+      )
+      expect(result2.applications).toBe(3.5) // (3+4)/2 = 3.5
+    })
+
+    it('includes AI avatar interviews: 2,3 → Average: 2.5', async () => {
+      const supabase = createMockSupabase([
+        createSnapshot({ month: '2026-01-01', usage_ai_avatar_interviews: 2 }),
+        createSnapshot({ month: '2026-02-01', usage_ai_avatar_interviews: 3 }),
+      ])
+
+      const result = await getUsageAverages(
+        supabase as unknown as Parameters<typeof getUsageAverages>[0],
+        'user-123'
+      )
+
+      expect(result.aiAvatarInterviews).toBe(2.5) // (2+3)/2 = 2.5
+    })
+
+    it('handles months with zero usage: 10,0,5 → Average: 5.0', async () => {
+      const supabase = createMockSupabase([
+        createSnapshot({ month: '2026-01-01', usage_applications: 10 }),
+        createSnapshot({ month: '2026-02-01', usage_applications: 0 }),
+        createSnapshot({ month: '2026-03-01', usage_applications: 5 }),
+      ])
+
+      const result = await getUsageAverages(
+        supabase as unknown as Parameters<typeof getUsageAverages>[0],
+        'user-123'
+      )
+
+      expect(result.applications).toBe(5) // (10+0+5)/3 = 5.0
+    })
   })
 
   // ==========================================================================
@@ -164,6 +284,33 @@ describe('Analytics (Phase 14.1)', () => {
   // ==========================================================================
 
   describe('getRecommendation', () => {
+    it('zero usage → Momentum (lowest tier, good starting point)', () => {
+      const averages = createAverages({
+        applications: 0,
+        cvs: 0,
+        interviews: 0,
+        compensation: 0,
+        contracts: 0,
+        aiAvatarInterviews: 0,
+        monthsTracked: 0,
+      })
+      const result = getRecommendation(averages)
+
+      expect(result.recommendedTier).toBe('momentum')
+    })
+
+    it('low usage fitting Momentum limits → Momentum', () => {
+      const averages = createAverages({
+        applications: 5,
+        cvs: 4,
+        interviews: 3,
+        monthsTracked: 3,
+      })
+      const result = getRecommendation(averages)
+
+      expect(result.recommendedTier).toBe('momentum')
+    })
+
     it('avg 5 apps/mo → Momentum', () => {
       const averages = createAverages({
         applications: 5,
@@ -214,6 +361,132 @@ describe('Analytics (Phase 14.1)', () => {
       expect(result.recommendedTier).toBe('elite')
     })
 
+    it('mixed resources — highest needed tier wins', () => {
+      // apps=5 (fits Momentum), cvs=5 (fits Momentum), ai_avatar=3 (needs Accelerate)
+      const averages = createAverages({
+        applications: 5,
+        cvs: 5,
+        aiAvatarInterviews: 3, // Momentum has 0, Accelerate has 5
+        monthsTracked: 3,
+      })
+      const result = getRecommendation(averages)
+
+      // Recommended: 'accelerate' (driven by AI avatar need)
+      expect(result.recommendedTier).toBe('accelerate')
+    })
+
+    it('recommended billing period is always yearly (best value)', () => {
+      // Any input → recommendedBillingPeriod = 'yearly'
+      const r1 = getRecommendation(createAverages({ monthsTracked: 0 }))
+      expect(r1.recommendedBillingPeriod).toBe('yearly')
+
+      const r2 = getRecommendation(createAverages({ applications: 10, monthsTracked: 3 }))
+      expect(r2.recommendedBillingPeriod).toBe('yearly')
+
+      const r3 = getRecommendation(createAverages({ applications: 20, monthsTracked: 6 }))
+      expect(r3.recommendedBillingPeriod).toBe('yearly')
+    })
+
+    it('comparison object has all 6 resources', () => {
+      const averages = createAverages({
+        applications: 5,
+        cvs: 3,
+        interviews: 2,
+        compensation: 1,
+        contracts: 1,
+        aiAvatarInterviews: 0,
+        monthsTracked: 3,
+      })
+      const result = getRecommendation(averages)
+
+      // Should have comparison for all 6 resources
+      expect(result.comparison).toHaveProperty('applications')
+      expect(result.comparison).toHaveProperty('cvs')
+      expect(result.comparison).toHaveProperty('interviews')
+      expect(result.comparison).toHaveProperty('compensation')
+      expect(result.comparison).toHaveProperty('contracts')
+      expect(result.comparison).toHaveProperty('aiAvatarInterviews')
+
+      // Check structure of applications comparison
+      expect(result.comparison.applications).toHaveProperty('average')
+      expect(result.comparison.applications).toHaveProperty('momentumLimit')
+      expect(result.comparison.applications).toHaveProperty('accelerateLimit')
+      expect(result.comparison.applications).toHaveProperty('eliteLimit')
+      expect(result.comparison.applications).toHaveProperty('fitsIn')
+
+      // Check limits (using actual property names)
+      expect(result.comparison.applications.momentumLimit).toBe(8)
+      expect(result.comparison.applications.accelerateLimit).toBe(15)
+      expect(result.comparison.applications.eliteLimit).toBe(-1)
+
+      // Check AI avatar limits
+      expect(result.comparison.aiAvatarInterviews.momentumLimit).toBe(0)
+      expect(result.comparison.aiAvatarInterviews.accelerateLimit).toBe(5)
+      expect(result.comparison.aiAvatarInterviews.eliteLimit).toBe(10)
+    })
+
+    it('fitsIn shows lowest tier that covers each resource', () => {
+      // apps avg=5 → fitsIn='momentum'
+      const r1 = getRecommendation(createAverages({ applications: 5, monthsTracked: 1 }))
+      expect(r1.comparison.applications.fitsIn).toBe('momentum')
+
+      // apps avg=10 → fitsIn='accelerate'
+      const r2 = getRecommendation(createAverages({ applications: 10, monthsTracked: 1 }))
+      expect(r2.comparison.applications.fitsIn).toBe('accelerate')
+
+      // apps avg=20 → fitsIn='elite'
+      const r3 = getRecommendation(createAverages({ applications: 20, monthsTracked: 1 }))
+      expect(r3.comparison.applications.fitsIn).toBe('elite')
+
+      // ai_avatar avg=0 → fitsIn='momentum'
+      const r4 = getRecommendation(createAverages({ aiAvatarInterviews: 0, monthsTracked: 1 }))
+      expect(r4.comparison.aiAvatarInterviews.fitsIn).toBe('momentum')
+
+      // ai_avatar avg=3 → fitsIn='accelerate'
+      const r5 = getRecommendation(createAverages({ aiAvatarInterviews: 3, monthsTracked: 1 }))
+      expect(r5.comparison.aiAvatarInterviews.fitsIn).toBe('accelerate')
+    })
+
+    it('reason text is non-empty string with length > 10', () => {
+      const r1 = getRecommendation(createAverages({ monthsTracked: 0 }))
+      expect(typeof r1.reason).toBe('string')
+      expect(r1.reason.length).toBeGreaterThan(10)
+
+      const r2 = getRecommendation(createAverages({ applications: 12, monthsTracked: 3 }))
+      expect(r2.reason.length).toBeGreaterThan(10)
+    })
+
+    it('0 months data → reason is introductory (starting point)', () => {
+      const result = getRecommendation(createAverages({ monthsTracked: 0 }))
+      const reasonLower = result.reason.toLowerCase()
+      expect(
+        reasonLower.includes('start') ||
+        reasonLower.includes('recommend') ||
+        reasonLower.includes('begin') ||
+        reasonLower.includes('new')
+      ).toBe(true)
+    })
+
+    it('1 month data → reason references first month', () => {
+      const result = getRecommendation(createAverages({ applications: 5, monthsTracked: 1 }))
+      const reasonLower = result.reason.toLowerCase()
+      expect(
+        reasonLower.includes('first') ||
+        reasonLower.includes('month') ||
+        reasonLower.includes('1')
+      ).toBe(true)
+    })
+
+    it('multiple months → reason references the count', () => {
+      const result = getRecommendation(createAverages({ applications: 10, monthsTracked: 6 }))
+      const reasonLower = result.reason.toLowerCase()
+      expect(
+        reasonLower.includes('6') ||
+        reasonLower.includes('months') ||
+        reasonLower.includes('average')
+      ).toBe(true)
+    })
+
     it('reason text is non-empty for all scenarios', () => {
       // Zero months
       const r1 = getRecommendation(createAverages({ monthsTracked: 0 }))
@@ -233,6 +506,17 @@ describe('Analytics (Phase 14.1)', () => {
     })
 
     describe('Savings object has correct prices', () => {
+      it('savings object has correct structure for recommended tier', () => {
+        const result = getRecommendation(createAverages({ applications: 10, monthsTracked: 1 }))
+        // Recommended tier is accelerate, verify correct prices
+        expect(result.recommendedTier).toBe('accelerate')
+        expect(result.savings.monthly).toBe(18)
+        expect(result.savings.quarterly).toBe(45)
+        expect(result.savings.yearly).toBe(149)
+        // Best value is always yearly (reflected in recommendedBillingPeriod)
+        expect(result.recommendedBillingPeriod).toBe('yearly')
+      })
+
       it('Momentum: $12/mo, $30/qtr, $99/yr', () => {
         const averages = createAverages({ applications: 5, monthsTracked: 1 })
         const result = getRecommendation(averages)
