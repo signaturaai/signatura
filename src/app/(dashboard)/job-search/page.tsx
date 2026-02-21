@@ -16,15 +16,14 @@ import { useRouter } from 'next/navigation'
 import { AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle, Button, Input } from '@/components/ui'
 import { ToastProvider, useToast } from '@/components/ui'
-import { JobMatchCard } from '@/components/job-search'
+import { JobMatchCard, AdvancedFilters } from '@/components/job-search'
+import type { FilterState } from '@/components/job-search'
 import {
   Search,
   Settings2,
   RefreshCw,
   Sparkles,
   ExternalLink,
-  ChevronDown,
-  ChevronUp,
   Loader2,
   Target,
   Clipboard,
@@ -34,7 +33,6 @@ import {
   Plus,
   Bell,
   Inbox,
-  Filter,
   Briefcase,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -342,6 +340,44 @@ function JobSearchPageContent() {
   }, [showToast])
 
   // Handle apply
+  // Handle apply filters
+  const handleApplyFilters = useCallback((filters: FilterState) => {
+    // For now, just log the filters - in a full implementation,
+    // this would filter the jobMatches or trigger a new search
+    console.log('Applying filters:', filters)
+    showToast('Filters applied', 'success')
+  }, [showToast])
+
+  // Handle save preferences
+  const handleSavePreferences = useCallback(async (filters: FilterState) => {
+    try {
+      const response = await fetch('/api/job-search/preferences', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          preferred_job_titles: filters.preferred_job_titles,
+          preferred_locations: filters.preferred_locations,
+          experience_years: filters.experience_years,
+          required_skills: filters.required_skills,
+          company_size_preferences: filters.company_size_preferences,
+          remote_policy_preferences: filters.remote_policy_preferences,
+          required_benefits: filters.required_benefits,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to save preferences')
+      }
+
+      const data = await response.json()
+      setPreferences(data.preferences)
+      showToast('Preferences saved successfully', 'success')
+    } catch (error) {
+      console.error('Save preferences error:', error)
+      showToast('Failed to save preferences', 'error')
+    }
+  }, [showToast])
+
   const handleApply = useCallback(async (jobId: string) => {
     setActioningJobId(jobId)
     try {
@@ -560,50 +596,13 @@ function JobSearchPageContent() {
       </Card>
 
       {/* Advanced Filters (Collapsible) */}
-      <Card>
-        <button
-          onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-          className="w-full p-4 flex items-center justify-between hover:bg-muted/50 transition-colors rounded-lg"
-        >
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-text-secondary" />
-            <span className="font-medium text-text-primary">Advanced Filters</span>
-          </div>
-          {showAdvancedFilters ? (
-            <ChevronUp className="h-4 w-4 text-text-secondary" />
-          ) : (
-            <ChevronDown className="h-4 w-4 text-text-secondary" />
-          )}
-        </button>
-        {showAdvancedFilters && (
-          <CardContent className="border-t pt-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="text-sm font-medium text-text-primary mb-1.5 block">
-                  Location
-                </label>
-                <Input placeholder="e.g., San Francisco, Remote" />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-text-primary mb-1.5 block">
-                  Minimum Salary
-                </label>
-                <Input type="number" placeholder="e.g., 100000" />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-text-primary mb-1.5 block">
-                  Work Type
-                </label>
-                <Input placeholder="e.g., Remote, Hybrid" />
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 mt-4">
-              <Button variant="ghost" size="sm">Reset</Button>
-              <Button size="sm">Apply Filters</Button>
-            </div>
-          </CardContent>
-        )}
-      </Card>
+      <AdvancedFilters
+        preferences={preferences}
+        onApplyFilters={handleApplyFilters}
+        onSavePreferences={handleSavePreferences}
+        isCollapsed={!showAdvancedFilters}
+        onToggleCollapse={() => setShowAdvancedFilters(!showAdvancedFilters)}
+      />
 
       {/* AI-Powered Job Matches */}
       <div className="space-y-4">

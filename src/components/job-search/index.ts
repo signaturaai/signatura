@@ -6,3 +6,6 @@
 
 export { JobMatchCard } from './JobMatchCard'
 export type { JobMatchCardProps, JobPosting } from './JobMatchCard'
+
+export { AdvancedFilters } from './AdvancedFilters'
+export type { AdvancedFiltersProps, FilterState } from './AdvancedFilters'
