@@ -49,9 +49,9 @@ export default async function DashboardLayout({
   // Try to get user profile from user_profiles table
   const { data: profile } = await supabase
     .from('user_profiles')
-    .select('full_name, profile_image, current_streak')
+    .select('full_name, profile_image, current_streak, role')
     .eq('id', user.id)
-    .single() as { data: { full_name: string | null; profile_image: string | null; current_streak: number } | null }
+    .single() as { data: { full_name: string | null; profile_image: string | null; current_streak: number; role: 'candidate' | 'recruiter' | 'admin' | null } | null }
 
   // Also try profiles table (used by signup) as fallback
   let profileFromProfiles = null
@@ -71,6 +71,7 @@ export default async function DashboardLayout({
   const userName = getDisplayName(combinedProfile, user)
   const streak = (profile?.current_streak as number) || 0
   const profileImage = profile?.profile_image || profileFromProfiles?.avatar_url || null
+  const userRole = profile?.role || 'candidate'
 
   return (
     <div className="min-h-screen bg-background">
@@ -81,6 +82,7 @@ export default async function DashboardLayout({
           email: user.email || '',
           image: profileImage,
         }}
+        userRole={userRole}
       />
 
       {/* Main content */}

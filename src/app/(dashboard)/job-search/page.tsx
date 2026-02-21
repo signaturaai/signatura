@@ -18,6 +18,8 @@ import { Card, CardContent, CardHeader, CardTitle, Button, Input } from '@/compo
 import { ToastProvider, useToast } from '@/components/ui'
 import { JobMatchCard, AdvancedFilters } from '@/components/job-search'
 import type { FilterState } from '@/components/job-search'
+import { UsageBadge, UpgradePrompt } from '@/components/subscription'
+import { useSubscription } from '@/hooks/useSubscription'
 import {
   Search,
   Settings2,
@@ -131,6 +133,13 @@ function JobSearchPageContent() {
   const { showToast } = useToast()
   const supabase = createClient()
 
+  // Subscription state
+  const {
+    subscriptionEnabled,
+    isAdmin,
+    checkAndConsume,
+  } = useSubscription()
+
   // Data state
   const [preferences, setPreferences] = useState<JobSearchPreferencesRow | null>(null)
   const [jobMatches, setJobMatches] = useState<JobMatch[]>([])
@@ -143,6 +152,7 @@ function JobSearchPageContent() {
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
   const [showPreferencesModal, setShowPreferencesModal] = useState(false)
   const [newKeyword, setNewKeyword] = useState('')
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false)
 
   // Fetch data on mount
   useEffect(() => {
@@ -190,6 +200,16 @@ function JobSearchPageContent() {
   const handleSearchNow = useCallback(async () => {
     setIsSearching(true)
     try {
+      // Check subscription usage first (unless admin or subscription disabled)
+      const { check, increment } = await checkAndConsume('applications')
+
+      // If subscription is enabled, enforced, and not allowed — show upgrade prompt
+      if (check.enforced && !check.allowed && !isAdmin) {
+        setShowUpgradePrompt(true)
+        setIsSearching(false)
+        return
+      }
+
       const response = await fetch('/api/job-search/discover', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -206,6 +226,9 @@ function JobSearchPageContent() {
         }
         return
       }
+
+      // Increment usage counter after successful search
+      await increment()
 
       showToast(`Found ${data.matched} new matches from ${data.discovered} jobs`, 'success')
 
@@ -226,7 +249,7 @@ function JobSearchPageContent() {
     } finally {
       setIsSearching(false)
     }
-  }, [showToast])
+  }, [showToast, checkAndConsume, isAdmin])
 
   // Handle Refresh Insights
   const handleRefreshInsights = useCallback(async () => {
@@ -604,6 +627,13 @@ function JobSearchPageContent() {
         onToggleCollapse={() => setShowAdvancedFilters(!showAdvancedFilters)}
       />
 
+      {/* Upgrade Prompt Modal */}
+      <UpgradePrompt
+        resource="applications"
+        open={showUpgradePrompt}
+        onClose={() => setShowUpgradePrompt(false)}
+      />
+
       {/* AI-Powered Job Matches */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -616,23 +646,27 @@ function JobSearchPageContent() {
               </span>
             )}
           </h2>
-          <Button
-            onClick={handleSearchNow}
-            disabled={isSearching}
-            className="flex items-center gap-2"
-          >
-            {isSearching ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Searching...
-              </>
-            ) : (
-              <>
-                <Search className="h-4 w-4" />
-                Search Now
-              </>
-            )}
-          </Button>
+          <div className="flex items-center gap-3">
+            {/* Usage badge - only visible when subscription enabled */}
+            <UsageBadge resource="applications" />
+            <Button
+              onClick={handleSearchNow}
+              disabled={isSearching}
+              className="flex items-center gap-2"
+            >
+              {isSearching ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Searching...
+                </>
+              ) : (
+                <>
+                  <Search className="h-4 w-4" />
+                  Search Now
+                </>
+              )}
+            </Button>
+          </div>
         </div>
 
         {/* Job Cards */}

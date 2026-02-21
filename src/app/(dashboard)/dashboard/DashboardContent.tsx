@@ -33,6 +33,7 @@ import {
 import { cn } from '@/lib/utils'
 import { mockActivityItems, mockQuickActions } from '@/lib/data/mockData'
 import type { ApplicationStatus } from '@/lib/types/dashboard'
+import { JobMatchesCard } from '@/components/dashboard/JobMatchesCard'
 
 interface DashboardMetrics {
   totalApplications: number
@@ -354,6 +355,9 @@ export function DashboardContent({ userName, applications, metrics }: DashboardC
 
         {/* Right Column - Activity & Actions */}
         <div className="space-y-6">
+          {/* Job Matches Summary */}
+          <JobMatchesCard />
+
           {/* Quick Actions */}
           <Card className="shadow-soft border-lavender-light/30">
             <CardHeader className="pb-3">

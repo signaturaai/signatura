@@ -25,8 +25,10 @@ import {
   LayoutDashboard,
   FileSignature,
   DollarSign,
+  Search,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
+import { useNewMatchCount } from '@/hooks/useNewMatchCount'
 
 interface DashboardNavProps {
   user: {
@@ -34,6 +36,7 @@ interface DashboardNavProps {
     email: string
     image?: string | null
   }
+  userRole?: 'candidate' | 'recruiter' | 'admin'
 }
 
 interface NavItem {
@@ -45,6 +48,10 @@ interface NavItem {
   bgColor: string
   badge?: number | string
   badgeColor?: string
+  /** Roles that can see this nav item. If undefined, visible to all. */
+  roles?: Array<'candidate' | 'recruiter' | 'admin'>
+  /** ID for dynamic badge updates */
+  id?: string
 }
 
 // Navigation items with badges
@@ -64,6 +71,7 @@ const navItems: NavItem[] = [
     description: 'Daily check-in',
     color: 'text-rose-dark',
     bgColor: 'bg-rose-light',
+    roles: ['candidate', 'admin'],
   },
   {
     href: '/applications',
@@ -74,6 +82,18 @@ const navItems: NavItem[] = [
     bgColor: 'bg-lavender-light',
     badge: 10,
     badgeColor: 'bg-lavender text-white',
+    roles: ['candidate', 'admin'],
+  },
+  {
+    id: 'job-search',
+    href: '/job-search',
+    label: 'Job Search',
+    icon: Search,
+    description: 'Find new jobs',
+    color: 'text-sky-dark',
+    bgColor: 'bg-sky-light',
+    badgeColor: 'bg-sky text-white',
+    roles: ['candidate', 'admin'],
   },
   {
     href: '/cv',
@@ -82,6 +102,7 @@ const navItems: NavItem[] = [
     description: 'Optimize your resume',
     color: 'text-peach-dark',
     bgColor: 'bg-peach-light',
+    roles: ['candidate', 'admin'],
   },
   {
     href: '/interview',
@@ -92,6 +113,7 @@ const navItems: NavItem[] = [
     bgColor: 'bg-sky-light',
     badge: 3,
     badgeColor: 'bg-sky text-white',
+    roles: ['candidate', 'admin'],
   },
   {
     href: '/compensation',
@@ -102,6 +124,7 @@ const navItems: NavItem[] = [
     bgColor: 'bg-success-light',
     badge: 1,
     badgeColor: 'bg-success text-white',
+    roles: ['candidate', 'admin'],
   },
   {
     href: '/contract',
@@ -110,6 +133,7 @@ const navItems: NavItem[] = [
     description: 'Review contracts',
     color: 'text-warning-dark',
     bgColor: 'bg-warning-light',
+    roles: ['candidate', 'admin'],
   },
   {
     href: '/settings',
@@ -121,11 +145,35 @@ const navItems: NavItem[] = [
   },
 ]
 
-export function DashboardNav({ user }: DashboardNavProps) {
+export function DashboardNav({ user, userRole = 'candidate' }: DashboardNavProps) {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  // Fetch new match count for Job Search badge
+  const { data: newMatchCount = 0 } = useNewMatchCount({
+    enabled: userRole !== 'recruiter',
+    refetchInterval: 60000, // Refresh every minute
+  })
+
+  // Filter nav items based on user role and add dynamic badges
+  const filteredNavItems = useMemo(() => {
+    return navItems
+      .filter((item) => {
+        // If no roles defined, show to all
+        if (!item.roles) return true
+        // Otherwise, check if current role is in the allowed roles
+        return item.roles.includes(userRole)
+      })
+      .map((item) => {
+        // Add dynamic badge for Job Search
+        if (item.id === 'job-search' && newMatchCount > 0) {
+          return { ...item, badge: newMatchCount }
+        }
+        return item
+      })
+  }, [userRole, newMatchCount])
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -160,7 +208,7 @@ export function DashboardNav({ user }: DashboardNavProps) {
 
           {/* Desktop Navigation */}
           <div className="hidden lg:flex items-center gap-1">
-            {navItems.map((item) => {
+            {filteredNavItems.map((item) => {
               const isActive = isNavActive(item.href)
               return (
                 <Link
@@ -233,7 +281,7 @@ export function DashboardNav({ user }: DashboardNavProps) {
         {/* Mobile Navigation */}
         {mobileMenuOpen && (
           <div className="lg:hidden py-4 space-y-2 animate-fade-up">
-            {navItems.map((item) => {
+            {filteredNavItems.map((item) => {
               const isActive = isNavActive(item.href)
               return (
                 <Link

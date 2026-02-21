@@ -891,7 +891,10 @@ describe('SearchKeywords', () => {
   })
 
   it('H: handles API error with rollback on add', async () => {
-    const mockFailingAdd = vi.fn().mockRejectedValue(new Error('API Error'))
+    // Use a delayed rejection so we can observe the optimistic update
+    const mockFailingAdd = vi.fn().mockImplementation(
+      () => new Promise((_, reject) => setTimeout(() => reject(new Error('API Error')), 50))
+    )
     const user = userEvent.setup()
 
     render(
@@ -905,7 +908,7 @@ describe('SearchKeywords', () => {
     const input = screen.getByPlaceholderText('Add a keyword...')
     await user.type(input, 'FailKeyword{enter}')
 
-    // Optimistic update should show the keyword
+    // Optimistic update should show the keyword (before API rejection)
     await waitFor(() => {
       expect(screen.getByText('FailKeyword')).toBeInTheDocument()
     })
@@ -913,7 +916,7 @@ describe('SearchKeywords', () => {
     // After error, keyword should be removed (rollback)
     await waitFor(() => {
       expect(screen.queryByText('FailKeyword')).not.toBeInTheDocument()
-    })
+    }, { timeout: 3000 })
   })
 
   it('H: handles API error with rollback on remove', async () => {
