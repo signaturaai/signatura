@@ -294,8 +294,12 @@ describe('vercel.json Configuration', () => {
     )
 
     expect(vercelConfig.crons).toBeDefined()
-    expect(vercelConfig.crons).toHaveLength(1)
-    expect(vercelConfig.crons[0].path).toBe('/api/cron/process-subscriptions')
-    expect(vercelConfig.crons[0].schedule).toBe('0 0 * * *') // Daily at midnight
+    expect(vercelConfig.crons.length).toBeGreaterThanOrEqual(1)
+
+    const subscriptionCron = vercelConfig.crons.find(
+      (c: { path: string }) => c.path === '/api/cron/process-subscriptions'
+    )
+    expect(subscriptionCron).toBeDefined()
+    expect(subscriptionCron.schedule).toBe('0 0 * * *') // Daily at midnight
   })
 })
