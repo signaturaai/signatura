@@ -16,6 +16,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { discoverJobs, calculateMatchScore } from '@/lib/job-search'
+import { checkUsageLimit, incrementUsage, isAdmin } from '@/lib/subscription/access-control'
 import type {
   JobSearchPreferencesRow,
   ProfileJobSearchFields,
@@ -101,6 +102,32 @@ export async function POST(request: NextRequest): Promise<NextResponse<DiscoverR
 
     // Use service client for database operations (bypasses RLS for inserts)
     const serviceSupabase = createServiceClient()
+
+    // 2a. Check subscription usage limit (unless admin)
+    const userIsAdmin = await isAdmin(serviceSupabase, user.id)
+
+    if (!userIsAdmin) {
+      const usageCheck = await checkUsageLimit(serviceSupabase, user.id, 'applications')
+
+      // If subscription is enforced and not allowed, block the request
+      if (usageCheck.enforced && !usageCheck.allowed) {
+        const reason = usageCheck.reason || 'LIMIT_REACHED'
+        const statusCode = reason === 'NO_SUBSCRIPTION' ? 402 : 403
+
+        return NextResponse.json(
+          {
+            success: false,
+            newMatches: 0,
+            topScore: 0,
+            error: reason === 'NO_SUBSCRIPTION' ? 'Subscription required' : 'Usage limit reached',
+            reason,
+            used: usageCheck.used,
+            limit: usageCheck.limit,
+          },
+          { status: statusCode }
+        )
+      }
+    }
 
     // 2. Fetch user's profile
     const { data: profileData, error: profileError } = await serviceSupabase
@@ -297,6 +324,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<DiscoverR
     }
 
     console.log(`[JobSearch] Complete: ${newMatchCount} matches, ${borderlineCount} borderline, top score: ${topScore}`)
+
+    // 9. Increment usage counter (always track, even if admin or kill switch off)
+    try {
+      await incrementUsage(serviceSupabase, user.id, 'applications')
+    } catch (usageError) {
+      // Silent fail - usage tracking shouldn't break the app
+      console.error('[JobSearch] Failed to increment usage:', usageError)
+    }
 
     return NextResponse.json({
       success: true,
