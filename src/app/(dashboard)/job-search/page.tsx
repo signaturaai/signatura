@@ -13,14 +13,15 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle, Button, Input } from '@/components/ui'
 import { ToastProvider, useToast } from '@/components/ui'
+import { JobMatchCard } from '@/components/job-search'
 import {
   Search,
   Settings2,
   RefreshCw,
   Sparkles,
-  Mail,
   ExternalLink,
   ChevronDown,
   ChevronUp,
@@ -34,9 +35,6 @@ import {
   Bell,
   Inbox,
   Filter,
-  Heart,
-  ThumbsDown,
-  EyeOff,
   Briefcase,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -44,7 +42,8 @@ import { createClient } from '@/lib/supabase/client'
 import type {
   JobSearchPreferencesRow,
   JobPostingRow,
-  EmailNotificationFrequency,
+  FeedbackReason,
+  UserFeedback,
 } from '@/types/job-search'
 
 // ============================================================================
@@ -122,147 +121,6 @@ function KeywordChip({ keyword, onRemove, isRemoving }: KeywordChipProps) {
         <X className="h-3 w-3" />
       </button>
     </span>
-  )
-}
-
-interface JobMatchCardProps {
-  job: JobMatch
-  onLike: (jobId: string) => void
-  onDislike: (jobId: string) => void
-  onHide: (jobId: string) => void
-  onApply: (jobId: string) => void
-  isActioning?: boolean
-}
-
-function JobMatchCard({ job, onLike, onDislike, onHide, onApply, isActioning }: JobMatchCardProps) {
-  const tierColors = {
-    excellent: 'bg-success text-white',
-    great: 'bg-sky-dark text-white',
-    good: 'bg-lavender-dark text-white',
-  }
-
-  const tierLabels = {
-    excellent: 'Excellent Match',
-    great: 'Great Match',
-    good: 'Good Match',
-  }
-
-  return (
-    <Card className="hover:shadow-soft-md transition-shadow duration-200">
-      <CardContent className="p-6">
-        <div className="flex items-start justify-between gap-4">
-          {/* Left: Job Info */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              {job.isNew && (
-                <span className="px-2 py-0.5 bg-rose-light text-rose-dark text-xs font-medium rounded-full">
-                  NEW
-                </span>
-              )}
-              <span className={cn('px-2 py-0.5 text-xs font-medium rounded-full', tierColors[job.matchTier])}>
-                {job.match_score}% — {tierLabels[job.matchTier]}
-              </span>
-            </div>
-
-            <h3 className="text-lg font-semibold text-text-primary truncate">{job.title}</h3>
-            <p className="text-text-secondary">{job.company_name}</p>
-
-            <div className="flex flex-wrap items-center gap-3 mt-3 text-sm text-text-tertiary">
-              {job.location && (
-                <span className="flex items-center gap-1">
-                  📍 {job.location}
-                </span>
-              )}
-              {job.work_type && (
-                <span className="flex items-center gap-1 capitalize">
-                  🏢 {job.work_type}
-                </span>
-              )}
-              <span className="flex items-center gap-1">
-                💰 {formatSalary(job.salary_min, job.salary_max, job.salary_currency)}
-              </span>
-            </div>
-
-            {job.match_reasons && job.match_reasons.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {job.match_reasons.slice(0, 3).map((reason, i) => (
-                  <span key={i} className="px-2 py-0.5 bg-muted text-text-secondary text-xs rounded">
-                    {reason}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Right: Actions */}
-          <div className="flex flex-col gap-2">
-            <Button
-              size="sm"
-              onClick={() => onApply(job.id)}
-              disabled={isActioning || job.status === 'applied'}
-              className="whitespace-nowrap"
-            >
-              {job.status === 'applied' ? 'Applied' : 'Apply Now'}
-            </Button>
-
-            <div className="flex items-center gap-1">
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={() => onLike(job.id)}
-                disabled={isActioning}
-                className={cn(
-                  'h-8 w-8',
-                  job.user_feedback === 'like' && 'bg-success-light text-success-dark'
-                )}
-                title="Like"
-              >
-                <Heart className="h-4 w-4" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={() => onDislike(job.id)}
-                disabled={isActioning}
-                className={cn(
-                  'h-8 w-8',
-                  job.user_feedback === 'dislike' && 'bg-error-light text-error-dark'
-                )}
-                title="Dislike"
-              >
-                <ThumbsDown className="h-4 w-4" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={() => onHide(job.id)}
-                disabled={isActioning}
-                className="h-8 w-8"
-                title="Hide"
-              >
-                <EyeOff className="h-4 w-4" />
-              </Button>
-            </div>
-
-            {job.source_url && (
-              <a
-                href={job.source_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-sky-dark hover:underline flex items-center gap-1 justify-center"
-              >
-                View Original <ExternalLink className="h-3 w-3" />
-              </a>
-            )}
-          </div>
-        </div>
-
-        <p className="mt-3 text-sm text-text-tertiary">
-          Discovered {formatRelativeTime(job.discovered_at)}
-          {job.posted_date && ` • Posted ${formatRelativeTime(job.posted_date)}`}
-        </p>
-      </CardContent>
-    </Card>
   )
 }
 
@@ -453,13 +311,13 @@ function JobSearchPageContent() {
   }, [newKeyword, preferences, showToast])
 
   // Handle job feedback
-  const handleJobFeedback = useCallback(async (jobId: string, action: 'like' | 'dislike' | 'hide') => {
+  const handleJobFeedback = useCallback(async (jobId: string, action: UserFeedback, reason?: FeedbackReason) => {
     setActioningJobId(jobId)
     try {
       const response = await fetch('/api/job-search/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jobId, action }),
+        body: JSON.stringify({ jobId, action, reason }),
       })
 
       if (!response.ok) {
@@ -471,7 +329,7 @@ function JobSearchPageContent() {
       } else {
         setJobMatches(prev => prev.map(job =>
           job.id === jobId
-            ? { ...job, user_feedback: action as 'like' | 'dislike' }
+            ? { ...job, user_feedback: action }
             : job
         ))
       }
@@ -812,17 +670,16 @@ function JobSearchPageContent() {
           </Card>
         ) : (
           <div className="space-y-4">
-            {jobMatches.map((job) => (
-              <JobMatchCard
-                key={job.id}
-                job={job}
-                onLike={(id) => handleJobFeedback(id, 'like')}
-                onDislike={(id) => handleJobFeedback(id, 'dislike')}
-                onHide={(id) => handleJobFeedback(id, 'hide')}
-                onApply={handleApply}
-                isActioning={actioningJobId === job.id}
-              />
-            ))}
+            <AnimatePresence mode="popLayout">
+              {jobMatches.map((job) => (
+                <JobMatchCard
+                  key={job.id}
+                  job={job}
+                  onApply={handleApply}
+                  onFeedback={handleJobFeedback}
+                />
+              ))}
+            </AnimatePresence>
           </div>
         )}
       </div>
