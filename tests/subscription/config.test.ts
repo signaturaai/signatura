@@ -126,6 +126,26 @@ describe('isSubscriptionEnabled (Kill Switch)', () => {
       process.env.SUBSCRIPTION_ENABLED = 'TRUE'
       expect(isSubscriptionEnabled()).toBe(false)
     })
+
+    it('should NOT return true for "yes"', () => {
+      process.env.SUBSCRIPTION_ENABLED = 'yes'
+      expect(isSubscriptionEnabled()).toBe(false)
+    })
+
+    it('should NOT return true for "1"', () => {
+      process.env.SUBSCRIPTION_ENABLED = '1'
+      expect(isSubscriptionEnabled()).toBe(false)
+    })
+
+    it('should NOT return true for "True" (mixed case)', () => {
+      process.env.SUBSCRIPTION_ENABLED = 'True'
+      expect(isSubscriptionEnabled()).toBe(false)
+    })
+
+    it('should NOT return true for "enabled"', () => {
+      process.env.SUBSCRIPTION_ENABLED = 'enabled'
+      expect(isSubscriptionEnabled()).toBe(false)
+    })
   })
 
   describe('client-side (typeof window !== "undefined")', () => {
@@ -372,6 +392,27 @@ describe('getPrice', () => {
       })
     })
   })
+
+  describe('invalid tier handling', () => {
+    it('getPrice throws for invalid tier "premium"', () => {
+      // TypeScript prevents this at compile time, but at runtime it would throw
+      expect(() => getPrice('premium' as SubscriptionTier, 'monthly')).toThrow()
+    })
+
+    it('getPrice throws for invalid tier "basic"', () => {
+      expect(() => getPrice('basic' as SubscriptionTier, 'monthly')).toThrow()
+    })
+  })
+
+  describe('invalid billing period handling', () => {
+    it('getPrice throws for invalid period "biweekly"', () => {
+      expect(() => getPrice('momentum', 'biweekly' as BillingPeriod)).toThrow()
+    })
+
+    it('getPrice throws for invalid period "weekly"', () => {
+      expect(() => getPrice('momentum', 'weekly' as BillingPeriod)).toThrow()
+    })
+  })
 })
 
 describe('getPricingOption', () => {
@@ -486,6 +527,54 @@ describe('getPeriodEndDate', () => {
     const originalTime = start.getTime()
     getPeriodEndDate(start, 'monthly')
     expect(start.getTime()).toBe(originalTime)
+  })
+
+  describe('month-end edge cases', () => {
+    // Note: JavaScript Date.setMonth() rolls over when day exceeds target month's days
+    // This documents the actual behavior of getPeriodEndDate
+
+    it('monthly from Jan 31 rolls over to March (non-leap year)', () => {
+      // 2027 is not a leap year - Feb has 28 days
+      // Jan 31 + 1 month = Feb 31 which rolls to March 3
+      const start = new Date('2027-01-31T10:00:00Z')
+      const end = getPeriodEndDate(start, 'monthly')
+      expect(end.getMonth()).toBe(2) // March (rolled over from Feb)
+      expect(end.getDate()).toBe(3) // Feb 31 → March 3 (31-28=3)
+    })
+
+    it('monthly from Jan 31 rolls over to March (leap year)', () => {
+      // 2028 is a leap year - Feb has 29 days
+      // Jan 31 + 1 month = Feb 31 which rolls to March 2
+      const start = new Date('2028-01-31T10:00:00Z')
+      const end = getPeriodEndDate(start, 'monthly')
+      expect(end.getMonth()).toBe(2) // March (rolled over from Feb)
+      expect(end.getDate()).toBe(2) // Feb 31 → March 2 (31-29=2)
+    })
+
+    it('monthly from March 31 rolls over to May', () => {
+      // March 31 + 1 month = April 31 which rolls to May 1
+      const start = new Date('2026-03-31T10:00:00Z')
+      const end = getPeriodEndDate(start, 'monthly')
+      expect(end.getMonth()).toBe(4) // May (rolled over from April)
+      expect(end.getDate()).toBe(1) // April 31 → May 1
+    })
+
+    it('quarterly from Nov 30 rolls over to March', () => {
+      // Nov 30 + 3 months = Feb 30 which rolls to March
+      const start = new Date('2026-11-30T10:00:00Z')
+      const end = getPeriodEndDate(start, 'quarterly')
+      expect(end.getFullYear()).toBe(2027)
+      expect(end.getMonth()).toBe(2) // March (rolled over from Feb)
+      expect(end.getDate()).toBe(2) // Feb 30 → March 2 (30-28=2)
+    })
+
+    it('monthly from standard date (15th) works correctly', () => {
+      // Standard dates that don't cause rollover
+      const start = new Date('2026-01-15T10:00:00Z')
+      const end = getPeriodEndDate(start, 'monthly')
+      expect(end.getMonth()).toBe(1) // February
+      expect(end.getDate()).toBe(15) // Same day
+    })
   })
 })
 
