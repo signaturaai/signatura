@@ -342,6 +342,23 @@ describe('Access Control', () => {
         expect(result.reason).toBe('FEATURE_NOT_INCLUDED')
       })
 
+      it('Momentum has applicationTracker=true (included feature)', async () => {
+        mockSubscriptionEnabled = true
+        const supabase = createMockSupabase({
+          subscriptionData: createMockSubscriptionRow({ tier: 'momentum' }),
+        })
+
+        const result = await checkFeatureAccess(
+          supabase as unknown as Parameters<typeof checkFeatureAccess>[0],
+          'user-123',
+          'applicationTracker'
+        )
+
+        expect(result.allowed).toBe(true)
+        expect(result.enforced).toBe(true)
+        expect(result.tier).toBe('momentum')
+      })
+
       it('should allow aiAvatarInterviews for accelerate tier', async () => {
         mockSubscriptionEnabled = true
         const supabase = createMockSupabase({
@@ -1008,6 +1025,26 @@ describe('Access Control', () => {
         expect(result.usage.aiAvatarInterviews.used).toBe(0)
       })
 
+      it('should return full usage summary for accelerate with percentUsed', async () => {
+        const supabase = createMockSupabase({
+          subscriptionData: createMockSubscriptionRow({
+            tier: 'accelerate',
+            usage_applications: 7, // 7/15 = 46.67%
+          }),
+        })
+
+        const result = await getSubscriptionStatus(
+          supabase as unknown as Parameters<typeof getSubscriptionStatus>[0],
+          'user-123'
+        )
+
+        expect(result.usage.applications.used).toBe(7)
+        expect(result.usage.applications.limit).toBe(15)
+        expect(result.usage.applications.remaining).toBe(8)
+        expect(result.usage.applications.percentUsed).toBe(47) // 7/15 = 46.67 → 47
+        expect(result.usage.applications.unlimited).toBe(false)
+      })
+
       it('should mark unlimited resources correctly', async () => {
         const supabase = createMockSupabase({
           subscriptionData: createMockSubscriptionRow({
@@ -1259,6 +1296,191 @@ describe('Access Control', () => {
   })
 
   // ==========================================================================
+  // Phase 14 Spec: Momentum tier limits
+  // ==========================================================================
+
+  describe('Momentum tier: Usage limit enforcement', () => {
+    it('Momentum at 7/8 applications → allowed', async () => {
+      mockSubscriptionEnabled = true
+      const supabase = createMockSupabase({
+        subscriptionData: createMockSubscriptionRow({
+          tier: 'momentum',
+          usage_applications: 7, // limit is 8
+        }),
+      })
+
+      const result = await checkUsageLimit(
+        supabase as unknown as Parameters<typeof checkUsageLimit>[0],
+        'user-123',
+        'applications'
+      )
+
+      expect(result.allowed).toBe(true)
+      expect(result.used).toBe(7)
+      expect(result.limit).toBe(8)
+      expect(result.remaining).toBe(1)
+    })
+
+    it('Momentum at 8/8 applications → denied LIMIT_REACHED', async () => {
+      mockSubscriptionEnabled = true
+      const supabase = createMockSupabase({
+        subscriptionData: createMockSubscriptionRow({
+          tier: 'momentum',
+          usage_applications: 8, // at limit
+        }),
+      })
+
+      const result = await checkUsageLimit(
+        supabase as unknown as Parameters<typeof checkUsageLimit>[0],
+        'user-123',
+        'applications'
+      )
+
+      expect(result.allowed).toBe(false)
+      expect(result.reason).toBe('LIMIT_EXCEEDED')
+      expect(result.used).toBe(8)
+      expect(result.limit).toBe(8)
+      expect(result.remaining).toBe(0)
+    })
+
+    it('Momentum at 0/0 aiAvatarInterviews → denied (limit is 0)', async () => {
+      mockSubscriptionEnabled = true
+      const supabase = createMockSupabase({
+        subscriptionData: createMockSubscriptionRow({
+          tier: 'momentum',
+          usage_ai_avatar_interviews: 0, // 0 used, but limit is also 0
+        }),
+      })
+
+      const result = await checkUsageLimit(
+        supabase as unknown as Parameters<typeof checkUsageLimit>[0],
+        'user-123',
+        'aiAvatarInterviews'
+      )
+
+      // Even 0 used, limit is 0 → denied because Momentum has no AI avatar access
+      expect(result.allowed).toBe(false)
+      expect(result.reason).toBe('LIMIT_EXCEEDED')
+      expect(result.used).toBe(0)
+      expect(result.limit).toBe(0)
+      expect(result.remaining).toBe(0)
+    })
+  })
+
+  // ==========================================================================
+  // Phase 14 Spec: Accelerate tier limits
+  // ==========================================================================
+
+  describe('Accelerate tier: Usage limit enforcement', () => {
+    it('Accelerate has aiAvatarInterviews feature enabled', async () => {
+      mockSubscriptionEnabled = true
+      const supabase = createMockSupabase({
+        subscriptionData: createMockSubscriptionRow({ tier: 'accelerate' }),
+      })
+
+      const result = await checkFeatureAccess(
+        supabase as unknown as Parameters<typeof checkFeatureAccess>[0],
+        'user-123',
+        'aiAvatarInterviews'
+      )
+
+      expect(result.allowed).toBe(true)
+      expect(result.tier).toBe('accelerate')
+    })
+
+    it('Accelerate at 14/15 applications → allowed', async () => {
+      mockSubscriptionEnabled = true
+      const supabase = createMockSupabase({
+        subscriptionData: createMockSubscriptionRow({
+          tier: 'accelerate',
+          usage_applications: 14, // limit is 15
+        }),
+      })
+
+      const result = await checkUsageLimit(
+        supabase as unknown as Parameters<typeof checkUsageLimit>[0],
+        'user-123',
+        'applications'
+      )
+
+      expect(result.allowed).toBe(true)
+      expect(result.used).toBe(14)
+      expect(result.limit).toBe(15)
+      expect(result.remaining).toBe(1)
+    })
+  })
+
+  // ==========================================================================
+  // Phase 14 Spec: Elite tier limits
+  // ==========================================================================
+
+  describe('Elite tier: Usage limit enforcement', () => {
+    it('Elite has unlimited (-1) for applications', async () => {
+      mockSubscriptionEnabled = true
+      const supabase = createMockSupabase({
+        subscriptionData: createMockSubscriptionRow({
+          tier: 'elite',
+          usage_applications: 9999, // huge usage but unlimited
+        }),
+      })
+
+      const result = await checkUsageLimit(
+        supabase as unknown as Parameters<typeof checkUsageLimit>[0],
+        'user-123',
+        'applications'
+      )
+
+      expect(result.allowed).toBe(true)
+      expect(result.unlimited).toBe(true)
+      expect(result.used).toBe(9999)
+      expect(result.limit).toBe(-1)
+    })
+
+    it('Elite at 9/10 AI avatar → allowed', async () => {
+      mockSubscriptionEnabled = true
+      const supabase = createMockSupabase({
+        subscriptionData: createMockSubscriptionRow({
+          tier: 'elite',
+          usage_ai_avatar_interviews: 9, // limit is 10
+        }),
+      })
+
+      const result = await checkUsageLimit(
+        supabase as unknown as Parameters<typeof checkUsageLimit>[0],
+        'user-123',
+        'aiAvatarInterviews'
+      )
+
+      expect(result.allowed).toBe(true)
+      expect(result.used).toBe(9)
+      expect(result.limit).toBe(10)
+      expect(result.remaining).toBe(1)
+    })
+
+    it('Elite at 10/10 AI avatar → denied', async () => {
+      mockSubscriptionEnabled = true
+      const supabase = createMockSupabase({
+        subscriptionData: createMockSubscriptionRow({
+          tier: 'elite',
+          usage_ai_avatar_interviews: 10, // at limit
+        }),
+      })
+
+      const result = await checkUsageLimit(
+        supabase as unknown as Parameters<typeof checkUsageLimit>[0],
+        'user-123',
+        'aiAvatarInterviews'
+      )
+
+      expect(result.allowed).toBe(false)
+      expect(result.reason).toBe('LIMIT_EXCEEDED')
+      expect(result.used).toBe(10)
+      expect(result.limit).toBe(10)
+      expect(result.remaining).toBe(0)
+    })
+  })
+
+  // ==========================================================================
   // Phase 14 Spec: Accelerate AI avatar 5-limit enforcement
   // ==========================================================================
 
@@ -1355,6 +1577,19 @@ describe('Access Control', () => {
       it('should return true when profile is_admin is true (role != admin)', async () => {
         const supabase = createMockSupabase({
           profileData: { role: 'user', is_admin: true },
+        })
+
+        const result = await isAdmin(
+          supabase as unknown as Parameters<typeof isAdmin>[0],
+          'user-admin'
+        )
+
+        expect(result).toBe(true)
+      })
+
+      it('should return true when BOTH role=admin AND is_admin=true', async () => {
+        const supabase = createMockSupabase({
+          profileData: { role: 'admin', is_admin: true },
         })
 
         const result = await isAdmin(
@@ -1463,6 +1698,46 @@ describe('Access Control', () => {
 
         expect(result.allowed).toBe(true)
         expect(result.unlimited).toBe(true)
+        expect(result.adminBypass).toBe(true)
+      })
+
+      it('admin bypasses even when kill switch ON + tier=NULL', async () => {
+        mockSubscriptionEnabled = true
+        const supabase = createMockSupabase({
+          profileData: { role: 'admin', is_admin: false },
+          subscriptionData: createMockSubscriptionRow({ tier: null }),
+        })
+
+        const result = await checkUsageLimit(
+          supabase as unknown as Parameters<typeof checkUsageLimit>[0],
+          'user-admin',
+          'applications'
+        )
+
+        expect(result.allowed).toBe(true)
+        expect(result.enforced).toBe(false)
+        expect(result.unlimited).toBe(true)
+        expect(result.adminBypass).toBe(true)
+      })
+
+      it('admin bypasses even when usage at limit (momentum tier, 8/8)', async () => {
+        mockSubscriptionEnabled = true
+        const supabase = createMockSupabase({
+          profileData: { role: 'admin', is_admin: true },
+          subscriptionData: createMockSubscriptionRow({
+            tier: 'momentum',
+            usage_applications: 8, // at limit for momentum
+          }),
+        })
+
+        const result = await checkUsageLimit(
+          supabase as unknown as Parameters<typeof checkUsageLimit>[0],
+          'user-admin',
+          'applications'
+        )
+
+        // Admin is never blocked
+        expect(result.allowed).toBe(true)
         expect(result.adminBypass).toBe(true)
       })
     })
