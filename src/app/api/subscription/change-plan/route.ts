@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
 
     if (!parseResult.success) {
       return NextResponse.json(
-        { error: 'Invalid request body', details: parseResult.error.errors },
+        { error: 'Invalid request body', details: parseResult.error.issues },
         { status: 400 }
       )
     }
@@ -133,7 +133,7 @@ export async function POST(request: NextRequest) {
       await serviceClient
         .from('user_subscriptions')
         .update({
-          scheduled_billing_period_change: targetBillingPeriod,
+          scheduled_billing_period: targetBillingPeriod,
         })
         .eq('user_id', user.id)
 

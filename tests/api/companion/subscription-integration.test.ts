@@ -10,7 +10,7 @@ import { NextRequest } from 'next/server'
 
 // Test configuration state
 let mockUser: { id: string } | null = { id: 'test-user-123' }
-let checkFeatureAccessResult = { hasAccess: true }
+let checkFeatureAccessResult = { allowed: true }
 let checkUsageLimitResult = { allowed: true, current: 0, limit: 10 }
 let incrementUsageCalled = false
 
@@ -87,7 +87,7 @@ describe('POST /api/companion/chat - Subscription Integration', () => {
     vi.clearAllMocks()
     // Reset test state
     mockUser = { id: 'test-user-123' }
-    checkFeatureAccessResult = { hasAccess: true }
+    checkFeatureAccessResult = { allowed: true }
     checkUsageLimitResult = { allowed: true, current: 0, limit: 10 }
     incrementUsageCalled = false
     // Force mock mode
@@ -102,8 +102,8 @@ describe('POST /api/companion/chat - Subscription Integration', () => {
   describe('SPLIT PATTERN: Feature Access Check', () => {
     it('should return 402 when user has no_subscription for feature', async () => {
       checkFeatureAccessResult = {
-        hasAccess: false,
-        reason: 'no_subscription',
+        allowed: false,
+        reason: 'NO_SUBSCRIPTION',
       } as any
       const { POST } = await import('@/app/api/companion/chat/route')
 
@@ -114,12 +114,12 @@ describe('POST /api/companion/chat - Subscription Integration', () => {
 
       expect(response.status).toBe(402)
       expect(data.error).toBe('Subscription required')
-      expect(data.reason).toBe('no_subscription')
+      expect(data.reason).toBe('NO_SUBSCRIPTION')
     })
 
     it('should return 403 when feature is not available in plan', async () => {
       checkFeatureAccessResult = {
-        hasAccess: false,
+        allowed: false,
         reason: 'feature_not_included',
       } as any
       const { POST } = await import('@/app/api/companion/chat/route')
@@ -136,7 +136,7 @@ describe('POST /api/companion/chat - Subscription Integration', () => {
 
   describe('SPLIT PATTERN: Usage Limit Check', () => {
     it('should return 402 when user has NO_SUBSCRIPTION for usage', async () => {
-      checkFeatureAccessResult = { hasAccess: true }
+      checkFeatureAccessResult = { allowed: true }
       checkUsageLimitResult = {
         allowed: false,
         reason: 'NO_SUBSCRIPTION',
@@ -156,7 +156,7 @@ describe('POST /api/companion/chat - Subscription Integration', () => {
     })
 
     it('should return 403 when usage limit is reached', async () => {
-      checkFeatureAccessResult = { hasAccess: true }
+      checkFeatureAccessResult = { allowed: true }
       checkUsageLimitResult = {
         allowed: false,
         reason: 'LIMIT_REACHED',
@@ -176,7 +176,7 @@ describe('POST /api/companion/chat - Subscription Integration', () => {
     })
 
     it('should not increment usage when limit check fails', async () => {
-      checkFeatureAccessResult = { hasAccess: true }
+      checkFeatureAccessResult = { allowed: true }
       checkUsageLimitResult = {
         allowed: false,
         reason: 'LIMIT_REACHED',
@@ -195,7 +195,7 @@ describe('POST /api/companion/chat - Subscription Integration', () => {
 
   describe('SPLIT PATTERN: Usage Increment on Success', () => {
     it('should increment usage after successful chat response', async () => {
-      checkFeatureAccessResult = { hasAccess: true }
+      checkFeatureAccessResult = { allowed: true }
       checkUsageLimitResult = { allowed: true, current: 5, limit: 10 }
       const { POST } = await import('@/app/api/companion/chat/route')
 
@@ -210,7 +210,7 @@ describe('POST /api/companion/chat - Subscription Integration', () => {
     })
 
     it('should include response data in successful response', async () => {
-      checkFeatureAccessResult = { hasAccess: true }
+      checkFeatureAccessResult = { allowed: true }
       checkUsageLimitResult = { allowed: true, current: 0, limit: 10 }
       const { POST } = await import('@/app/api/companion/chat/route')
 

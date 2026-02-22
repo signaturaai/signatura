@@ -89,7 +89,7 @@ export function buildSearchQueries(
   // Get locations (prefer preferences, fall back to profile)
   const locations = prefs.preferred_locations.length > 0
     ? prefs.preferred_locations
-    : [profile.location_preferences?.city, profile.location_preferences?.country].filter(Boolean)
+    : [profile.location_preferences?.city].filter(Boolean)
 
   // Get skills from profile CV analysis or preferences
   const skills = profile.general_cv_analysis?.skills?.slice(0, 5) || []
@@ -231,17 +231,18 @@ export function parseGeminiJobResponse(rawText: string): DiscoveredJob[] {
   }
 
   // Validate and transform the parsed data
-  if (!Array.isArray(parsed)) {
+  let parsedArray: unknown[]
+  if (Array.isArray(parsed)) {
+    parsedArray = parsed
+  } else if (parsed && typeof parsed === 'object' && 'jobs' in parsed && Array.isArray((parsed as { jobs: unknown }).jobs)) {
     // If it's an object with a jobs array, extract it
-    if (parsed && typeof parsed === 'object' && 'jobs' in parsed && Array.isArray((parsed as { jobs: unknown }).jobs)) {
-      parsed = (parsed as { jobs: unknown[] }).jobs
-    } else {
-      return []
-    }
+    parsedArray = (parsed as { jobs: unknown[] }).jobs
+  } else {
+    return []
   }
 
   const jobs: DiscoveredJob[] = []
-  for (const item of parsed) {
+  for (const item of parsedArray) {
     const job = transformToDiscoveredJob(item as GeminiJobData)
     if (job) {
       jobs.push(job)
@@ -411,9 +412,10 @@ async function executeGeminiQuery(
   timeoutMs: number = QUERY_TIMEOUT_MS
 ): Promise<{ text: string; tokenUsage: { prompt: number; completion: number } }> {
   const genAI = getGeminiClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const model = genAI.getGenerativeModel({
     model: GEMINI_MODEL,
-    tools: [{ googleSearch: {} }] as unknown[],
+    tools: [{ googleSearch: {} }] as any,
   })
 
   // Create timeout promise
@@ -508,7 +510,10 @@ async function getExistingHashes(
     return new Set()
   }
 
-  return new Set(data?.map(row => row.content_hash).filter(Boolean) || [])
+  // Type assertion for Supabase query result
+  const typedData = (data as unknown) as { content_hash: string | null }[] | null
+  const hashes = typedData?.map(row => row.content_hash).filter((h): h is string => h !== null) || []
+  return new Set(hashes)
 }
 
 // ============================================================================

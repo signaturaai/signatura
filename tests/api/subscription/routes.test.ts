@@ -455,7 +455,7 @@ describe('Subscription API Routes', () => {
         expect(data.success).toBe(true)
         expect(data.immediate).toBe(false)
         expect(mockSupabaseUpdate).toHaveBeenCalledWith({
-          scheduled_billing_period_change: 'yearly',
+          scheduled_billing_period: 'yearly',
         })
       })
     })

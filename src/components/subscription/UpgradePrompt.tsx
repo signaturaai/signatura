@@ -82,10 +82,24 @@ export function UpgradePrompt({
   const {
     subscriptionEnabled,
     isLoading,
-    tier: currentTier,
+    tier: _currentTier,
     usageFor,
     recommendation,
   } = useSubscription()
+
+  // Get recommendation data (needed for hooks)
+  const recommendedTier = recommendation?.recommendedTier || 'accelerate'
+
+  // Hooks must be called before early returns
+  const handleUpgrade = useCallback(() => {
+    router.push(`/pricing?recommended=${recommendedTier}`)
+    onClose?.()
+  }, [router, recommendedTier, onClose])
+
+  const handleViewPlans = useCallback(() => {
+    router.push('/pricing')
+    onClose?.()
+  }, [router, onClose])
 
   // When subscription system is disabled, render nothing
   if (!subscriptionEnabled) {
@@ -102,8 +116,7 @@ export function UpgradePrompt({
   const resourceLabel = resource ? RESOURCE_LABELS[resource] : ''
   const featureLabel = feature ? FEATURE_LABELS[feature] : ''
 
-  // Get recommendation data
-  const recommendedTier = recommendation?.recommendation?.recommendedTier || 'accelerate'
+  // Get recommendation config
   const recommendedConfig = TIER_CONFIGS[recommendedTier]
   const recommendedPrice = recommendedConfig.pricing.monthly.amount
 
@@ -113,19 +126,9 @@ export function UpgradePrompt({
     : null
 
   // Get average usage from recommendation
-  const averageUsage = resource && recommendation?.recommendation?.comparison?.[resource]
-    ? Math.round(recommendation.recommendation.comparison[resource].average)
+  const averageUsage = resource && recommendation?.comparison?.[resource]
+    ? Math.round(recommendation.comparison[resource].average)
     : null
-
-  const handleUpgrade = useCallback(() => {
-    router.push(`/pricing?recommended=${recommendedTier}`)
-    onClose?.()
-  }, [router, recommendedTier, onClose])
-
-  const handleViewPlans = useCallback(() => {
-    router.push('/pricing')
-    onClose?.()
-  }, [router, onClose])
 
   return (
     <AlertDialog open={open} onOpenChange={(isOpen) => !isOpen && onClose?.()}>
@@ -162,9 +165,9 @@ export function UpgradePrompt({
             )}
 
             {/* Current plan indicator */}
-            {currentTier && (
+            {_currentTier && (
               <span className="block text-xs text-muted-foreground mt-2">
-                Current plan: {TIER_CONFIGS[currentTier].name}
+                Current plan: {TIER_CONFIGS[_currentTier].name}
               </span>
             )}
           </AlertDialogDescription>

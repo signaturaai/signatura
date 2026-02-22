@@ -76,7 +76,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApplyResp
       return NextResponse.json({ success: false, error: 'Job posting not found' }, { status: 404 })
     }
 
-    const job = jobData as JobPostingRow
+    const job = (jobData as unknown) as JobPostingRow
 
     if (job.user_id !== user.id) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 403 })
@@ -96,6 +96,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApplyResp
 
     const applicationData = {
       user_id: user.id,
+      created_by: user.id,
       company_name: job.company_name,
       position_title: job.title,
       job_url: job.source_url,
@@ -128,7 +129,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApplyResp
       return NextResponse.json({ success: false, error: 'Failed to create application' }, { status: 500 })
     }
 
-    const applicationId = applicationResult.id
+    const applicationId = ((applicationResult as unknown) as { id: string }).id
 
     // 5. Update job_posting: status = "applied", job_application_id = new application ID
     const { error: updateError } = await serviceSupabase

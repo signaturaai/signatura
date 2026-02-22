@@ -70,8 +70,21 @@ export async function GET(): Promise<NextResponse<UsageTrendsResponse | { error:
       )
     }
 
+    // Type assertion for Supabase query result
+    interface SnapshotRow {
+      snapshot_month: string
+      applications_used: number | null
+      cvs_used: number | null
+      interviews_used: number | null
+      compensation_used: number | null
+      contracts_used: number | null
+      ai_avatar_interviews_used: number | null
+    }
+
+    const typedSnapshots = (snapshots as unknown) as SnapshotRow[] | null
+
     // Transform snapshots to trend data
-    const trends: UsageTrendData[] = (snapshots || []).map((snapshot) => ({
+    const trends: UsageTrendData[] = (typedSnapshots || []).map((snapshot) => ({
       month: snapshot.snapshot_month,
       applications: snapshot.applications_used || 0,
       cvs: snapshot.cvs_used || 0,

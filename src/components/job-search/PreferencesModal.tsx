@@ -638,7 +638,7 @@ export function PreferencesModal({
 
                     <div className="text-sm text-text-tertiary">
                       <p className="mb-2">
-                        When enabled, you'll receive email digests containing:
+                        When enabled, you&apos;ll receive email digests containing:
                       </p>
                       <ul className="list-disc list-inside space-y-1">
                         <li>New AI-matched job opportunities</li>

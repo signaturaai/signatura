@@ -85,7 +85,7 @@ const checkmarkVariants = {
     pathLength: 1,
     opacity: 1,
     transition: {
-      pathLength: { duration: 0.5, ease: 'easeInOut' },
+      pathLength: { duration: 0.5, ease: 'easeInOut' as const },
       opacity: { duration: 0.2 },
     },
   },
@@ -98,7 +98,7 @@ const circleVariants = {
     opacity: 1,
     transition: {
       duration: 0.4,
-      ease: 'easeOut',
+      ease: 'easeOut' as const,
     },
   },
 }

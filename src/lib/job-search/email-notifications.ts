@@ -293,7 +293,7 @@ export async function sendJobMatchDigest(
   }
 
   // Also get email from auth.users if not in profile
-  let userEmail = (userData as unknown as UserEmailData).email
+  let userEmail: string | null = (userData as unknown as UserEmailData).email || null
   if (!userEmail) {
     const { data: authUser } = await supabase.auth.admin.getUserById(userId)
     userEmail = authUser?.user?.email || null
@@ -316,12 +316,15 @@ export async function sendJobMatchDigest(
     return { success: false, emailsSent: 0, error: 'Failed to fetch preferences' }
   }
 
+  // Type assertion for preferences data
+  const typedPrefsData = (prefsData as unknown) as { last_email_sent_at: string | null } | null
+
   // 3. Determine time window based on frequency
   const hoursAgo = FREQUENCY_HOURS[frequency]
   const sinceDate = new Date(Date.now() - hoursAgo * 60 * 60 * 1000).toISOString()
 
   // 4. Fetch new matches since last email or within frequency window
-  const cutoffDate = prefsData?.last_email_sent_at || sinceDate
+  const cutoffDate = typedPrefsData?.last_email_sent_at || sinceDate
 
   const { data: jobsData, error: jobsError } = await supabase
     .from('job_postings')
@@ -338,7 +341,7 @@ export async function sendJobMatchDigest(
     return { success: false, emailsSent: 0, error: 'Failed to fetch jobs' }
   }
 
-  const jobs = jobsData as EmailJob[]
+  const jobs = (jobsData as unknown) as EmailJob[]
 
   // 5. Skip if no new matches
   if (!jobs || jobs.length === 0) {
@@ -406,7 +409,10 @@ export async function sendBatchDigests(
     return { success: false, sent: 0, failed: 0 }
   }
 
-  if (!prefsData || prefsData.length === 0) {
+  // Type assertion for preferences data
+  const typedPrefsData = (prefsData as unknown) as { user_id: string }[] | null
+
+  if (!typedPrefsData || typedPrefsData.length === 0) {
     console.log(`[EmailNotify] No users with ${frequency} notification frequency`)
     return { success: true, sent: 0, failed: 0 }
   }
@@ -414,7 +420,7 @@ export async function sendBatchDigests(
   let sent = 0
   let failed = 0
 
-  for (const { user_id } of prefsData) {
+  for (const { user_id } of typedPrefsData) {
     const result = await sendJobMatchDigest(user_id, frequency)
     if (result.emailsSent > 0) {
       sent++

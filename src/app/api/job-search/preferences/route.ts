@@ -16,6 +16,8 @@ import {
   type JobSearchPreferencesRow,
   type ProfileJobSearchFields,
   type JobPostingRow,
+  type CompanySize,
+  type GeneralCvAnalysis,
 } from '@/types/job-search'
 
 // ============================================================================
@@ -122,11 +124,14 @@ export async function GET(): Promise<NextResponse<PreferencesResponse>> {
     const serviceSupabase = createServiceClient()
 
     // 2. Fetch preferences
-    let { data: prefs, error: prefsError } = await serviceSupabase
+    const prefsResult = await serviceSupabase
       .from('job_search_preferences')
       .select('*')
       .eq('user_id', user.id)
       .single()
+
+    let prefs = prefsResult.data
+    const prefsError = prefsResult.error
 
     // 3. Create default if none exists
     if (prefsError && prefsError.code === 'PGRST116') {
@@ -148,7 +153,7 @@ export async function GET(): Promise<NextResponse<PreferencesResponse>> {
       return NextResponse.json({ error: 'Failed to fetch preferences' }, { status: 500 })
     }
 
-    return NextResponse.json({ preferences: prefs as JobSearchPreferencesRow })
+    return NextResponse.json({ preferences: (prefs as unknown) as JobSearchPreferencesRow })
   } catch (error) {
     console.error('[Preferences] Error in GET:', error)
     return NextResponse.json(
@@ -193,11 +198,14 @@ export async function PUT(request: NextRequest): Promise<NextResponse<UpdateResp
     const serviceSupabase = createServiceClient()
 
     // 3. Ensure preferences exist (create if not)
-    let { data: existingPrefs, error: fetchError } = await serviceSupabase
+    const existingPrefsResult = await serviceSupabase
       .from('job_search_preferences')
       .select('*')
       .eq('user_id', user.id)
       .single()
+
+    let existingPrefs = existingPrefsResult.data
+    const fetchError = existingPrefsResult.error
 
     if (fetchError && fetchError.code === 'PGRST116') {
       // Create default preferences first
@@ -253,17 +261,31 @@ export async function PUT(request: NextRequest): Promise<NextResponse<UpdateResp
       if (profileError || !profileData) {
         console.warn('[Preferences] Could not fetch profile for re-scoring')
       } else {
+        // Type assertion for profile data
+        const typedProfileData = (profileData as unknown) as {
+          id: string
+          full_name: string
+          preferred_job_titles: string[] | null
+          preferred_industries: string[] | null
+          minimum_salary_expectation: number | null
+          salary_currency: string | null
+          location_preferences: Record<string, unknown> | null
+          company_size_preferences: string[] | null
+          career_goals: string | null
+          general_cv_analysis: unknown
+        }
+
         const profile: CandidateProfile = {
-          id: profileData.id,
-          full_name: profileData.full_name,
-          preferred_job_titles: profileData.preferred_job_titles || [],
-          preferred_industries: profileData.preferred_industries || [],
-          minimum_salary_expectation: profileData.minimum_salary_expectation,
-          salary_currency: profileData.salary_currency || 'USD',
-          location_preferences: profileData.location_preferences || {},
-          company_size_preferences: profileData.company_size_preferences || [],
-          career_goals: profileData.career_goals,
-          general_cv_analysis: profileData.general_cv_analysis,
+          id: typedProfileData.id,
+          full_name: typedProfileData.full_name,
+          preferred_job_titles: typedProfileData.preferred_job_titles || [],
+          preferred_industries: typedProfileData.preferred_industries || [],
+          minimum_salary_expectation: typedProfileData.minimum_salary_expectation,
+          salary_currency: typedProfileData.salary_currency || 'USD',
+          location_preferences: typedProfileData.location_preferences || {},
+          company_size_preferences: (typedProfileData.company_size_preferences || []) as CompanySize[],
+          career_goals: typedProfileData.career_goals,
+          general_cv_analysis: typedProfileData.general_cv_analysis as GeneralCvAnalysis | null,
         }
 
         // Fetch borderline jobs from last 7 days
@@ -282,7 +304,7 @@ export async function PUT(request: NextRequest): Promise<NextResponse<UpdateResp
         } else if (borderlineJobs && borderlineJobs.length > 0) {
           console.log(`[Preferences] Re-scoring ${borderlineJobs.length} borderline jobs`)
 
-          for (const job of borderlineJobs as JobPostingRow[]) {
+          for (const job of (borderlineJobs as unknown) as JobPostingRow[]) {
             const matchResult = calculateMatchScore(
               {
                 title: job.title,
@@ -297,13 +319,13 @@ export async function PUT(request: NextRequest): Promise<NextResponse<UpdateResp
                 required_skills: job.required_skills || [],
                 benefits: job.benefits || [],
                 company_size: job.company_size || undefined,
-                source_url: job.source_url,
+                source_url: job.source_url || '',
                 source_platform: job.source_platform || undefined,
                 posted_date: job.posted_date || undefined,
                 content_hash: job.content_hash || undefined,
               },
               profile,
-              updatedPrefs as JobSearchPreferencesRow
+              (updatedPrefs as unknown) as JobSearchPreferencesRow
             )
 
             // If score improved to 75+, promote the job
@@ -333,7 +355,7 @@ export async function PUT(request: NextRequest): Promise<NextResponse<UpdateResp
 
     return NextResponse.json({
       success: true,
-      preferences: updatedPrefs as JobSearchPreferencesRow,
+      preferences: (updatedPrefs as unknown) as JobSearchPreferencesRow,
       promotedJobs,
     })
   } catch (error) {

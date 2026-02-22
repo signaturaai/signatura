@@ -92,8 +92,8 @@ function toUserSubscription(row: Database['public']['Tables']['user_subscription
     currentPeriodEnd: row.current_period_end,
     cancelledAt: row.cancelled_at,
     cancellationEffectiveAt: (row as Record<string, unknown>).cancellation_effective_at as string | null,
-    scheduledTierChange: (row as Record<string, unknown>).scheduled_tier_change as SubscriptionTier | null,
-    scheduledBillingPeriodChange: (row as Record<string, unknown>).scheduled_billing_period_change as BillingPeriod | null,
+    scheduledTierChange: (row as Record<string, unknown>).scheduled_tier as SubscriptionTier | null,
+    scheduledBillingPeriodChange: (row as Record<string, unknown>).scheduled_billing_period as BillingPeriod | null,
     growTransactionToken: (row as Record<string, unknown>).grow_transaction_token as string | null,
     growRecurringId: (row as Record<string, unknown>).grow_recurring_id as string | null,
     growLastTransactionCode: (row as Record<string, unknown>).grow_last_transaction_code as string | null,
@@ -124,10 +124,13 @@ async function logSubscriptionEvent(
   newBillingPeriod?: BillingPeriod | null,
   amountPaid?: number
 ): Promise<void> {
+  // Type assertion for Json field
+  type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
+
   const { error } = await supabase.from('subscription_events').insert({
     user_id: userId,
     event_type: eventType,
-    event_data: metadata,
+    event_data: metadata as Json,
     previous_tier: previousTier,
     new_tier: newTier,
     previous_billing_period: previousBillingPeriod,
@@ -168,7 +171,9 @@ export async function getSubscription(
     throw new Error(`Failed to get subscription: ${error.message}`)
   }
 
-  return toUserSubscription(data)
+  // Type assertion for Supabase query result
+  const typedData = (data as unknown) as Database['public']['Tables']['user_subscriptions']['Row']
+  return toUserSubscription(typedData)
 }
 
 /**
@@ -206,8 +211,8 @@ export async function activateSubscription(
     // Clear pending/scheduled/cancellation state
     pending_tier: null,
     pending_billing_period: null,
-    scheduled_tier_change: null,
-    scheduled_billing_period_change: null,
+    scheduled_tier: null,
+    scheduled_billing_period: null,
     cancelled_at: null,
     cancellation_effective_at: null,
   }
@@ -291,8 +296,8 @@ export async function renewSubscription(
     current_period_end: periodEnd.toISOString(),
     grow_last_transaction_code: transactionCode,
     // Clear scheduled changes
-    scheduled_tier_change: null,
-    scheduled_billing_period_change: null,
+    scheduled_tier: null,
+    scheduled_billing_period: null,
   }
 
   if (shouldResetCounters) {
@@ -388,7 +393,7 @@ export async function upgradeSubscription(
     .update({
       tier: newTier,
       // Clear any scheduled tier change since we're upgrading now
-      scheduled_tier_change: null,
+      scheduled_tier: null,
     })
     .eq('user_id', userId)
 
@@ -451,7 +456,7 @@ export async function scheduleDowngrade(
   const { error } = await supabase
     .from('user_subscriptions')
     .update({
-      scheduled_tier_change: targetTier,
+      scheduled_tier: targetTier,
     })
     .eq('user_id', userId)
 
@@ -485,8 +490,8 @@ export async function cancelScheduledChange(
   const { error } = await supabase
     .from('user_subscriptions')
     .update({
-      scheduled_tier_change: null,
-      scheduled_billing_period_change: null,
+      scheduled_tier: null,
+      scheduled_billing_period: null,
     })
     .eq('user_id', userId)
 
@@ -608,9 +613,12 @@ export async function processExpirations(
     throw new Error(`Failed to fetch cancelled subscriptions: ${cancelledError.message}`)
   }
 
-  if (cancelledSubs) {
-    for (const sub of cancelledSubs) {
-      const effectiveAt = (sub as Record<string, unknown>).cancellation_effective_at as string
+  // Type assertion for Supabase query result
+  const typedCancelledSubs = (cancelledSubs as unknown) as { user_id: string; cancellation_effective_at: string | null }[] | null
+
+  if (typedCancelledSubs) {
+    for (const sub of typedCancelledSubs) {
+      const effectiveAt = sub.cancellation_effective_at
       if (effectiveAt && isBefore(parseISO(effectiveAt), now)) {
         const { error } = await supabase
           .from('user_subscriptions')
@@ -639,8 +647,11 @@ export async function processExpirations(
     throw new Error(`Failed to fetch past_due subscriptions: ${pastDueError.message}`)
   }
 
-  if (pastDueSubs) {
-    for (const sub of pastDueSubs) {
+  // Type assertion for Supabase query result
+  const typedPastDueSubs = (pastDueSubs as unknown) as { user_id: string; updated_at: string }[] | null
+
+  if (typedPastDueSubs) {
+    for (const sub of typedPastDueSubs) {
       if (isBefore(parseISO(sub.updated_at), gracePeriodCutoff)) {
         const { error } = await supabase
           .from('user_subscriptions')

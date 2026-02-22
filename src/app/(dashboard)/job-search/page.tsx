@@ -682,7 +682,7 @@ function JobSearchPageContent() {
                     No job matches yet
                   </h3>
                   <p className="text-text-secondary max-w-md">
-                    Click "Search Now" to discover AI-matched jobs based on your profile and preferences.
+                    Click &quot;Search Now&quot; to discover AI-matched jobs based on your profile and preferences.
                   </p>
                 </div>
                 <Button onClick={handleSearchNow} disabled={isSearching} className="mt-2">

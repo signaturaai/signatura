@@ -128,8 +128,11 @@ export async function getUsageAverages(
     throw new Error(`Failed to fetch usage snapshots: ${error.message}`)
   }
 
+  // Type assertion for Supabase query result
+  const typedSnapshots = (snapshots as unknown) as Record<string, unknown>[] | null
+
   // No data - return zeros
-  if (!snapshots || snapshots.length === 0) {
+  if (!typedSnapshots || typedSnapshots.length === 0) {
     return {
       applications: 0,
       cvs: 0,
@@ -141,7 +144,7 @@ export async function getUsageAverages(
     }
   }
 
-  const monthCount = snapshots.length
+  const monthCount = typedSnapshots.length
 
   // Sum all resources across all months
   const totals: Record<ResourceKey, number> = {
@@ -153,8 +156,8 @@ export async function getUsageAverages(
     aiAvatarInterviews: 0,
   }
 
-  for (const snapshot of snapshots) {
-    const row = snapshot as Record<string, unknown>
+  for (const snapshot of typedSnapshots) {
+    const row = snapshot
     totals.applications += (row[RESOURCE_TO_COLUMN.applications] as number) || 0
     totals.cvs += (row[RESOURCE_TO_COLUMN.cvs] as number) || 0
     totals.interviews += (row[RESOURCE_TO_COLUMN.interviews] as number) || 0

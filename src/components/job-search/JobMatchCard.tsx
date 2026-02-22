@@ -403,7 +403,7 @@ export function JobMatchCard({ job, onApply, onFeedback }: JobMatchCardProps) {
               >
                 <div className="bg-error-light/20 border border-error/20 rounded-lg p-3">
                   <p className="text-sm text-text-secondary mb-2">
-                    What's the main reason?
+                    What&apos;s the main reason?
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {DISLIKE_REASONS.map((reason) => (

@@ -22,6 +22,8 @@ import type {
   ProfileJobSearchFields,
   DiscoveredJob,
   MatchBreakdown,
+  CompanySize,
+  GeneralCvAnalysis,
 } from '@/types/job-search'
 
 // ============================================================================
@@ -130,7 +132,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<DiscoverR
     }
 
     // 2. Fetch user's profile
-    const { data: profileData, error: profileError } = await serviceSupabase
+    const { data: rawProfileData, error: profileError } = await serviceSupabase
       .from('profiles')
       .select(
         'id, full_name, preferred_job_titles, preferred_industries, minimum_salary_expectation, salary_currency, location_preferences, company_size_preferences, career_goals, general_cv_analysis'
@@ -138,12 +140,26 @@ export async function POST(request: NextRequest): Promise<NextResponse<DiscoverR
       .eq('id', user.id)
       .single()
 
-    if (profileError || !profileData) {
+    if (profileError || !rawProfileData) {
       console.error('[JobSearch] Profile fetch error:', profileError)
       return NextResponse.json(
         { success: false, newMatches: 0, topScore: 0, error: 'Profile not found' },
         { status: 404 }
       )
+    }
+
+    // Type assertion for profile data
+    const profileData = (rawProfileData as unknown) as {
+      id: string
+      full_name: string
+      preferred_job_titles: string[] | null
+      preferred_industries: string[] | null
+      minimum_salary_expectation: number | null
+      salary_currency: string | null
+      location_preferences: Record<string, unknown> | null
+      company_size_preferences: string[] | null
+      career_goals: string | null
+      general_cv_analysis: unknown
     }
 
     const profile: CandidateProfile = {
@@ -154,17 +170,20 @@ export async function POST(request: NextRequest): Promise<NextResponse<DiscoverR
       minimum_salary_expectation: profileData.minimum_salary_expectation,
       salary_currency: profileData.salary_currency || 'USD',
       location_preferences: profileData.location_preferences || {},
-      company_size_preferences: profileData.company_size_preferences || [],
+      company_size_preferences: (profileData.company_size_preferences || []) as CompanySize[],
       career_goals: profileData.career_goals,
-      general_cv_analysis: profileData.general_cv_analysis,
+      general_cv_analysis: profileData.general_cv_analysis as GeneralCvAnalysis | null,
     }
 
     // 3. Fetch or create job search preferences
-    let { data: prefsData, error: prefsError } = await serviceSupabase
+    const prefsResult = await serviceSupabase
       .from('job_search_preferences')
       .select('*')
       .eq('user_id', user.id)
       .single()
+
+    let prefsData = prefsResult.data
+    const prefsError = prefsResult.error
 
     if (prefsError && prefsError.code === 'PGRST116') {
       // No preferences found, create default
@@ -192,7 +211,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<DiscoverR
       )
     }
 
-    const prefs = prefsData as JobSearchPreferencesRow
+    const prefs = (prefsData as unknown) as JobSearchPreferencesRow
 
     // 4. Check rate limit (5 minutes between searches)
     if (prefs.last_search_at) {

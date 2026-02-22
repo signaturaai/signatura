@@ -84,8 +84,11 @@ export async function PATCH(request: NextRequest): Promise<NextResponse<Keywords
       return NextResponse.json({ success: false, error: 'Failed to fetch preferences' }, { status: 500 })
     }
 
+    // Type assertion for preferences
+    const typedPrefs = (prefs as unknown) as { ai_keywords: string[] | null }
+
     // 4. Update keywords array
-    const currentKeywords: string[] = prefs.ai_keywords || []
+    const currentKeywords: string[] = typedPrefs.ai_keywords || []
     let updatedKeywords: string[]
 
     if (action === 'add') {

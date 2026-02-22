@@ -54,10 +54,12 @@ export {
   approveTransaction,
   parseWebhookPayload,
   verifyWebhook,
-  type GrowApiResponse,
-  type GrowPageCode,
-  type GrowRecurringPaymentParams,
-  type GrowOneTimeChargeParams,
+  type CreateRecurringPaymentParams,
+  type CreateRecurringPaymentResult,
+  type CreateOneTimeChargeParams,
+  type CreateOneTimeChargeResult,
+  type ApproveTransactionParams,
+  type ApproveTransactionResult,
   type GrowWebhookPayload,
 } from './grow-adapter'
 
@@ -66,8 +68,10 @@ export {
   createOrFindCustomer,
   createInvoiceReceipt,
   createCreditInvoice,
-  type MorningCustomer,
-  type MorningInvoice,
+  type MorningCustomerResult,
+  type MorningDocumentResult,
+  type CreateCustomerParams,
+  type CreateInvoiceParams,
 } from './morning-adapter'
 
 // Core subscription management

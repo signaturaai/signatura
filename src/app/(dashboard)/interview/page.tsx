@@ -672,7 +672,7 @@ export default function InterviewPage() {
           <UsageBadge resource="interviews" />
         </div>
         <p className="text-muted-foreground">
-          I'll be your practice partner. Let's build your confidence together.
+          I&apos;ll be your practice partner. Let&apos;s build your confidence together.
         </p>
       </div>
 
@@ -790,8 +790,8 @@ export default function InterviewPage() {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground mb-4">
-              I'll ask you questions, listen to your answers, and give you constructive feedback.
-              Struggling is part of learning—that's why we practice here, where it's safe.
+              I&apos;ll ask you questions, listen to your answers, and give you constructive feedback.
+              Struggling is part of learning—that&apos;s why we practice here, where it&apos;s safe.
             </p>
             <Button variant="outline" onClick={() => setMode('star-builder')}>
               <Play className="h-4 w-4 mr-2" />
@@ -812,8 +812,8 @@ export default function InterviewPage() {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground mb-4">
-              I'll simulate technical interviews tailored to your target role.
-              We'll work through problems together and I'll help you articulate your thinking.
+              I&apos;ll simulate technical interviews tailored to your target role.
+              We&apos;ll work through problems together and I&apos;ll help you articulate your thinking.
             </p>
             <Button variant="outline">
               <Play className="h-4 w-4 mr-2" />
@@ -832,8 +832,8 @@ export default function InterviewPage() {
             <div>
               <p className="font-medium">Remember</p>
               <p className="text-sm text-muted-foreground">
-                Interviews are conversations, not interrogations. You're interviewing them too.
-                Let's practice not just answering questions, but feeling confident in who you are.
+                Interviews are conversations, not interrogations. You&apos;re interviewing them too.
+                Let&apos;s practice not just answering questions, but feeling confident in who you are.
               </p>
             </div>
           </div>

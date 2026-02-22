@@ -136,8 +136,8 @@ function createMockSubscriptionRow(overrides: Partial<Record<string, unknown>> =
     current_period_end: periodEnd.toISOString(),
     cancelled_at: null,
     cancellation_effective_at: null,
-    scheduled_tier_change: null,
-    scheduled_billing_period_change: null,
+    scheduled_tier: null,
+    scheduled_billing_period: null,
     grow_transaction_token: null,
     grow_recurring_id: null,
     grow_last_transaction_code: null,
@@ -1157,7 +1157,7 @@ describe('Access Control', () => {
       it('should include scheduledTierChange when present', async () => {
         const supabase = createMockSupabase({
           subscriptionData: createMockSubscriptionRow({
-            scheduled_tier_change: 'accelerate',
+            scheduled_tier: 'accelerate',
           }),
         })
 
@@ -1172,7 +1172,7 @@ describe('Access Control', () => {
       it('should include scheduledBillingPeriodChange when present', async () => {
         const supabase = createMockSupabase({
           subscriptionData: createMockSubscriptionRow({
-            scheduled_billing_period_change: 'yearly',
+            scheduled_billing_period: 'yearly',
           }),
         })
 

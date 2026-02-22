@@ -634,7 +634,7 @@ describe('POST /api/subscription/change-plan', () => {
 
     expect(mockServiceClient.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        scheduled_billing_period_change: 'yearly',
+        scheduled_billing_period: 'yearly',
       })
     )
   })

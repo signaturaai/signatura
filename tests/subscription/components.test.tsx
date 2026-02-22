@@ -447,7 +447,7 @@ describe('UpgradePrompt', () => {
     render(<UpgradePrompt resource="applications" open={true} />)
 
     // Should show recommendation with tier name and price
-    expect(screen.getByText(/Accelerate/)).toBeInTheDocument()
+    expect(screen.getAllByText(/Accelerate/).length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText(/\$18\/mo/)).toBeInTheDocument()
   })
 
