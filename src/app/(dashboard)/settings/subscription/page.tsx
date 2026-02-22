@@ -671,8 +671,8 @@ export default function SubscriptionSettingsPage() {
             aiAvatarInterviews: 0,
           }}
           currentTier={tier}
-          recommendedTier={recommendation?.recommendation?.recommendedTier || null}
-          recommendationReason={recommendation?.recommendation?.reason || null}
+          recommendedTier={recommendation?.recommendedTier || null}
+          recommendationReason={recommendation?.reason || null}
         />
       )}
 

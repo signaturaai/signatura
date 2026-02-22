@@ -158,7 +158,8 @@ async function getSubscriptionRow(
     throw new Error(`Database error: ${error.message}`)
   }
 
-  return data
+  // Type assertion for Supabase query result
+  return (data as unknown) as Database['public']['Tables']['user_subscriptions']['Row'] | null
 }
 
 /**
@@ -218,7 +219,8 @@ export async function isAdmin(
     return false
   }
 
-  const profile = data as Record<string, unknown>
+  // Type assertion for Supabase query result
+  const profile = (data as unknown) as { role?: string; is_admin?: boolean }
   return profile.role === 'admin' || profile.is_admin === true
 }
 
@@ -462,9 +464,11 @@ export async function incrementUsage(
   } else if (fetchError) {
     throw new Error(`Database error: ${fetchError.message}`)
   } else {
+    // Type assertion for Supabase query result
+    const typedRow = (currentRow as unknown) as Database['public']['Tables']['user_subscriptions']['Row']
     // Update existing row
-    currentTier = currentRow.tier as SubscriptionTier | null
-    const oldCount = (currentRow as Record<string, unknown>)[columnName] as number
+    currentTier = typedRow.tier as SubscriptionTier | null
+    const oldCount = (typedRow as Record<string, unknown>)[columnName] as number
     currentCount = oldCount + 1
 
     const { error: updateError } = await supabase
@@ -481,7 +485,8 @@ export async function incrementUsage(
   const month = format(startOfMonth(new Date()), 'yyyy-MM-dd')
   const snapshotColumn = columnName // Same column name in snapshots table
 
-  const { error: snapshotError } = await supabase.rpc('upsert_usage_snapshot', {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error: snapshotError } = await (supabase as any).rpc('upsert_usage_snapshot', {
     p_user_id: userId,
     p_month: month,
     p_column: snapshotColumn,
@@ -499,24 +504,26 @@ export async function incrementUsage(
       .single()
 
     if (existingSnapshot) {
-      const currentSnapshotCount = (existingSnapshot as Record<string, unknown>)[snapshotColumn] as number || 0
+      // Type assertion for Supabase query result
+      const typedSnapshot = (existingSnapshot as unknown) as Record<string, unknown>
+      const currentSnapshotCount = typedSnapshot[snapshotColumn] as number || 0
       await supabase
         .from('usage_monthly_snapshots')
         .update({
           [snapshotColumn]: currentSnapshotCount + 1,
-          tier_at_snapshot: currentTier || (existingSnapshot as Record<string, unknown>).tier_at_snapshot,
+          tier: currentTier || (typedSnapshot.tier as SubscriptionTier | null),
           updated_at: new Date().toISOString(),
         })
         .eq('user_id', userId)
-        .eq('month', month)
+        .eq('snapshot_month', month)
     } else {
       await supabase
         .from('usage_monthly_snapshots')
         .insert({
           user_id: userId,
-          month,
+          snapshot_month: month,
           [snapshotColumn]: 1,
-          tier_at_snapshot: currentTier,
+          tier: currentTier,
         })
     }
   }

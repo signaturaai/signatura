@@ -62,7 +62,7 @@ export function SubscriptionGuard({
 
     if (!hasSubscription) {
       // No subscription - redirect to pricing with recommendation
-      const recommendedTier = recommendation?.recommendation?.recommendedTier
+      const recommendedTier = recommendation?.recommendedTier
       const redirectUrl = recommendedTier
         ? `${redirectTo}?recommended=${recommendedTier}`
         : redirectTo

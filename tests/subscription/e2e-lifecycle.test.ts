@@ -55,8 +55,8 @@ function backfillUser(userId: string) {
     current_period_start: null,
     current_period_end: null,
     last_reset_at: null,
-    scheduled_tier_change: null,
-    scheduled_billing_period_change: null,
+    scheduled_tier: null,
+    scheduled_billing_period: null,
     cancellation_effective_at: null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -235,15 +235,15 @@ function renewSubscription(userId: string, transactionCode: string): { countersR
   dbState.lastTransactionCode = transactionCode
 
   // Apply scheduled tier change
-  if (sub.scheduled_tier_change) {
-    sub.tier = sub.scheduled_tier_change
-    sub.scheduled_tier_change = null
+  if (sub.scheduled_tier) {
+    sub.tier = sub.scheduled_tier
+    sub.scheduled_tier = null
   }
 
   // Apply scheduled billing period change
-  if (sub.scheduled_billing_period_change) {
-    sub.billing_period = sub.scheduled_billing_period_change
-    sub.scheduled_billing_period_change = null
+  if (sub.scheduled_billing_period) {
+    sub.billing_period = sub.scheduled_billing_period
+    sub.scheduled_billing_period = null
   }
 
   // Calculate new period
@@ -278,7 +278,7 @@ function renewSubscription(userId: string, transactionCode: string): { countersR
  */
 function scheduleDowngrade(userId: string, targetTier: string): void {
   if (dbState.userSubscription) {
-    dbState.userSubscription.scheduled_tier_change = targetTier
+    dbState.userSubscription.scheduled_tier = targetTier
     dbState.userSubscription.updated_at = new Date().toISOString()
   }
 }
@@ -549,13 +549,13 @@ describe('E2E Lifecycle Tests', () => {
 
       // Step 9: User schedules downgrade to Momentum
       scheduleDowngrade(userId, 'momentum')
-      expect(dbState.userSubscription?.scheduled_tier_change).toBe('momentum')
+      expect(dbState.userSubscription?.scheduled_tier).toBe('momentum')
       expect(dbState.userSubscription?.tier).toBe('accelerate') // Still accelerate
 
       // Step 10: Next renewal → tier changes to momentum
       renewSubscription(userId, 'txn-456')
       expect(dbState.userSubscription?.tier).toBe('momentum')
-      expect(dbState.userSubscription?.scheduled_tier_change).toBeNull()
+      expect(dbState.userSubscription?.scheduled_tier).toBeNull()
 
       // Limits now 8 per resource
       for (let i = 0; i < 8; i++) {

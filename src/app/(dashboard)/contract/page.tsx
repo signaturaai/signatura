@@ -355,7 +355,7 @@ export default function ContractReviewerPage() {
                 Step 1: Select an Application
               </CardTitle>
               <CardDescription>
-                Choose which job's contract you want to review. Applications with offers are shown first.
+                Choose which job&apos;s contract you want to review. Applications with offers are shown first.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -509,7 +509,7 @@ export default function ContractReviewerPage() {
                 <div className="mt-4 p-3 bg-purple-50 rounded-lg">
                   <div className="flex items-center gap-2 mb-2">
                     <Brain className="w-4 h-4 text-purple-600" />
-                    <span className="text-sm font-medium text-purple-800">We'll Check For</span>
+                    <span className="text-sm font-medium text-purple-800">We&apos;ll Check For</span>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {negotiationSession?.final_salary && (

@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
 
     if (!parseResult.success) {
       return NextResponse.json(
-        { error: 'Invalid request body', details: parseResult.error.errors },
+        { error: 'Invalid request body', details: parseResult.error.issues },
         { status: 400 }
       )
     }

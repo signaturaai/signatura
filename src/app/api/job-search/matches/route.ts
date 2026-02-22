@@ -92,12 +92,14 @@ export async function GET(request: NextRequest): Promise<NextResponse<MatchesRes
     const serviceSupabase = createServiceClient()
 
     // 3. Get last_search_at from preferences
-    const { data: prefsData } = await serviceSupabase
+    const { data: rawPrefsData } = await serviceSupabase
       .from('job_search_preferences')
       .select('last_search_at')
       .eq('user_id', user.id)
       .single()
 
+    // Type assertion for preferences data
+    const prefsData = (rawPrefsData as unknown) as { last_search_at: string | null } | null
     const lastSearchAt = prefsData?.last_search_at || null
 
     // 4. Build the query for job postings
@@ -185,7 +187,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<MatchesRes
     const hasMore = offset + (jobs?.length || 0) < total
 
     return NextResponse.json({
-      jobs: (jobs as JobPostingRow[]) || [],
+      jobs: ((jobs as unknown) as JobPostingRow[]) || [],
       total,
       hasMore,
       lastSearchAt,

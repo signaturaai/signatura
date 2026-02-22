@@ -31,8 +31,8 @@ export async function POST(request: NextRequest) {
     // SPLIT PATTERN: First check feature access for AI Avatar
     const serviceSupabase = createServiceClient()
     const featureCheck = await checkFeatureAccess(serviceSupabase, user.id, 'aiAvatarInterviews')
-    if (!featureCheck.hasAccess) {
-      if (featureCheck.reason === 'no_subscription') {
+    if (!featureCheck.allowed) {
+      if (featureCheck.reason === 'NO_SUBSCRIPTION') {
         return NextResponse.json({ error: 'Subscription required', ...featureCheck }, { status: 402 })
       }
       return NextResponse.json({ error: 'Feature not available in your plan', ...featureCheck }, { status: 403 })

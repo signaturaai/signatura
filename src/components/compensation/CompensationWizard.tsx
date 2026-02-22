@@ -40,10 +40,19 @@ export interface WizardOutput {
   userPriorities: UserPriorities
 }
 
+interface InitialData {
+  companyName?: string
+  positionTitle?: string
+  industry?: string
+  salaryMin?: number
+  salaryMax?: number
+}
+
 interface CompensationWizardProps {
   onComplete: (data: WizardOutput) => void
   onCancel?: () => void
   isLoading?: boolean
+  initialData?: InitialData
 }
 
 const STEPS = [
@@ -123,19 +132,20 @@ export function CompensationWizard({
   onComplete,
   onCancel,
   isLoading = false,
+  initialData,
 }: CompensationWizardProps) {
   const [currentStep, setCurrentStep] = useState(1)
 
   // Step 1: Role & Location
-  const [roleTitle, setRoleTitle] = useState('')
+  const [roleTitle, setRoleTitle] = useState(initialData?.positionTitle || '')
   const [roleLevel, setRoleLevel] = useState<RoleLevel>('mid')
   const [location, setLocation] = useState('')
-  const [companyName, setCompanyName] = useState('')
+  const [companyName, setCompanyName] = useState(initialData?.companyName || '')
   const [companySize, setCompanySize] = useState<'startup' | 'small' | 'medium' | 'large' | 'enterprise'>('medium')
   const [remotePolicy, setRemotePolicy] = useState<'onsite' | 'hybrid' | 'remote'>('hybrid')
 
   // Step 2: Offer Numbers
-  const [baseSalary, setBaseSalary] = useState('')
+  const [baseSalary, setBaseSalary] = useState(initialData?.salaryMin?.toString() || '')
   const [currency, setCurrency] = useState<Currency>('USD')
   const [signOnBonus, setSignOnBonus] = useState('')
   const [annualBonus, setAnnualBonus] = useState('')

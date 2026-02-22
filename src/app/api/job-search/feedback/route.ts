@@ -104,7 +104,7 @@ function updateFeedbackStats(
     total_likes: current.total_likes || 0,
     total_dislikes: current.total_dislikes || 0,
     total_hides: current.total_hides || 0,
-    reasons: { ...current.reasons } || {},
+    reasons: { ...(current.reasons || {}) },
   }
 
   switch (feedback) {
@@ -174,7 +174,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<FeedbackR
       return NextResponse.json({ success: false, error: 'Job posting not found' }, { status: 404 })
     }
 
-    if (jobData.user_id !== user.id) {
+    // Type assertion for job data
+    const job = (jobData as unknown) as { id: string; user_id: string; company_name: string; location: string | null }
+
+    if (job.user_id !== user.id) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 403 })
     }
 
@@ -248,14 +251,21 @@ export async function POST(request: NextRequest): Promise<NextResponse<FeedbackR
       return NextResponse.json({ success: true })
     }
 
-    const currentImplicit: ImplicitPreferences = prefsData.implicit_preferences || {}
-    const currentStats: PreferencesFeedbackStats = prefsData.feedback_stats || {
+    // Type assertion for preferences data
+    const prefs = (prefsData as unknown) as {
+      implicit_preferences: ImplicitPreferences | null
+      feedback_stats: PreferencesFeedbackStats | null
+      avoid_companies: string[] | null
+    }
+
+    const currentImplicit: ImplicitPreferences = prefs.implicit_preferences || {}
+    const currentStats: PreferencesFeedbackStats = prefs.feedback_stats || {
       total_likes: 0,
       total_dislikes: 0,
       total_hides: 0,
       reasons: {},
     }
-    const currentAvoidCompanies: string[] = prefsData.avoid_companies || []
+    const currentAvoidCompanies: string[] = prefs.avoid_companies || []
 
     // Update feedback stats
     const updatedStats = updateFeedbackStats(currentStats, feedback, reason)
@@ -264,7 +274,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<FeedbackR
     const updatedImplicit = updateImplicitPreferences(
       currentImplicit,
       reason,
-      jobData as JobPostingData,
+      (job as unknown) as JobPostingData,
       updatedStats
     )
 
@@ -283,8 +293,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<FeedbackR
     }
 
     // Add company to avoidance list if reason is "Not interested in company"
-    if (reason === 'Not interested in company' && jobData.company_name) {
-      const companyName = jobData.company_name.trim()
+    if (reason === 'Not interested in company' && job.company_name) {
+      const companyName = job.company_name.trim()
       if (companyName && !currentAvoidCompanies.includes(companyName)) {
         prefsUpdate.avoid_companies = [...currentAvoidCompanies, companyName]
       }

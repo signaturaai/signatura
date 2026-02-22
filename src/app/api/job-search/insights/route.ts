@@ -21,6 +21,8 @@ import type {
   ProfileJobSearchFields,
   DiscoveredJob,
   JobPostingRow,
+  CompanySize,
+  GeneralCvAnalysis,
 } from '@/types/job-search'
 
 // ============================================================================
@@ -112,25 +114,42 @@ export async function POST(request: NextRequest): Promise<NextResponse<InsightsR
       return NextResponse.json({ success: false, error: 'Profile not found' }, { status: 404 })
     }
 
+    // Type assertion for profile data
+    const typedProfileData = (profileData as unknown) as {
+      id: string
+      full_name: string
+      preferred_job_titles: string[] | null
+      preferred_industries: string[] | null
+      minimum_salary_expectation: number | null
+      salary_currency: string | null
+      location_preferences: Record<string, unknown> | null
+      company_size_preferences: string[] | null
+      career_goals: string | null
+      general_cv_analysis: unknown
+    }
+
     const profile: CandidateProfile = {
-      id: profileData.id,
-      full_name: profileData.full_name,
-      preferred_job_titles: profileData.preferred_job_titles || [],
-      preferred_industries: profileData.preferred_industries || [],
-      minimum_salary_expectation: profileData.minimum_salary_expectation,
-      salary_currency: profileData.salary_currency || 'USD',
-      location_preferences: profileData.location_preferences || {},
-      company_size_preferences: profileData.company_size_preferences || [],
-      career_goals: profileData.career_goals,
-      general_cv_analysis: profileData.general_cv_analysis,
+      id: typedProfileData.id,
+      full_name: typedProfileData.full_name,
+      preferred_job_titles: typedProfileData.preferred_job_titles || [],
+      preferred_industries: typedProfileData.preferred_industries || [],
+      minimum_salary_expectation: typedProfileData.minimum_salary_expectation,
+      salary_currency: typedProfileData.salary_currency || 'USD',
+      location_preferences: typedProfileData.location_preferences || {},
+      company_size_preferences: (typedProfileData.company_size_preferences || []) as CompanySize[],
+      career_goals: typedProfileData.career_goals,
+      general_cv_analysis: typedProfileData.general_cv_analysis as GeneralCvAnalysis | null,
     }
 
     // 3. Fetch or create job search preferences
-    let { data: prefsData, error: prefsError } = await serviceSupabase
+    const prefsResult = await serviceSupabase
       .from('job_search_preferences')
       .select('*')
       .eq('user_id', user.id)
       .single()
+
+    let prefsData = prefsResult.data
+    const prefsError = prefsResult.error
 
     if (prefsError && prefsError.code === 'PGRST116') {
       // Create default preferences
@@ -152,7 +171,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<InsightsR
       return NextResponse.json({ success: false, error: 'Failed to fetch preferences' }, { status: 500 })
     }
 
-    const prefs = prefsData as JobSearchPreferencesRow
+    const prefs = (prefsData as unknown) as JobSearchPreferencesRow
 
     // 4. Check if we should use cached insights
     // Parse forceRefresh from request body if provided
@@ -167,13 +186,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<InsightsR
     if (!forceRefresh && !shouldRefreshInsights(prefs)) {
       // Return cached insights
       console.log(`[Insights] Returning cached insights for user ${user.id}`)
-      return NextResponse.json({
+      return NextResponse.json<InsightsResponse>({
         success: true,
         insights: {
           keywords: prefs.ai_keywords || [],
-          recommendedBoards: prefs.ai_recommended_boards || [],
-          marketInsights: prefs.ai_market_insights || null,
-          personalizedStrategy: prefs.ai_personalized_strategy || null,
+          recommendedBoards: ((prefs.ai_recommended_boards || []) as unknown) as SearchInsights['recommendedBoards'],
+          marketInsights: prefs.ai_market_insights || '',
+          personalizedStrategy: prefs.ai_personalized_strategy || '',
           generatedAt: prefs.ai_last_analysis_at || new Date().toISOString(),
         },
         cached: true,
@@ -194,24 +213,24 @@ export async function POST(request: NextRequest): Promise<NextResponse<InsightsR
     }
 
     // Convert JobPostingRow to DiscoveredJob for the insights generator
-    const recentJobs: DiscoveredJob[] = (recentJobsData || []).map((job: JobPostingRow) => ({
+    const recentJobs: DiscoveredJob[] = ((recentJobsData || []) as unknown as JobPostingRow[]).map((job) => ({
       title: job.title,
       company_name: job.company_name,
-      company_logo_url: job.company_logo_url || undefined,
-      description: job.description || undefined,
-      location: job.location || undefined,
-      work_type: job.work_type || undefined,
-      experience_level: job.experience_level || undefined,
-      salary_min: job.salary_min || undefined,
-      salary_max: job.salary_max || undefined,
-      salary_currency: job.salary_currency || undefined,
+      company_logo_url: job.company_logo_url ?? null,
+      description: job.description ?? null,
+      location: job.location ?? null,
+      work_type: job.work_type ?? null,
+      experience_level: job.experience_level ?? null,
+      salary_min: job.salary_min ?? null,
+      salary_max: job.salary_max ?? null,
+      salary_currency: job.salary_currency ?? undefined,
       required_skills: job.required_skills || [],
       benefits: job.benefits || [],
-      company_size: job.company_size || undefined,
-      source_url: job.source_url,
-      source_platform: job.source_platform || undefined,
-      posted_date: job.posted_date || undefined,
-      content_hash: job.content_hash || undefined,
+      company_size: job.company_size ?? null,
+      source_url: job.source_url || '',
+      source_platform: job.source_platform ?? null,
+      posted_date: job.posted_date ?? null,
+      content_hash: job.content_hash ?? null,
     }))
 
     // 6. Generate AI insights

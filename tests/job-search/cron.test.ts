@@ -211,7 +211,7 @@ describe('GET /api/cron/job-search', () => {
 
   describe('Returns', () => {
     it('rejects without CRON_SECRET', async () => {
-      const { GET } = await import('@/app/api/cron/job-search/route')
+      const { GET } = await import('@/lib/job-search/cron-helpers')
       const request = createCronRequest()
       const response = await GET(request)
       const data = await response.json()
@@ -222,7 +222,7 @@ describe('GET /api/cron/job-search', () => {
     })
 
     it('rejects with invalid CRON_SECRET', async () => {
-      const { GET } = await import('@/app/api/cron/job-search/route')
+      const { GET } = await import('@/lib/job-search/cron-helpers')
       const request = createCronRequest({ 'x-cron-secret': 'wrong-secret' })
       const response = await GET(request)
       const data = await response.json()
@@ -235,7 +235,7 @@ describe('GET /api/cron/job-search', () => {
     it('returns 500 when CRON_SECRET is not configured', async () => {
       vi.stubEnv('CRON_SECRET', '')
 
-      const { GET } = await import('@/app/api/cron/job-search/route')
+      const { GET } = await import('@/lib/job-search/cron-helpers')
       const request = createCronRequest({ 'x-cron-secret': 'any-secret' })
       const response = await GET(request)
       const data = await response.json()
@@ -248,7 +248,7 @@ describe('GET /api/cron/job-search', () => {
     it('returns success response structure on valid request', async () => {
       setupServiceClient({ activePrefs: [] })
 
-      const { GET } = await import('@/app/api/cron/job-search/route')
+      const { GET } = await import('@/lib/job-search/cron-helpers')
       const request = createCronRequest({ 'x-cron-secret': 'test-cron-secret' })
       const response = await GET(request)
       const data = await response.json()
@@ -271,7 +271,7 @@ describe('GET /api/cron/job-search', () => {
 describe('shouldSearchToday', () => {
   describe('Returns', () => {
     it('returns true for fresh users', async () => {
-      const { shouldSearchToday } = await import('@/app/api/cron/job-search/route')
+      const { shouldSearchToday } = await import('@/lib/job-search/cron-helpers')
       const prefs = createMockPreferences({
         consecutive_zero_match_days: 0,
         last_search_at: daysAgo(1),
@@ -281,7 +281,7 @@ describe('shouldSearchToday', () => {
     })
 
     it('returns false when zero matches for 7+ days and searched yesterday', async () => {
-      const { shouldSearchToday } = await import('@/app/api/cron/job-search/route')
+      const { shouldSearchToday } = await import('@/lib/job-search/cron-helpers')
       const prefs = createMockPreferences({
         consecutive_zero_match_days: 8,
         last_search_at: daysAgo(1),
@@ -291,7 +291,7 @@ describe('shouldSearchToday', () => {
     })
 
     it('returns true when zero matches for 7+ days but last search was 3+ days ago', async () => {
-      const { shouldSearchToday } = await import('@/app/api/cron/job-search/route')
+      const { shouldSearchToday } = await import('@/lib/job-search/cron-helpers')
       const prefs = createMockPreferences({
         consecutive_zero_match_days: 8,
         last_search_at: daysAgo(4),
@@ -301,7 +301,7 @@ describe('shouldSearchToday', () => {
     })
 
     it('returns false for inactive users', async () => {
-      const { shouldSearchToday } = await import('@/app/api/cron/job-search/route')
+      const { shouldSearchToday } = await import('@/lib/job-search/cron-helpers')
       const prefs = createMockPreferences({
         is_active: false,
         consecutive_zero_match_days: 0,
@@ -311,7 +311,7 @@ describe('shouldSearchToday', () => {
     })
 
     it('returns true when never searched before', async () => {
-      const { shouldSearchToday } = await import('@/app/api/cron/job-search/route')
+      const { shouldSearchToday } = await import('@/lib/job-search/cron-helpers')
       const prefs = createMockPreferences({
         consecutive_zero_match_days: 10,
         last_search_at: null,
@@ -321,7 +321,7 @@ describe('shouldSearchToday', () => {
     })
 
     it('returns true for users with 6 consecutive zero match days', async () => {
-      const { shouldSearchToday } = await import('@/app/api/cron/job-search/route')
+      const { shouldSearchToday } = await import('@/lib/job-search/cron-helpers')
       const prefs = createMockPreferences({
         consecutive_zero_match_days: 6,
         last_search_at: daysAgo(1),
@@ -331,7 +331,7 @@ describe('shouldSearchToday', () => {
     })
 
     it('returns false for users with exactly 7 zero match days searched 2 days ago', async () => {
-      const { shouldSearchToday } = await import('@/app/api/cron/job-search/route')
+      const { shouldSearchToday } = await import('@/lib/job-search/cron-helpers')
       const prefs = createMockPreferences({
         consecutive_zero_match_days: 7,
         last_search_at: daysAgo(2),
@@ -341,7 +341,7 @@ describe('shouldSearchToday', () => {
     })
 
     it('returns true for users with exactly 7 zero match days searched 3 days ago', async () => {
-      const { shouldSearchToday } = await import('@/app/api/cron/job-search/route')
+      const { shouldSearchToday } = await import('@/lib/job-search/cron-helpers')
       const prefs = createMockPreferences({
         consecutive_zero_match_days: 7,
         last_search_at: daysAgo(3),
@@ -359,7 +359,7 @@ describe('shouldSearchToday', () => {
 describe('isEmailDue', () => {
   describe('Daily frequency', () => {
     it('returns true when last sent >24h ago', async () => {
-      const { isEmailDue } = await import('@/app/api/cron/job-search/route')
+      const { isEmailDue } = await import('@/lib/job-search/cron-helpers')
       const prefs = createMockPreferences({
         email_notification_frequency: 'daily',
         last_email_sent_at: hoursAgo(25),
@@ -369,7 +369,7 @@ describe('isEmailDue', () => {
     })
 
     it('returns false when last sent 12h ago', async () => {
-      const { isEmailDue } = await import('@/app/api/cron/job-search/route')
+      const { isEmailDue } = await import('@/lib/job-search/cron-helpers')
       const prefs = createMockPreferences({
         email_notification_frequency: 'daily',
         last_email_sent_at: hoursAgo(12),
@@ -379,7 +379,7 @@ describe('isEmailDue', () => {
     })
 
     it('returns false when last sent exactly 24h ago', async () => {
-      const { isEmailDue } = await import('@/app/api/cron/job-search/route')
+      const { isEmailDue } = await import('@/lib/job-search/cron-helpers')
       const prefs = createMockPreferences({
         email_notification_frequency: 'daily',
         last_email_sent_at: hoursAgo(24),
@@ -391,7 +391,7 @@ describe('isEmailDue', () => {
 
   describe('Weekly frequency', () => {
     it('returns true when today is Monday and last sent >6d ago', async () => {
-      const { isEmailDue } = await import('@/app/api/cron/job-search/route')
+      const { isEmailDue } = await import('@/lib/job-search/cron-helpers')
       const prefs = createMockPreferences({
         email_notification_frequency: 'weekly',
         last_email_sent_at: daysAgo(7),
@@ -407,7 +407,7 @@ describe('isEmailDue', () => {
     })
 
     it('returns false when today is Wednesday', async () => {
-      const { isEmailDue } = await import('@/app/api/cron/job-search/route')
+      const { isEmailDue } = await import('@/lib/job-search/cron-helpers')
       const prefs = createMockPreferences({
         email_notification_frequency: 'weekly',
         last_email_sent_at: daysAgo(7),
@@ -423,7 +423,7 @@ describe('isEmailDue', () => {
     })
 
     it('returns false when today is Monday but last sent 3 days ago', async () => {
-      const { isEmailDue } = await import('@/app/api/cron/job-search/route')
+      const { isEmailDue } = await import('@/lib/job-search/cron-helpers')
       const prefs = createMockPreferences({
         email_notification_frequency: 'weekly',
         last_email_sent_at: daysAgo(3),
@@ -441,7 +441,7 @@ describe('isEmailDue', () => {
 
   describe('Monthly frequency', () => {
     it('returns true when today is 1st', async () => {
-      const { isEmailDue } = await import('@/app/api/cron/job-search/route')
+      const { isEmailDue } = await import('@/lib/job-search/cron-helpers')
       const prefs = createMockPreferences({
         email_notification_frequency: 'monthly',
         last_email_sent_at: daysAgo(31),
@@ -455,7 +455,7 @@ describe('isEmailDue', () => {
     })
 
     it('returns false when today is 15th', async () => {
-      const { isEmailDue } = await import('@/app/api/cron/job-search/route')
+      const { isEmailDue } = await import('@/lib/job-search/cron-helpers')
       const prefs = createMockPreferences({
         email_notification_frequency: 'monthly',
         last_email_sent_at: daysAgo(31),
@@ -471,7 +471,7 @@ describe('isEmailDue', () => {
 
   describe('Disabled frequency', () => {
     it('always returns false', async () => {
-      const { isEmailDue } = await import('@/app/api/cron/job-search/route')
+      const { isEmailDue } = await import('@/lib/job-search/cron-helpers')
       const prefs = createMockPreferences({
         email_notification_frequency: 'disabled',
         last_email_sent_at: null,
@@ -483,7 +483,7 @@ describe('isEmailDue', () => {
 
   describe('Never sent before', () => {
     it('returns true for daily frequency when never sent', async () => {
-      const { isEmailDue } = await import('@/app/api/cron/job-search/route')
+      const { isEmailDue } = await import('@/lib/job-search/cron-helpers')
       const prefs = createMockPreferences({
         email_notification_frequency: 'daily',
         last_email_sent_at: null,
@@ -493,7 +493,7 @@ describe('isEmailDue', () => {
     })
 
     it('returns true for weekly frequency when never sent', async () => {
-      const { isEmailDue } = await import('@/app/api/cron/job-search/route')
+      const { isEmailDue } = await import('@/lib/job-search/cron-helpers')
       const prefs = createMockPreferences({
         email_notification_frequency: 'weekly',
         last_email_sent_at: null,
@@ -503,7 +503,7 @@ describe('isEmailDue', () => {
     })
 
     it('returns true for monthly frequency when never sent', async () => {
-      const { isEmailDue } = await import('@/app/api/cron/job-search/route')
+      const { isEmailDue } = await import('@/lib/job-search/cron-helpers')
       const prefs = createMockPreferences({
         email_notification_frequency: 'monthly',
         last_email_sent_at: null,
@@ -560,7 +560,7 @@ describe('cleanupExpiredJobs', () => {
         }),
       }
 
-      const { cleanupExpiredJobs } = await import('@/app/api/cron/job-search/route')
+      const { cleanupExpiredJobs } = await import('@/lib/job-search/cron-helpers')
       const result = await cleanupExpiredJobs(mockSupabase as never)
 
       expect(result.borderlineDeleted).toBe(1)
@@ -606,7 +606,7 @@ describe('cleanupExpiredJobs', () => {
         }),
       }
 
-      const { cleanupExpiredJobs } = await import('@/app/api/cron/job-search/route')
+      const { cleanupExpiredJobs } = await import('@/lib/job-search/cron-helpers')
       const result = await cleanupExpiredJobs(mockSupabase as never)
 
       expect(result.borderlineDeleted).toBe(0)
@@ -654,7 +654,7 @@ describe('cleanupExpiredJobs', () => {
         }),
       }
 
-      const { cleanupExpiredJobs } = await import('@/app/api/cron/job-search/route')
+      const { cleanupExpiredJobs } = await import('@/lib/job-search/cron-helpers')
       const result = await cleanupExpiredJobs(mockSupabase as never)
 
       expect(result.dismissedDeleted).toBe(1)
@@ -698,7 +698,7 @@ describe('cleanupExpiredJobs', () => {
         }),
       }
 
-      const { cleanupExpiredJobs } = await import('@/app/api/cron/job-search/route')
+      const { cleanupExpiredJobs } = await import('@/lib/job-search/cron-helpers')
       const result = await cleanupExpiredJobs(mockSupabase as never)
 
       expect(result.dismissedDeleted).toBe(0)
@@ -750,7 +750,7 @@ describe('cleanupExpiredJobs', () => {
         }),
       }
 
-      const { cleanupExpiredJobs } = await import('@/app/api/cron/job-search/route')
+      const { cleanupExpiredJobs } = await import('@/lib/job-search/cron-helpers')
       const result = await cleanupExpiredJobs(mockSupabase as never)
 
       // Active matched jobs (score >= 75, status = 'new') should never be in the deletion results

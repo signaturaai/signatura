@@ -84,7 +84,7 @@ async function reconcileSnapshots(
   const lastMonth = format(subMonths(new Date(), 1), 'yyyy-MM')
 
   // Fetch all snapshots for last month
-  const { data: snapshots, error: snapshotError } = await supabase
+  const { data: rawSnapshots, error: snapshotError } = await supabase
     .from('usage_monthly_snapshots')
     .select('*')
     .eq('snapshot_month', lastMonth)
@@ -94,10 +94,22 @@ async function reconcileSnapshots(
     return { reconciled: 0, mismatches: [] }
   }
 
-  if (!snapshots || snapshots.length === 0) {
+  if (!rawSnapshots || rawSnapshots.length === 0) {
     console.log('[Cron] No snapshots found for month:', lastMonth)
     return { reconciled: 0, mismatches: [] }
   }
+
+  // Type assertion for snapshots
+  const snapshots = (rawSnapshots as unknown) as Array<{
+    user_id: string
+    tier: string | null
+    applications_used: number
+    cvs_used: number
+    interviews_used: number
+    compensations_used: number
+    contracts_used: number
+    ai_avatar_interviews_used: number
+  }>
 
   // For each snapshot, verify against the current subscription counters
   // Note: This is a safety net check - if counters were reset for a new period,
@@ -106,7 +118,7 @@ async function reconcileSnapshots(
     const userId = snapshot.user_id
 
     // Get current subscription to verify tier matches
-    const { data: subscription, error: subError } = await supabase
+    const { data: rawSubscription, error: subError } = await supabase
       .from('user_subscriptions')
       .select('tier, billing_period')
       .eq('user_id', userId)
@@ -116,6 +128,9 @@ async function reconcileSnapshots(
       // User may have been deleted, skip
       continue
     }
+
+    // Type assertion for subscription
+    const subscription = (rawSubscription as unknown) as { tier: string; billing_period: string } | null
 
     // Check tier consistency (snapshot tier should match what was active during that month)
     // Note: Tier in snapshot represents the tier at the time of snapshot creation
@@ -132,7 +147,7 @@ async function reconcileSnapshots(
       { field: 'applications_used', value: snapshot.applications_used },
       { field: 'cvs_used', value: snapshot.cvs_used },
       { field: 'interviews_used', value: snapshot.interviews_used },
-      { field: 'compensation_used', value: snapshot.compensation_used },
+      { field: 'compensations_used', value: snapshot.compensations_used },
       { field: 'contracts_used', value: snapshot.contracts_used },
       { field: 'ai_avatar_interviews_used', value: snapshot.ai_avatar_interviews_used },
     ]

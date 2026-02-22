@@ -104,8 +104,8 @@ function createMockSubscriptionRow(overrides: Partial<Record<string, unknown>> =
     current_period_end: periodEnd.toISOString(),
     cancelled_at: null,
     cancellation_effective_at: null,
-    scheduled_tier_change: null,
-    scheduled_billing_period_change: null,
+    scheduled_tier: null,
+    scheduled_billing_period: null,
     grow_transaction_token: null,
     grow_recurring_id: null,
     grow_last_transaction_code: null,
@@ -271,8 +271,8 @@ describe('Subscription Manager', () => {
       const upsertCalls = supabase._getUpsertCalls()
       expect(upsertCalls[0].pending_tier).toBeNull()
       expect(upsertCalls[0].pending_billing_period).toBeNull()
-      expect(upsertCalls[0].scheduled_tier_change).toBeNull()
-      expect(upsertCalls[0].scheduled_billing_period_change).toBeNull()
+      expect(upsertCalls[0].scheduled_tier).toBeNull()
+      expect(upsertCalls[0].scheduled_billing_period).toBeNull()
       expect(upsertCalls[0].cancelled_at).toBeNull()
       expect(upsertCalls[0].cancellation_effective_at).toBeNull()
     })
@@ -376,17 +376,17 @@ describe('Subscription Manager', () => {
       expect(updateCalls[0].last_reset_at).toBeUndefined()
     })
 
-    it('should clear scheduled_tier_change on upgrade', async () => {
+    it('should clear scheduled_tier on upgrade', async () => {
       const mockRow = createMockSubscriptionRow({
         tier: 'momentum',
-        scheduled_tier_change: 'elite',
+        scheduled_tier: 'elite',
       })
       const supabase = createMockSupabase({ subscriptionData: mockRow })
 
       await upgradeSubscription(supabase as never, 'user-abc', 'accelerate')
 
       const updateCalls = supabase._getUpdateCalls()
-      expect(updateCalls[0].scheduled_tier_change).toBeNull()
+      expect(updateCalls[0].scheduled_tier).toBeNull()
     })
 
     it('should log upgraded event', async () => {
@@ -508,14 +508,14 @@ describe('Subscription Manager', () => {
       ).rejects.toThrow('elite is not a downgrade from momentum')
     })
 
-    it('should set scheduled_tier_change', async () => {
+    it('should set scheduled_tier', async () => {
       const mockRow = createMockSubscriptionRow({ tier: 'elite' })
       const supabase = createMockSupabase({ subscriptionData: mockRow })
 
       await scheduleDowngrade(supabase as never, 'user-abc', 'momentum')
 
       const updateCalls = supabase._getUpdateCalls()
-      expect(updateCalls[0].scheduled_tier_change).toBe('momentum')
+      expect(updateCalls[0].scheduled_tier).toBe('momentum')
     })
 
     it('should NOT change current tier', async () => {
@@ -583,14 +583,14 @@ describe('Subscription Manager', () => {
   // ==========================================================================
 
   describe('cancelScheduledChange', () => {
-    it('should clear scheduled_tier_change and scheduled_billing_period_change', async () => {
+    it('should clear scheduled_tier and scheduled_billing_period', async () => {
       const supabase = createMockSupabase()
 
       await cancelScheduledChange(supabase as never, 'user-abc')
 
       const updateCalls = supabase._getUpdateCalls()
-      expect(updateCalls[0].scheduled_tier_change).toBeNull()
-      expect(updateCalls[0].scheduled_billing_period_change).toBeNull()
+      expect(updateCalls[0].scheduled_tier).toBeNull()
+      expect(updateCalls[0].scheduled_billing_period).toBeNull()
     })
 
     it('should log scheduled_change_cancelled event', async () => {
@@ -780,7 +780,7 @@ describe('Subscription Manager', () => {
     it('should apply scheduledTierChange on renewal', async () => {
       const mockRow = createMockSubscriptionRow({
         tier: 'elite',
-        scheduled_tier_change: 'momentum',
+        scheduled_tier: 'momentum',
       })
       const supabase = createMockSupabase({ subscriptionData: mockRow })
 
@@ -790,14 +790,14 @@ describe('Subscription Manager', () => {
       // Tier should now be the scheduled tier (momentum), not the original (elite)
       expect(updateCalls[0].tier).toBe('momentum')
       // Scheduled change should be cleared
-      expect(updateCalls[0].scheduled_tier_change).toBeNull()
+      expect(updateCalls[0].scheduled_tier).toBeNull()
     })
 
     it('should apply scheduledBillingPeriodChange on renewal', async () => {
       const mockRow = createMockSubscriptionRow({
         tier: 'momentum',
         billing_period: 'monthly',
-        scheduled_billing_period_change: 'yearly',
+        scheduled_billing_period: 'yearly',
       })
       const supabase = createMockSupabase({ subscriptionData: mockRow })
 
@@ -805,13 +805,13 @@ describe('Subscription Manager', () => {
 
       const updateCalls = supabase._getUpdateCalls()
       expect(updateCalls[0].billing_period).toBe('yearly')
-      expect(updateCalls[0].scheduled_billing_period_change).toBeNull()
+      expect(updateCalls[0].scheduled_billing_period).toBeNull()
     })
 
     it('should keep current tier if no scheduledTierChange', async () => {
       const mockRow = createMockSubscriptionRow({
         tier: 'accelerate',
-        scheduled_tier_change: null,
+        scheduled_tier: null,
       })
       const supabase = createMockSupabase({ subscriptionData: mockRow })
 
@@ -825,8 +825,8 @@ describe('Subscription Manager', () => {
       const mockRow = createMockSubscriptionRow({
         tier: 'elite',
         billing_period: 'monthly',
-        scheduled_tier_change: 'momentum',
-        scheduled_billing_period_change: 'yearly',
+        scheduled_tier: 'momentum',
+        scheduled_billing_period: 'yearly',
       })
       const supabase = createMockSupabase({ subscriptionData: mockRow })
 
@@ -834,8 +834,8 @@ describe('Subscription Manager', () => {
 
       const updateCalls = supabase._getUpdateCalls()
       // Both scheduled fields should be cleared after applying
-      expect(updateCalls[0].scheduled_tier_change).toBeNull()
-      expect(updateCalls[0].scheduled_billing_period_change).toBeNull()
+      expect(updateCalls[0].scheduled_tier).toBeNull()
+      expect(updateCalls[0].scheduled_billing_period).toBeNull()
     })
 
     it('should extend period by billing period duration (monthly)', async () => {
@@ -1148,7 +1148,7 @@ describe('Subscription Manager', () => {
         await scheduleDowngrade(supabase as never, 'user-abc', 'momentum')
 
         const updateCalls = supabase._getUpdateCalls()
-        expect(updateCalls[0].scheduled_tier_change).toBe('momentum')
+        expect(updateCalls[0].scheduled_tier).toBe('momentum')
         expect(updateCalls[0].tier).toBeUndefined() // Current tier unchanged
       })
     })

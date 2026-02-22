@@ -10,11 +10,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { discoverJobs, calculateMatchScore, sendJobMatchDigest } from '@/lib/job-search'
+import { shouldSearchToday, isEmailDue } from '@/lib/job-search/cron-helpers'
 import type {
   JobSearchPreferencesRow,
   ProfileJobSearchFields,
-  DiscoveredJob,
   EmailNotificationFrequency,
+  CompanySize,
 } from '@/types/job-search'
 
 // ============================================================================
@@ -50,89 +51,17 @@ interface CleanupResult {
 // ============================================================================
 
 const MAX_JOBS_PER_USER = 50
-const ZERO_MATCH_THRESHOLD_DAYS = 7
-const SEARCH_INTERVAL_WHEN_INACTIVE = 3 // days
 const BORDERLINE_EXPIRY_DAYS = 7
 const DISMISSED_EXPIRY_DAYS = 30
 
 // ============================================================================
-// Helper Functions (exported for testing)
+// Helper Functions
 // ============================================================================
-
-/**
- * Determines if a user should be searched today based on their activity patterns.
- */
-export function shouldSearchToday(prefs: JobSearchPreferencesRow): boolean {
-  // Defense in depth: inactive users should not search
-  if (!prefs.is_active) {
-    return false
-  }
-
-  // If no consecutive zero match days, always search
-  if (prefs.consecutive_zero_match_days < ZERO_MATCH_THRESHOLD_DAYS) {
-    return true
-  }
-
-  // For users with 7+ consecutive zero match days, only search every 3 days
-  if (!prefs.last_search_at) {
-    return true // Never searched, should search
-  }
-
-  const lastSearch = new Date(prefs.last_search_at)
-  const now = new Date()
-  const daysSinceLastSearch = Math.floor(
-    (now.getTime() - lastSearch.getTime()) / (1000 * 60 * 60 * 24)
-  )
-
-  return daysSinceLastSearch >= SEARCH_INTERVAL_WHEN_INACTIVE
-}
-
-/**
- * Determines if an email notification is due based on frequency settings.
- */
-export function isEmailDue(
-  prefs: JobSearchPreferencesRow,
-  now: Date = new Date()
-): boolean {
-  const { email_notification_frequency, last_email_sent_at } = prefs
-
-  // Disabled frequency never sends
-  if (email_notification_frequency === 'disabled') {
-    return false
-  }
-
-  // Never sent before - always due for any enabled frequency
-  if (!last_email_sent_at) {
-    return true
-  }
-
-  const lastSent = new Date(last_email_sent_at)
-  const hoursSinceLastSent = (now.getTime() - lastSent.getTime()) / (1000 * 60 * 60)
-  const dayOfWeek = now.getUTCDay() // 0 = Sunday, 1 = Monday
-  const dayOfMonth = now.getUTCDate()
-
-  switch (email_notification_frequency) {
-    case 'daily':
-      // Due if more than 24 hours since last sent
-      return hoursSinceLastSent > 24
-
-    case 'weekly':
-      // Due on Monday (day 1) and more than 6 days since last sent
-      return dayOfWeek === 1 && hoursSinceLastSent > 6 * 24
-
-    case 'monthly':
-      // Due on 1st of month
-      return dayOfMonth === 1
-
-    default:
-      return false
-  }
-}
 
 /**
  * Cleans up expired borderline and dismissed jobs.
  */
-export async function cleanupExpiredJobs(
+async function cleanupExpiredJobs(
   supabase: ReturnType<typeof createServiceClient>
 ): Promise<CleanupResult> {
   const now = new Date()
@@ -262,7 +191,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<CronRespon
     let emailsSent = 0
 
     // 3. Process each active user sequentially
-    for (const prefs of activePrefs as JobSearchPreferencesRow[]) {
+    for (const prefs of (activePrefs as unknown) as JobSearchPreferencesRow[]) {
       // Check if we should search today for this user
       if (!shouldSearchToday(prefs)) {
         console.log(`[Cron] Skipping user ${prefs.user_id} - not due for search`)
@@ -271,7 +200,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<CronRespon
 
       try {
         // Fetch user's profile
-        const { data: profileData, error: profileError } = await supabase
+        const { data: rawProfileData, error: profileError } = await supabase
           .from('profiles')
           .select(
             'id, full_name, preferred_job_titles, preferred_industries, minimum_salary_expectation, salary_currency, location_preferences, company_size_preferences, career_goals, general_cv_analysis'
@@ -279,9 +208,35 @@ export async function GET(request: NextRequest): Promise<NextResponse<CronRespon
           .eq('id', prefs.user_id)
           .single()
 
-        if (profileError || !profileData) {
+        if (profileError || !rawProfileData) {
           console.error(`[Cron] Failed to fetch profile for user ${prefs.user_id}:`, profileError)
           continue
+        }
+
+        // Type assertion for profile data
+        const profileData = (rawProfileData as unknown) as {
+          id: string
+          full_name: string
+          preferred_job_titles: string[] | null
+          preferred_industries: string[] | null
+          minimum_salary_expectation: number | null
+          salary_currency: string | null
+          location_preferences: Record<string, unknown> | null
+          company_size_preferences: string[] | null
+          career_goals: string | null
+          general_cv_analysis: string | null
+        }
+
+        // Parse general_cv_analysis if it's a string (JSON stored in DB)
+        let generalCvAnalysis = null
+        if (profileData.general_cv_analysis) {
+          try {
+            generalCvAnalysis = typeof profileData.general_cv_analysis === 'string'
+              ? JSON.parse(profileData.general_cv_analysis)
+              : profileData.general_cv_analysis
+          } catch {
+            generalCvAnalysis = null
+          }
         }
 
         const profile: CandidateProfile = {
@@ -292,9 +247,9 @@ export async function GET(request: NextRequest): Promise<NextResponse<CronRespon
           minimum_salary_expectation: profileData.minimum_salary_expectation,
           salary_currency: profileData.salary_currency || 'USD',
           location_preferences: profileData.location_preferences || {},
-          company_size_preferences: profileData.company_size_preferences || [],
+          company_size_preferences: (profileData.company_size_preferences || []) as CompanySize[],
           career_goals: profileData.career_goals,
-          general_cv_analysis: profileData.general_cv_analysis,
+          general_cv_analysis: generalCvAnalysis,
         }
 
         // Discover jobs
@@ -310,7 +265,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<CronRespon
           const matchResult = calculateMatchScore(job, profile, prefs)
 
           // Skip jobs below 65%
-          if (matchResult.score < 65) {
+          if (matchResult.totalScore < 65) {
             continue
           }
 
@@ -334,9 +289,9 @@ export async function GET(request: NextRequest): Promise<NextResponse<CronRespon
             source_platform: job.source_platform || null,
             posted_date: job.posted_date || null,
             content_hash: job.content_hash || null,
-            match_score: matchResult.score,
+            match_score: matchResult.totalScore,
             match_breakdown: matchResult.breakdown,
-            match_reasons: matchResult.reasons,
+            match_reasons: matchResult.matchReasons,
             status: 'new' as const,
           }
 
@@ -350,7 +305,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<CronRespon
             continue
           }
 
-          if (matchResult.score >= 75) {
+          if (matchResult.totalScore >= 75) {
             matchesCreated++
           } else {
             borderlineStored++

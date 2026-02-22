@@ -100,10 +100,14 @@ export function JobMatchesCard() {
         .eq('user_id', user.id)
         .single()
 
+      // Type assertions for Supabase query results
+      const typedTopMatches = (topMatches as unknown) as JobMatch[] | null
+      const typedPrefs = (prefs as unknown) as { last_search_at: string | null } | null
+
       setData({
         newMatchCount: newMatchCount || 0,
-        topMatches: (topMatches || []) as JobMatch[],
-        lastSearchedAt: prefs?.last_search_at || null,
+        topMatches: typedTopMatches || [],
+        lastSearchedAt: typedPrefs?.last_search_at || null,
       })
     } catch (error) {
       console.error('[JobMatchesCard] Error fetching data:', error)

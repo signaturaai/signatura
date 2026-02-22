@@ -229,8 +229,8 @@ export function calculateLocationScore(
     return 95
   }
 
-  // If candidate wants remote only and job isn't remote
-  if (candidatePrefs.remote_policy === 'remote' && jobWorkType !== 'remote') {
+  // If candidate wants remote only and job isn't remote (already returned above if it was remote/flexible)
+  if (candidatePrefs.remote_policy === 'remote') {
     // Check if it's hybrid - might still work
     if (jobWorkType === 'hybrid') {
       return 50
@@ -514,14 +514,22 @@ export function calculateMatchScore(
   // Calculate individual scores (0-100 each)
   const skillsScore = calculateSkillsScore(job.required_skills, candidateSkills)
   const experienceScore = calculateExperienceScore(job.experience_level, candidateLevel)
+  // Type assertion for location preferences which may have additional fields at runtime
+  const locationPrefs = candidateProfile.location_preferences as {
+    city?: string | null
+    country?: string | null
+    remote_policy?: string | null
+    willing_to_relocate?: boolean
+  } | undefined
+
   const locationScore = calculateLocationScore(
     job.location,
     job.work_type,
     {
-      city: candidateProfile.location_preferences?.city,
-      country: candidateProfile.location_preferences?.country,
-      remote_policy: candidateProfile.location_preferences?.remote_policy,
-      willing_to_relocate: (candidateProfile.location_preferences as Record<string, boolean>)?.willing_to_relocate,
+      city: locationPrefs?.city,
+      country: locationPrefs?.country,
+      remote_policy: locationPrefs?.remote_policy,
+      willing_to_relocate: locationPrefs?.willing_to_relocate,
     }
   )
   const salaryScore = calculateSalaryScore(
