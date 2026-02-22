@@ -87,3 +87,58 @@ export function isEmailDue(
       return false
   }
 }
+
+// ============================================================================
+// Cleanup Functions
+// ============================================================================
+
+export interface CleanupResult {
+  borderlineDeleted: number
+  dismissedDeleted: number
+}
+
+const BORDERLINE_EXPIRY_DAYS = 7
+const DISMISSED_EXPIRY_DAYS = 30
+
+/**
+ * Cleans up expired borderline and dismissed jobs.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function cleanupExpiredJobs(supabase: any): Promise<CleanupResult> {
+  const now = new Date()
+
+  // Delete borderline jobs (65-74% match score) older than 7 days
+  const borderlineCutoff = new Date(now.getTime() - BORDERLINE_EXPIRY_DAYS * 24 * 60 * 60 * 1000)
+
+  const { data: borderlineDeleted, error: borderlineError } = await supabase
+    .from('job_postings')
+    .delete()
+    .gte('match_score', 65)
+    .lt('match_score', 75)
+    .lt('discovered_at', borderlineCutoff.toISOString())
+    .select('id')
+
+  if (borderlineError) {
+    console.error('[Cron] Failed to delete borderline jobs:', borderlineError)
+  }
+
+  // Delete dismissed jobs past discarded_until + 30 days
+  const dismissedCutoff = new Date(now.getTime() - DISMISSED_EXPIRY_DAYS * 24 * 60 * 60 * 1000)
+
+  const { data: dismissedDeleted, error: dismissedError } = await supabase
+    .from('job_postings')
+    .delete()
+    .eq('status', 'dismissed')
+    .not('discarded_until', 'is', null)
+    .lt('discarded_until', dismissedCutoff.toISOString())
+    .select('id')
+
+  if (dismissedError) {
+    console.error('[Cron] Failed to delete dismissed jobs:', dismissedError)
+  }
+
+  return {
+    borderlineDeleted: borderlineDeleted?.length || 0,
+    dismissedDeleted: dismissedDeleted?.length || 0,
+  }
+}

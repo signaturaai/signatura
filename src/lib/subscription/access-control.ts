@@ -609,8 +609,8 @@ export async function getSubscriptionStatus(
   const status = row.status as SubscriptionStatus
   const hasSubscription = tier !== null
   const cancellationEffectiveAt = (row as Record<string, unknown>).cancellation_effective_at as string | null
-  const scheduledTierChange = (row as Record<string, unknown>).scheduled_tier_change as SubscriptionTier | null
-  const scheduledBillingPeriodChange = (row as Record<string, unknown>).scheduled_billing_period_change as BillingPeriod | null
+  const scheduledTierChange = row.scheduled_tier as SubscriptionTier | null
+  const scheduledBillingPeriodChange = row.scheduled_billing_period as BillingPeriod | null
 
   // Build usage summary
   const usage = createUsageSummary(row, tier)

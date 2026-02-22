@@ -211,7 +211,7 @@ describe('GET /api/cron/job-search', () => {
 
   describe('Returns', () => {
     it('rejects without CRON_SECRET', async () => {
-      const { GET } = await import('@/lib/job-search/cron-helpers')
+      const { GET } = await import('@/app/api/cron/job-search/route')
       const request = createCronRequest()
       const response = await GET(request)
       const data = await response.json()
@@ -222,7 +222,7 @@ describe('GET /api/cron/job-search', () => {
     })
 
     it('rejects with invalid CRON_SECRET', async () => {
-      const { GET } = await import('@/lib/job-search/cron-helpers')
+      const { GET } = await import('@/app/api/cron/job-search/route')
       const request = createCronRequest({ 'x-cron-secret': 'wrong-secret' })
       const response = await GET(request)
       const data = await response.json()
@@ -235,7 +235,7 @@ describe('GET /api/cron/job-search', () => {
     it('returns 500 when CRON_SECRET is not configured', async () => {
       vi.stubEnv('CRON_SECRET', '')
 
-      const { GET } = await import('@/lib/job-search/cron-helpers')
+      const { GET } = await import('@/app/api/cron/job-search/route')
       const request = createCronRequest({ 'x-cron-secret': 'any-secret' })
       const response = await GET(request)
       const data = await response.json()
@@ -248,7 +248,7 @@ describe('GET /api/cron/job-search', () => {
     it('returns success response structure on valid request', async () => {
       setupServiceClient({ activePrefs: [] })
 
-      const { GET } = await import('@/lib/job-search/cron-helpers')
+      const { GET } = await import('@/app/api/cron/job-search/route')
       const request = createCronRequest({ 'x-cron-secret': 'test-cron-secret' })
       const response = await GET(request)
       const data = await response.json()

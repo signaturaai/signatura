@@ -236,16 +236,16 @@ describe('E2E: Cron Job Processes Users and Sends Emails Correctly', () => {
   })
 
   it('Step 3: Weekly email frequency is supported', () => {
-    const cronPath = path.resolve(__dirname, '../../src/app/api/cron/job-search/route.ts')
-    const content = fs.readFileSync(cronPath, 'utf-8')
+    const cronHelpersPath = path.resolve(__dirname, '../../src/lib/job-search/cron-helpers.ts')
+    const content = fs.readFileSync(cronHelpersPath, 'utf-8')
 
     expect(content).toContain('weekly')
     expect(content).toContain('email_notification_frequency')
   })
 
   it('Step 4: Throttling logic exists for consecutive zero-match users', () => {
-    const cronPath = path.resolve(__dirname, '../../src/app/api/cron/job-search/route.ts')
-    const content = fs.readFileSync(cronPath, 'utf-8')
+    const cronHelpersPath = path.resolve(__dirname, '../../src/lib/job-search/cron-helpers.ts')
+    const content = fs.readFileSync(cronHelpersPath, 'utf-8')
 
     expect(content).toContain('consecutive_zero_match_days')
   })
@@ -267,8 +267,8 @@ describe('E2E: Cron Job Processes Users and Sends Emails Correctly', () => {
   })
 
   it('Step 9: Cleanup deletes expired borderline and dismissed matches', () => {
-    const cronPath = path.resolve(__dirname, '../../src/app/api/cron/job-search/route.ts')
-    const content = fs.readFileSync(cronPath, 'utf-8')
+    const cronHelpersPath = path.resolve(__dirname, '../../src/lib/job-search/cron-helpers.ts')
+    const content = fs.readFileSync(cronHelpersPath, 'utf-8')
 
     // Check for cleanup operations
     expect(content).toContain('borderline')

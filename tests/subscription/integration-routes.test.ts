@@ -200,7 +200,7 @@ function mockBlockedUsageLimit(reason = 'LIMIT_EXCEEDED') {
 
 function mockAllowedFeatureAccess() {
   mockCheckFeatureAccess.mockResolvedValue({
-    hasAccess: true,
+    allowed: true,
     enforced: true,
     tier: 'accelerate',
   })
@@ -208,7 +208,7 @@ function mockAllowedFeatureAccess() {
 
 function mockBlockedFeatureAccess(reason = 'tier_too_low') {
   mockCheckFeatureAccess.mockResolvedValue({
-    hasAccess: false,
+    allowed: false,
     enforced: true,
     reason,
     tier: 'momentum',
